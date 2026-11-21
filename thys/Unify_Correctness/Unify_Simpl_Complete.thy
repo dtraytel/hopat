@@ -249,8 +249,10 @@ lemma head_norm_dpair_complete:
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env"
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and i = scinvD[OF inv]
-  from hn_term[OF ei wi p] obtain t1 u1 where
-    h: "head_norm env t = return t1" "head_norm env u = return u1" "upok A env rb X t1 u1" by blast
+  from hn_dfd(1,2)[OF ei wi p] obtain t1 u1 where
+    h12: "head_norm env t = return t1" "head_norm env u = return u1" by (auto simp: dfd_pure return_def)
+  have "upok A env rb X t1 u1" using hn_dfd(3)[OF ei wi p] h12 by (simp add: return_def)
+  note h = h12 this
   note pd1 = upokD[OF h(3)]
   from pd1(9)[OF r0] obtain e0 T where T: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t1 : T" "e0 \<turnstile> inst ?\<rho> u1 : T"
     by blast

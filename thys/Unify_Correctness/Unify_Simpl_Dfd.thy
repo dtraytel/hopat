@@ -130,18 +130,12 @@ lemma LMc_Abs:
   "e' \<turnstile> inst \<rho> (unfc env (Abs a U t)) : T \<Longrightarrow> LMc \<rho> env e (Abs a U t) = LMc \<rho> env (e\<langle>0:tsubst \<rho> U\<rangle>) t + 2"
   unfolding LMc_def by (simp add: bnorm_Abs_typed)
 
-lemma unfc_same:
-  assumes "tenv env1 = tenv env" "tyenv env1 = tyenv env"
-  shows "unfc env1 = unfc env"
-  unfolding unfc_def[abs_def] cval_def[abs_def] uvalc_def uvalc_step_def[abs_def] dep_def by (simp only: assms)
 
 lemma dmc_same:
   assumes "tenv env1 = tenv env" "tyenv env1 = tyenv env"
   shows "dmc env1 = dmc env"
   using unfc_same[OF assms] assms(2) by (simp add: dmc_def[abs_def] LMc_def[abs_def])
 
-lemma unfc_rigid: "rigid h \<Longrightarrow> unfc env h = h"
-  by (cases h) simp_all
 
 lemma LMc_rigid:
   assumes "rigid h" "e \<turnstile> inst \<rho> (unfc env (h \<degree>\<degree> ts)) : T"
@@ -329,43 +323,8 @@ end
 
 subsection \<open>Typing and definedness of the unfolding under the invariants\<close>
 
-lemma tok_einv:
-  assumes ei: "einv A K env" and wi: "winv env X" and X: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
-  shows "tok env (X \<union> evars env)"
-proof (rule tokI)
-  fix x T assume xT: "(x, T) \<in> X \<union> evars env"
-  note e = einvD[OF ei]
-  have "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
-  proof (cases "(x, T) \<in> X")
-    case True
-    with X show ?thesis by (auto simp: vtvars_def)
-  next
-    case False
-    with xT obtain y U u where yb: "vt_lookup (tenv env) y = Some (U, u)" "(x, T) = (y, U) \<or> (x, T) \<in> vars u"
-      by (auto simp: evars_def bnds_def)
-    moreover have "tvars T \<subseteq> ttvars u" if "(x, T) \<in> vars u" using that
-      by (induction u) (auto simp: ttvars_def)
-    ultimately show ?thesis using tvinvD(2)[OF e(1) yb(1)] by blast
-  qed
-  then show "tcons (tyenv env) T" by (rule tinv_tcons[OF e(2)])
-next
-  have "vinv (tnorm_inst (tyenv env)) env X" using winvD[OF wi einv_rho0[OF ei]] by blast
-  then show "vcons (tnorm_inst (tyenv env)) (X \<union> evars env \<union> evars env)" by (simp add: vinv_def)
-qed
 
-lemma typing_unfc0:
-  assumes "einv A K env" "winv env X" "e \<turnstile> inst (rho0 env) t : T"
-  shows "e \<turnstile> inst (rho0 env) (unfc env t) : T"
-proof -
-  note r0 = einv_rho0[OF assms(1)]
-  have "wt_env (rho0 env) env" using winvD[OF assms(2) r0] by blast
-  from typing_unfc[OF einvD(3)[OF assms(1)] this r0(1) assms(3)] show ?thesis .
-qed
 
-lemma termip_unfc0:
-  assumes "einv A K env" "winv env X" "e \<turnstile> inst (rho0 env) t : T"
-  shows "termip (sup beta subt) (unfc env t)"
-  using termip_inst[OF type_implies_termi[OF typing_unfc0[OF assms]] refl] by (rule termip_beta_subt)
 
 lemma upok_unfc:
   assumes "einv A K env" "winv env X" "upok A env rb X t u"
@@ -381,40 +340,6 @@ qed
 
 text \<open>Head normalization of a well-formed pair terminates, and raises at most a clash:\<close>
 
-lemma hn_dfd:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s t"
-  shows "dfd (head_norm env s)" "dfd (head_norm env t)"
-    "ok (head_norm env s) s' \<Longrightarrow> ok (head_norm env t) t' \<Longrightarrow> upok A env bs X s' t'"
-proof -
-  let ?\<rho> = "rho0 env"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
-  have tk: "tok env (X \<union> evars env)" by (rule tok_einv[OF ei wi pd(6)])
-  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> s : T0" "e0 \<turnstile> inst ?\<rho> t : T0"
-    using pd(9)[OF r0] by blast
-  have hn: "dfd (head_norm env u)" if "vars u \<subseteq> X \<union> evars env" "e0 \<turnstile> inst ?\<rho> u : T0" for u
-  proof (rule head_norm_def[OF e(3,4,6,7)])
-    show "tok env (vars u \<union> evars env)" using tk that(1) by (auto intro: tok_mono)
-    show "termip (sup beta subt) (unfc env u)" by (rule termip_unfc0[OF ei wi that(2)])
-  qed
-  show "dfd (head_norm env s)" "dfd (head_norm env t)" using hn[OF pd(1) ty0(2)] hn[OF pd(2) ty0(3)] by simp_all
-  assume s'': "head_norm env s = Some (Ok s')" and t'': "head_norm env t = Some (Ok t')"
-  have w0: "wt_env ?\<rho> env" using winvD[OF wi r0] by blast
-  show "upok A env bs X s' t'"
-    unfolding upok_def
-  proof (intro conjI allI impI)
-    show "vars s' \<union> vars t' \<subseteq> X \<union> evars env"
-      using head_norm_vars[OF s'' refl] head_norm_vars[OF t'' refl] pd(1,2) by blast
-    show "ttvars s' \<union> ttvars t' \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
-      using head_norm_ttvars[OF s'' refl] head_norm_ttvars[OF t'' refl] pd(3-6) tvinv_etvars[OF e(1)] by blast
-    show "\<not> loose_bvar s' (ilength bs)" by (rule head_norm_loose[OF s'' refl w0 ilength_nonneg pd(7)])
-    show "\<not> loose_bvar t' (ilength bs)" by (rule head_norm_loose[OF t'' refl w0 ilength_nonneg pd(8)])
-    fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
-    obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T" using pd(9)[OF \<rho>] by blast
-    have wr: "wt_env \<rho> env" using winvD[OF wi \<rho>] by blast
-    show "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s' : T \<and> e \<turnstile> inst \<rho> t' : T"
-      using ty head_norm_sound[OF s'' refl \<rho>(1) wr ty(2)] head_norm_sound[OF t'' refl \<rho>(1) wr ty(3)] by blast
-  qed
-qed
 
 subsection \<open>Normalization of pairs\<close>
 
@@ -585,22 +510,13 @@ proof -
   qed
 qed
 
+lemma head_norm_dpair_okW_hn:
+  assumes "okW (head_norm_dpair al env (rb, t, u)) r"
+  shows "\<exists>t1 u1. head_norm env t = return t1 \<and> head_norm env u = return u1"
+  using assms by (auto simp: head_norm_dpair_def liftM_def bindW_def return_def
+    split: option.splits xres.splits prod.splits)
 
-lemma winv_stepg:
-  assumes st: "step_okg env bs s t env'" and wi: "winv env X" and p: "upok A env bs X s t"
-  shows "winv env' X"
-  unfolding winv_def
-proof (intro allI impI)
-  fix \<rho> assume \<rho>: "tsol (tyenv env') \<rho>" "cert_inst \<rho>"
-  have ext: "extends env env'" using st unfolding step_okg_def by blast
-  have \<rho>0: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF \<rho>(1) ext])
-  obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
-    using upokD(9)[OF p \<rho>0 \<rho>(2)] by blast
-  have w: "wt_env \<rho> env" "vinv \<rho> env X" using winvD[OF wi \<rho>0 \<rho>(2)] by blast+
-  have "vinv \<rho> env (X \<union> vars s \<union> vars t)" using w(2) vinv_evars[of s t X env \<rho>] upokD(1,2)[OF p] by simp
-  with st \<rho>(1) w(1) ty upokD(7,8)[OF p] show "wt_env \<rho> env' \<and> vinv \<rho> env' X"
-    unfolding step_okg_def by (blast intro: extends_refl)
-qed
+
 
 subsection \<open>Assignments\<close>
 

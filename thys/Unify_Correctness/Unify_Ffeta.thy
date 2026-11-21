@@ -178,9 +178,11 @@ theorem head_norm_dpair_ffeta:
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env" and ?e = "benv (rho0 env) rb"
   note e = einvD[OF ei]
-  from hn_term[OF ei wi p nf] obtain t1 u1 where
-    h: "head_norm env t = return t1" "head_norm env u = return u1" "upok A env rb X t1 u1" by blast
-  from upok_unf[OF ei wi h(3) nf] obtain T where T: "bs_env ?\<rho> ?e rb" "?e \<turnstile> inst ?\<rho> t1 : T"
+  from head_norm_dpair_okW_hn[OF hn] obtain t1 u1 where
+    h12: "head_norm env t = return t1" "head_norm env u = return u1" by blast
+  have "upok A env rb X t1 u1" using hn_dfd(3)[OF ei wi p] h12 by (simp add: return_def)
+  note h = h12 this
+  from upok_benv[OF h(3) einv_rho0[OF ei]] obtain T where T: "bs_env ?\<rho> ?e rb" "?e \<turnstile> inst ?\<rho> t1 : T"
     "?e \<turnstile> inst ?\<rho> u1 : T" by blast
   note pd1 = upokD[OF h(3)]
   have tv1: "ttvars t1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A" "ttvars u1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"

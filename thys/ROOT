@@ -72,6 +72,8 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Term_Flex
     Pattern_Term_Proj
     Pattern_Term_Unif
+    Pattern_Unfc
+    Pattern_Term_Dfd
     Pattern_Patterns
     Pattern_Unify_Patterns
     Pattern_Unify_Correctness

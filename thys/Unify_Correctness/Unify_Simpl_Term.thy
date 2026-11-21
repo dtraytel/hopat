@@ -779,9 +779,6 @@ qed
 
 subsection \<open>The measure of a pair\<close>
 
-abbreviation rho0 :: "env \<Rightarrow> tinst" where
-  "rho0 env \<equiv> tnorm_inst (tyenv env)"
-
 lemma bnorm_ahd:
   assumes at: "atom h" and ty: "e \<turnstile> h \<degree>\<degree> xs : T"
   shows "bnorm (h \<degree>\<degree> xs) = h \<degree>\<degree> map bnorm xs" "e \<turnstile> h \<degree>\<degree> map bnorm xs : T" "no_redex (h \<degree>\<degree> map bnorm xs)"
@@ -932,21 +929,6 @@ proof -
   moreover have "benv \<rho> rb \<turnstile> inst \<rho> t : T" by (rule typing_benv[OF e(1,2)]) (simp add: pd(7))
   moreover have "benv \<rho> rb \<turnstile> inst \<rho> u : T" by (rule typing_benv[OF e(1,3)]) (simp add: pd(8))
   ultimately show ?thesis by blast
-qed
-
-lemma upok_unf:
-  assumes "einv A K env" "winv env X" "upok A env rb X t u" "nfree env"
-  shows "\<exists>T. bs_env (rho0 env) (benv (rho0 env) rb) rb \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T \<and>
-    benv (rho0 env) rb \<turnstile> inst (rho0 env) u : T \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T \<and>
-    benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T"
-proof -
-  from upok_benv[OF assms(3) einv_rho0[OF assms(1)]] obtain T where
-    T: "bs_env (rho0 env) (benv (rho0 env) rb) rb" "benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T"
-      "benv (rho0 env) rb \<turnstile> inst (rho0 env) u : T" by blast
-  note pd = upokD[OF assms(3)]
-  have "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T" by (rule typing_unf0[OF assms(1,2) pd(1) T(2) assms(4)])
-  moreover have "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T" by (rule typing_unf0[OF assms(1,2) pd(2) T(3) assms(4)])
-  ultimately show ?thesis using T by blast
 qed
 
 subsection \<open>Normalization of pairs\<close>
@@ -1339,13 +1321,6 @@ lemma lxokE_iff:
 
 lemma lxok_iff [simp]: "lxok E f m P \<longleftrightarrow> xokW E m P"
   by (auto simp: lxokE_iff xokW_def)
-
-lemma upok_unf:
-  assumes "einv A K env" "winv env X" "upok A env rb X t u"
-  shows "\<exists>T. bs_env (rho0 env) (benv (rho0 env) rb) rb \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T \<and>
-    benv (rho0 env) rb \<turnstile> inst (rho0 env) u : T \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T \<and>
-    benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T"
-  by (rule upok_unf[OF assms nfree0])
 
 end
 

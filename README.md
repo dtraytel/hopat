@@ -270,16 +270,14 @@ does not check:
   the variables (`vcons`) asks for one type only for the other names, and a
   step of a unifier (`step_ok`, `dstep`) is sound for the solutions of every
   later environment that binds no loose name (`nfree`). `pure_sig` is that
-  locale without loose names. The theorems on termination and on the
-  invariants of the resulting environments are stated in a form that is the
-  old statement in `pure_sig` and, with loose names, speaks about the results
-  that bind none of them: `cut f m` for pattern unification
-  (`Pattern_Termination.thy`, `unify_inv` in `Pattern_Term_Unif.thy`),
-  `lxokE` and `lfin` for the higher-order unifier and its result sequences
-  (`Unify_Simpl_Term.thy`, `Unify_Seq_Loose.thy`, `unifiers_lfin` in
-  `Unify_Results.thy`). So one
-  proof gives termination in `pure_sig` and the invariants of such results in
-  `pure_sig_gen`. The theories on the rules have general locales next to the
+  locale without loose names. Termination is proved once, with no
+  hypothesis on the names (see below); the statements in the old form are
+  derived from that proof: in `pure_sig` they are termination with the old
+  exceptions, and with loose names they speak about the results that bind
+  none of them: `cut f m` for pattern unification (`Pattern_Termination.thy`;
+  `unify_terminates`, `unify_inv` in `Pattern_Term_Dfd.thy`), `lfin` for the
+  result sequences of the higher-order unifier (`Unify_Seq_Loose.thy`,
+  `unifiers_lfin` in `Unify_Results.thy`). The theories on the rules have general locales next to the
   old ones (`pure_model_gen`, `prf_sig_gen`, `bicompose_call_gen`, …), of
   which the old ones are instances; the theorems on a result of
   `bicompose_aux`, `biresolution` and `assumption` hold there for a result
@@ -326,18 +324,18 @@ does not check:
   search also terminates without hypothesis on the names (`hounifiers_cfin` in
   `Unify_Pull_Dfd.thy`): pulling its sequence ends after finitely many
   unifiers, at the end or with `TYPE` from a lookup at a clashing type or
-  `TERM` from `add_ffpair`. The measures use `unfc` (`Unify_Unfc.thy`), the
+  `TERM` from `add_ffpair`. The measures use `unfc` (`Pattern_Unfc.thy`), the
   unfolding that follows a binding only at an agreeing type, as `lookup` does;
   `SIMPL`, the flex-flex treatment and `MATCH` are covered by
   `Unify_Simpl_Dfd.thy`, `Unify_Flexflex_Dfd.thy` and `Unify_Mc_Dfd.thy`. The
   `TERM` exception `add_ffpair: Vars expected` does occur in Isabelle2026's
   `unify.ML` with a name at two types (`AUDIT.md`, "Additions after the
   eighteenth execution"). Pattern unification terminates as well
-  (`unify_terminates_c` in `Unify_Pattern_Dfd.thy`), with `Unif`, `Pattern`,
+  (`unify_terminates_c` in `Pattern_Term_Dfd.thy`), with `Unif`, `Pattern`,
   `TYPE` from a clashing lookup, or `Fail "mk_ff_list"` when the heads of a
-  flex-flex pair are one name with different numbers of arguments (this
+  flex-flex pair are one loose name with different numbers of arguments (this
   occurs in Isabelle2026's `Pattern.unify` and `Unify.unifiers`), so
-  `unifiers` terminates (`unifiers_cfin`): it returns a finite sequence or
+  `unifiers` terminates (`unifiers_cfin` in `Unify_Pattern_Dfd.thy`): it returns a finite sequence or
   raises `TYPE` or `Fail "mk_ff_list"`. Open are the rules (`AUDIT.md`,
   "Additions after the fourteenth execution" to "... eighteenth execution").
   Completeness does not hold for solutions that keep a name at two types:

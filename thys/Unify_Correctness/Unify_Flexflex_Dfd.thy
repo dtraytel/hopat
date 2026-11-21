@@ -15,43 +15,14 @@ begin
 
 subsection \<open>Definedness with a postcondition\<close>
 
-definition dfdp :: "'a M \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "dfdp m P \<longleftrightarrow> dfd m \<and> (\<forall>x. m = return x \<longrightarrow> P x)"
 
-lemma dfdp_return [simp]: "dfdp (return x) P \<longleftrightarrow> P x"
-  by (auto simp: dfdp_def return_def)
 
-lemma dfdp_Ok [simp]: "dfdp (Some (Ok x)) P \<longleftrightarrow> P x"
-  by (auto simp: dfdp_def return_def)
 
-lemma dfdp_var_clash: "x \<in> loose \<Longrightarrow> dfdp (var_clash x T U) P"
-  by (auto simp: dfdp_def var_clash_def raise_def return_def clashx_def)
 
-lemma dfdp_dfd: "dfdp m P \<Longrightarrow> dfd m"
-  by (simp add: dfdp_def)
 
-lemma dfdp_ok: "dfdp m P \<Longrightarrow> m = return x \<Longrightarrow> P x"
-  by (simp add: dfdp_def)
 
-lemma dfdp_mono: "dfdp m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x) \<Longrightarrow> dfdp m Q"
-  by (simp add: dfdp_def)
 
-lemma dfdp_bindM:
-  assumes "dfdp m P" "\<And>x. m = return x \<Longrightarrow> P x \<Longrightarrow> dfdp (f x) Q"
-  shows "dfdp (bindM m f) Q"
-proof (rule dfd_cases[OF dfdp_dfd[OF assms(1)]])
-  fix e assume "m = Some (Err e)" "clashx e"
-  then show ?thesis by (simp add: dfdp_def bindM_def return_def)
-next
-  fix x assume m: "m = Some (Ok x)"
-  then have "dfdp (f x) Q" using assms dfdp_ok[OF assms(1)] by (simp add: return_def)
-  with m show ?thesis by (simp add: bindM_def)
-qed
 
-lemma dfdp_cases:
-  assumes "dfdp m P"
-  obtains (err) e where "m = Some (Err e)" "clashx e" | (ok) x where "m = return x" "P x"
-  using assms by (auto simp: dfdp_def return_def elim: dfd_cases)
 
 lemma cxokE_liftM_dfdp: "dfdp m P \<Longrightarrow> cxokE Xe (liftM m) P"
   by (rule cxokE_liftM) (simp_all add: dfdp_def)
@@ -218,8 +189,6 @@ lemma tok_Var: "tok env (evars env) \<Longrightarrow> tcons (tyenv env) T \<Long
     tok env (vars (Var x T) \<union> evars env)"
   unfolding tok_def by auto
 
-lemma tok_bnd: "tok env (evars env) \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> tok env (vars u \<union> evars env)"
-  using evarsI2[of env x U u] by (auto intro: tok_mono)
 
 lemma lookup1_def_tok:
   assumes "vt_is_empty (tyenv env)"

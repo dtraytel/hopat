@@ -137,20 +137,24 @@ next
   have anti: "nfree (id a)" if "ok (unify alg t u env) a" "ok (foldM (\<lambda>(t, u) env. unify alg t u env) tus a) b"
     "nfree (id b)" for a b
     using nfree_extends[OF dstepD(1)[OF foldM_unify_dstep[OF that(2)]]] that(3) by simp
-  from unif_term[OF fin Cons.prems(1,2) p Cons.prems(4)] obtain r1 where
-    r1: "cut id (unify alg t u env) = Some r1" "upost A K env X r1" by (auto simp: unify_def)
+  from unif_term_c[OF fin Cons.prems(1,2) p] obtain r0 where
+    r0: "unify alg t u env = Some r0" "upostc A K env X r0" by (auto simp: unify_def dcut_def)
+  have "perr e" if "r0 = Err e" for e using r0(2) that by simp
+  from cut_perrI[OF r0(1) this] obtain r1 where
+    r1: "cut id (unify alg t u env) = Some r1" "\<forall>e. r1 = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
+      "\<forall>a. r1 = Ok a \<longrightarrow> r0 = Ok a" by blast
   have eq: "cut id (foldM (\<lambda>(t, u) env. unify alg t u env) (tu # tus) env) =
       cut id (case r1 of Ok a \<Rightarrow> foldM (\<lambda>(t, u) env. unify alg t u env) tus a | Err e \<Rightarrow> raise e)"
     unfolding tu foldM.simps prod.case by (rule cut_bind_Some[OF r1(1) anti])
   show ?case
   proof (cases r1)
     case (Err e)
-    from r1(2) Err have e: "(\<exists>v. e = Unif v) \<or> e = Pattern" by (simp add: upost_def)
+    from r1(2) Err have e: "(\<exists>v. e = Unif v) \<or> e = Pattern" by simp
     show ?thesis unfolding eq Err xres.case
       by (rule cut_raiseI[OF refl]) (use e in simp_all)
   next
     case (Ok env1)
-    note a = upost_OkD[OF r1(2)[unfolded Ok]]
+    note a = upostc_OkD[OF r0(2)[unfolded r1(3)[rule_format, OF Ok]]]
     have nf1: "nfree env1" using cut_OkD(2)[OF r1(1)[unfolded Ok]] by simp
     have "\<forall>(t, u)\<in>set tus. upok A env1 [] X t u"
       using Cons.prems(3) upok_mono[OF _ a(3,4)] by auto

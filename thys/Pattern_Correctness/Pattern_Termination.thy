@@ -1,4 +1,4 @@
-section \<open>Termination of Pattern Unification\<close>
+section \<open>Auxiliary Definitions for Termination\<close>
 
 theory Pattern_Termination
   imports Pattern_Size Pattern_Complete Pattern_Type_Reach
@@ -87,18 +87,6 @@ lemma cut_bind_Some:
   shows "cut g (m \<bind> k) = cut g (case r of Ok a \<Rightarrow> k a | Err e \<Rightarrow> raise e)"
   by (subst cut_bind[of m k g f, OF assms(2)]) (simp_all add: assms(1) bindM_def raise_def split: xres.splits)
 
-lemma cut_handle:
-  assumes "\<And>e. \<exists>e'. h e = raise e'"
-  shows "cut g (handle m h) = cut g (handle (cut g m) h)"
-proof (cases "loose = {}")
-  case False
-  have h: "\<not> ok (h e) b" for e b using assms[of e] by (auto simp: raise_def)
-  from False show ?thesis by (rule cut_eqI) (auto simp: cut_Ok ok_handle h)
-next
-  case True
-  then show ?thesis unfolding cut_def by simp
-qed
-
 text \<open>Introduction rules for statements about cut computations:\<close>
 
 lemma cutI:
@@ -107,20 +95,8 @@ lemma cutI:
   shows "\<exists>r'. cut f m = Some r' \<and> P r'"
   using assms unfolding cut_def nfree_def by (cases r) (auto simp: raise_def)
 
-lemma cut_okI: "m = Some (Ok a) \<Longrightarrow> P (Ok a) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
-  by (rule cutI[of m "Ok a"]) simp_all
-
 lemma cut_errI: "m = Some (Err e) \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
   by (rule cutI[of m "Err e"]) simp_all
-
-lemma cut_bind_errI:
-  assumes "cut f m = Some (Err e)" "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
-    "P (Err e)" "P (Err Pattern)"
-  shows "\<exists>r. cut g (m \<bind> k) = Some r \<and> P r"
-proof -
-  have "cut g (m \<bind> k) = cut g (raise e)" using cut_bind_Some[OF assms(1,2)] by simp
-  then show ?thesis using cut_errI[of "raise e" e P g] assms(3,4) by (simp add: raise_def)
-qed
 
 lemma cut_raiseI: "m = raise e \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
   by (rule cut_errI[of m e]) (simp_all add: raise_def)
@@ -128,37 +104,6 @@ lemma cut_raiseI: "m = raise e \<Longrightarrow> P (Err e) \<Longrightarrow> P (
 lemma cut_returnI:
   "m = return a \<Longrightarrow> (nfree (f a) \<Longrightarrow> P (Ok a)) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
   by (rule cutI[of m "Ok a"]) (simp_all add: return_def)
-
-lemma cut_raise_cases: "cut f (raise e) = raise e \<or> cut f (raise e) = raise Pattern"
-  unfolding cut_def by (simp add: raise_def)
-
-text \<open>A handler that only raises exceptions:\<close>
-
-lemma cut_handle_bind_errI:
-  assumes c: "cut f m = Some (Err e)"
-    and anti: "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
-    and hr: "\<And>e. \<exists>e'. h e = raise e'" and hP: "\<And>e e'. P (Err e) \<Longrightarrow> h e = raise e' \<Longrightarrow> P (Err e')"
-    and Pe: "P (Err e)" "P (Err Pattern)"
-  shows "\<exists>r. cut g (handle (m \<bind> k) h) = Some r \<and> P r"
-proof -
-  have "cut g (m \<bind> k) = cut g (raise e)" using cut_bind_Some[OF c anti] by simp
-  then have eq: "cut g (handle (m \<bind> k) h) = cut g (handle (cut g (raise e)) h)"
-    using cut_handle[OF hr, of g "m \<bind> k"] by simp
-  from cut_raise_cases[of g e] obtain e1 where e1: "cut g (raise e) = raise e1" "P (Err e1)"
-    using Pe by auto
-  obtain e' where e': "h e1 = raise e'" using hr by blast
-  have "handle (raise e1) h = raise e'" using e' by (simp add: handle_def raise_def)
-  with eq e1(1) have "cut g (handle (m \<bind> k) h) = cut g (raise e')" by simp
-  then show ?thesis using cut_raiseI[of "raise e'" e' P g] hP[OF e1(2) e'] Pe(2) by simp
-qed
-
-lemma cut_looseI:
-  assumes "loose \<noteq> {}" "\<And>a. m = Some (Ok a) \<Longrightarrow> \<not> nfree (f a)" "P (Err Pattern)"
-  shows "\<exists>r. cut f m = Some r \<and> P r"
-  using assms unfolding cut_def by (auto simp: raise_def split: option.splits xres.splits)
-
-lemma cut_return: "nfree (f a) \<Longrightarrow> cut f (return a) = return a"
-  unfolding cut_def by (simp add: return_def)
 
 subsection \<open>Strong normalization with subterms\<close>
 
@@ -254,116 +199,11 @@ lemma beta_reds_sup: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> 
   by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
 
 
-subsection \<open>Head normalization\<close>
+text \<open>The rank of the head of a term, for the induction on head normalization:\<close>
 
 definition hrk :: "env \<Rightarrow> pterm \<Rightarrow> nat" where
   "hrk env t = (case t of Var x T \<Rightarrow> Suc (rk env x) | _ \<Rightarrow> 0)"
 
-text \<open>
-  On an acyclic environment with closed bindings, head normalization of a consistent term whose
-  unfolding is strongly normalizing returns a result.
-\<close>
-
-lemma head_norm_term:
-  assumes ac: "acyc env" and cl: "closed_env env"
-    and tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
-  shows "vok env (vars t \<union> evars env) \<Longrightarrow> termip (sup beta subt) (unf env t) \<Longrightarrow>
-    \<exists>t'. head_norm env t = return t'"
-proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_less wf_less_than],
-    of "\<lambda>t. (unf env t, hrk env t)"]])
-  case (1 t)
-  have sn: "termip (sup beta subt) u" if "(sup beta subt)\<^sup>*\<^sup>* (unf env t) u" for u
-    by (rule termip_sup_reds[OF that "1.prems"(2)])
-  have IH: "\<exists>t'. head_norm env u = return t'"
-    if "vok env (vars u \<union> evars env)" "(sup beta subt)\<^sup>+\<^sup>+ (unf env t) (unf env u)" for u
-  proof (rule "1.IH"[OF _ that(1)])
-    have "(unf env u, unf env t) \<in> sn_less"
-      by (simp only: sn_less_def mem_Collect_eq case_prod_conv) (use that(2) "1.prems"(2) in blast)
-    then show "(u, t) \<in> inv_image (sn_less <*lex*> less_than) (\<lambda>t. (unf env t, hrk env t))"
-      by simp
-    show "termip (sup beta subt) (unf env u)" by (rule sn[OF tranclp_into_rtranclp[OF that(2)]])
-  qed
-  have IH': "\<exists>t'. head_norm env u = return t'"
-    if "vok env (vars u \<union> evars env)" "unf env u = unf env t" "hrk env u < hrk env t" for u
-  proof (rule "1.IH"[OF _ that(1)])
-    show "(u, t) \<in> inv_image (sn_less <*lex*> less_than) (\<lambda>t. (unf env t, hrk env t))"
-      using that(2,3) by simp
-    show "termip (sup beta subt) (unf env u)" by (subst that(2)) (rule "1.prems"(2))
-  qed
-  have vk: "vok env (vars u \<union> evars env)" if "vars u \<subseteq> vars t \<union> evars env" for u
-    using "1.prems"(1) that by (auto intro: vok_mono)
-  have redex: "\<exists>t'. head_norm env (subst_bound u body) = return t'"
-    if "(sup beta subt)\<^sup>*\<^sup>* (unf env t) (unf env (Abs b U body $ u))" "vars body \<union> vars u \<subseteq> vars t \<union> evars env"
-    for b U body u
-  proof (subst subst_bound_subst, rule IH)
-    have r: "unf env (Abs b U body $ u) \<rightarrow>\<^sub>\<beta> unf env (body[u/0])"
-      by (simp add: unf_subst[OF ac cl])
-    then show "(sup beta subt)\<^sup>+\<^sup>+ (unf env t) (unf env (body[u/0]))"
-      using that(1) by (meson rtranclp_into_tranclp1 sup2I1)
-    show "vok env (vars (body[u/0]) \<union> evars env)"
-      using vk vars_subst[of body u 0] that(2) by blast
-  qed
-  show ?case
-  proof (cases t)
-    case (Var x T)
-    have lk: "lookup env x T = return (map_option snd (vt_lookup (tenv env) x))"
-      by (rule lookup_ok[OF tac tc vok_mono[OF "1.prems"(1)]]) (auto simp: Var)
-    show ?thesis
-    proof (cases "vt_lookup (tenv env) x")
-      case (Some p)
-      obtain U u where p: "p = (U, u)" by force
-      have u: "unf env u = unf env t" using Some p Var by (simp add: unf_Var[OF ac])
-      have "hrk env u < hrk env t"
-      proof (cases u)
-        case (Var y U')
-        have "(y, x) \<in> dep env" using depI[OF Some[unfolded p], of y U'] Var by simp
-        then show ?thesis using rk_less[OF ac] Var \<open>t = Var x T\<close> by (simp add: hrk_def)
-      qed (simp_all add: hrk_def \<open>t = Var x T\<close>)
-      moreover have "vars u \<subseteq> vars t \<union> evars env" using evarsI2[OF Some[unfolded p]] by blast
-      ultimately obtain t' where "head_norm env u = return t'"
-        using IH'[of u] vk u by blast
-      then show ?thesis using lk Var Some p by (subst head_norm.simps) simp
-    qed (use lk Var in \<open>subst head_norm.simps, simp\<close>)
-  next
-    case (Abs a T body)
-    have "subt (unf env t) (unf env body)" using Abs by (simp add: subt_def)
-    then have "(sup beta subt)\<^sup>+\<^sup>+ (unf env t) (unf env body)" by blast
-    moreover have "vok env (vars body \<union> evars env)" by (rule vk) (use Abs in simp)
-    ultimately obtain b' where "head_norm env body = return b'" using IH[of body] by blast
-    then show ?thesis using Abs by (subst head_norm.simps) simp
-  next
-    case (App f u)
-    have vfu: "vars f \<union> vars u \<subseteq> vars t \<union> evars env" using App by auto
-    show ?thesis
-    proof (cases "is_Abs f")
-      case True
-      then obtain b U body where f: "f = Abs b U body" by (cases f) auto
-      from redex[of b U body u] f App vfu show ?thesis by (subst head_norm.simps) simp
-    next
-      case False
-      have "subt (unf env t) (unf env f)" using App by (simp add: subt_def)
-      then have tf: "(sup beta subt)\<^sup>+\<^sup>+ (unf env t) (unf env f)" by blast
-      moreover have "vok env (vars f \<union> evars env)" using vk vfu by blast
-      ultimately obtain nf where nf: "head_norm env f = return nf" using IH[of f] by blast
-      have fnf: "unf env f \<rightarrow>\<^sub>\<beta>\<^sup>* unf env nf"
-        by (rule head_norm_unf[OF nf[unfolded return_def] refl ac cl])
-      have hn: "head_norm env t =
-          (case nf of Abs _ _ body \<Rightarrow> head_norm env (subst_bound u body) | _ \<Rightarrow> return (nf $ u))"
-        using App False nf by (subst head_norm.simps) (cases f; simp)
-      show ?thesis
-      proof (cases nf)
-        case (Abs b U body)
-        have "(sup beta subt)\<^sup>*\<^sup>* (unf env t) (unf env (Abs b U body $ u))"
-          using App Abs beta_reds_sup[OF rtrancl_beta_AppL[OF fnf, of "unf env u"]] by simp
-        moreover have "vars nf \<subseteq> vars f \<union> evars env"
-          by (rule head_norm_vars[OF nf[unfolded return_def] refl])
-        then have "vars body \<union> vars u \<subseteq> vars t \<union> evars env" using vfu Abs by auto
-        ultimately obtain t' where "head_norm env (subst_bound u body) = return t'" using redex[of b U body u] by blast
-        then show ?thesis using hn Abs by simp
-      qed (use hn in simp_all)
-    qed
-  qed (subst head_norm.simps, simp)+
-qed
 
 subsection \<open>Auxiliary computations\<close>
 
@@ -373,20 +213,6 @@ proof (induction xs)
   then obtain y ys where "f a = return y" "mapM f xs = return ys" by (meson list.set_intros)
   then show ?case by simp
 qed simp
-
-lemma existsM_return: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>b. P x = return b) \<Longrightarrow> \<exists>b. existsM P xs = return b"
-proof (induction xs)
-  case (Cons a xs)
-  then obtain b b' where "P a = return b" "existsM P xs = return b'" by (meson list.set_intros)
-  then show ?case by auto
-qed auto
-
-lemma allM_return: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>b. P x = return b) \<Longrightarrow> \<exists>b. allM P xs = return b"
-proof (induction xs)
-  case (Cons a xs)
-  then obtain b b' where "P a = return b" "allM P xs = return b'" by (meson list.set_intros)
-  then show ?case by auto
-qed auto
 
 lemma ints_of_result: "(\<exists>is. ints_of ts = return is) \<or> ints_of ts = raise Pattern"
 proof (induction ts rule: ints_of.induct)
@@ -411,79 +237,6 @@ proof -
   qed (simp add: tranclp.r_into_trancl)
 qed
 
-context
-  fixes env assumes ac: "acyc env" and cl: "closed_env env"
-    and tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
-begin
-
-lemma ints_of'_result:
-  assumes "vok env (\<Union> (vars ` set ts) \<union> evars env)" "\<And>t. t \<in> set ts \<Longrightarrow> termip (sup beta subt) (unf env t)"
-  shows "(\<exists>is. ints_of' env ts = return is) \<or> ints_of' env ts = raise Pattern"
-proof -
-  have "\<exists>t'. head_norm env t = return t'" if "t \<in> set ts" for t
-    by (rule head_norm_term[OF ac cl tac tc]) (use assms that in \<open>auto intro: vok_mono\<close>)
-  then obtain ts' where "mapM (head_norm env) ts = return ts'" using mapM_return by blast
-  then show ?thesis using ints_of_result[of ts'] by (auto simp: ints_of'_def)
-qed
-
-lemma rigid_occurs_result:
-  shows "vok env (vars t \<union> evars env) \<Longrightarrow> termip (sup beta subt) (unf env t) \<Longrightarrow>
-    \<exists>b. rigid_occurs F t env = return b"
-proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_sn_less, of "unf env"]])
-  case (1 t)
-  obtain t' where hn: "head_norm env t = return t'"
-    using head_norm_term[OF ac cl tac tc "1.prems"] by blast
-  have tt': "(sup beta subt)\<^sup>*\<^sup>* (unf env t) (unf env t')"
-    by (rule beta_reds_sup[OF head_norm_unf[OF hn[unfolded return_def] refl ac cl]])
-  have vt': "vars t' \<subseteq> vars t \<union> evars env" by (rule head_norm_vars[OF hn[unfolded return_def] refl])
-  have IH: "\<exists>b. rigid_occurs F u env = return b"
-    if "vars u \<subseteq> vars t' \<union> evars env" "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" for u
-  proof (rule "1.IH"[rule_format])
-    have tu: "(sup beta subt)\<^sup>+\<^sup>+ (unf env t) (unf env u)" using tt' that(2) by (rule rtranclp_tranclp_tranclp)
-    have "(unf env u, unf env t) \<in> sn_less"
-      by (simp only: sn_less_def mem_Collect_eq case_prod_conv) (use tu "1.prems"(2) in blast)
-    then show "(u, t) \<in> inv_image sn_less (unf env)" by simp
-    show "vok env (vars u \<union> evars env)" using "1.prems"(1) that(1) vt' by (auto intro: vok_mono)
-    show "termip (sup beta subt) (unf env u)" by (rule termip_sup_reds[OF tranclp_into_rtranclp[OF tu] "1.prems"(2)])
-  qed
-  show ?case
-  proof (cases "is_Abs t'")
-    case True
-    then obtain a T u where Abs: "t' = Abs a T u" by (cases t') auto
-    have "subt (unf env t') (unf env u)" using Abs by (simp add: subt_def)
-    then have "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" by blast
-    then obtain b where "rigid_occurs F u env = return b" using IH[of u] Abs by auto
-    then show ?thesis using hn Abs by (subst rigid_occurs.simps) simp
-  next
-    case False
-    obtain h ts where st: "strip_comb t' = (h, ts)" by force
-    have t': "t' = h \<degree>\<degree> ts" by (rule strip_comb_apps[OF st])
-    have sub: "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" if "u \<in> set ts" for u
-      unfolding t' unf_apps using sup_subt_apps[of "unf env u" "map (unf env) ts"] that by simp
-    have args: "\<exists>b. rigid_occurs F u env = return b" if "u \<in> set ts" for u
-    proof (rule IH)
-      show "vars u \<subseteq> vars t' \<union> evars env" using that t' by (auto simp: vars_apps)
-      show "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" by (rule sub[OF that])
-    qed
-    obtain b where ex: "existsM (\<lambda>u. rigid_occurs F u env) ts = return b"
-      using existsM_return[of ts "\<lambda>u. rigid_occurs F u env", OF args] by blast
-    have "\<exists>b. allM (rigid_head env) ts = return b"
-    proof (rule allM_return)
-      fix u assume u: "u \<in> set ts"
-      have "vok env (vars u \<union> evars env)"
-        using "1.prems"(1) vt' t' u by (auto simp: vars_apps intro: vok_mono)
-      moreover have "termip (sup beta subt) (unf env u)"
-        by (rule termip_sup_reds[OF rtranclp_trans[OF tt' tranclp_into_rtranclp[OF sub[OF u]]] "1.prems"(2)])
-      ultimately obtain u' where "head_norm env u = return u'" using head_norm_term[OF ac cl tac tc] by blast
-      then show "\<exists>b. rigid_head env u = return b" by (simp add: rigid_head_def)
-    qed
-    then show ?thesis using hn False ex st
-      by (subst rigid_occurs.simps) (auto simp: pterm_case_nonAbs split: pterm.splits)
-  qed
-qed
-
-end
-
 subsection \<open>Strong normalization of well-typed problems\<close>
 
 lemma termip_inst: "termip beta s \<Longrightarrow> s = inst \<rho> t \<Longrightarrow> termip beta t"
@@ -496,15 +249,6 @@ proof (induction arbitrary: t rule: accp_induct_rule)
     with "1.prems" show "termip beta t'" by (intro "1.IH") simp_all
   qed
 qed
-
-lemma termip_unf:
-  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (vars t \<union> evars env)" "e \<turnstile> inst \<rho> t : T" "nfree env"
-  shows "termip (sup beta subt) (unf env t)"
-proof -
-  have "e \<turnstile> inst \<rho> (unf env t) : T" by (rule typing_unf[OF assms(1-3,5,4)])
-  from termip_inst[OF type_implies_termi[OF this] refl] show ?thesis by (rule termip_beta_subt)
-qed
-
 
 subsection \<open>Unbound variables\<close>
 
@@ -576,46 +320,6 @@ qed
 
 subsection \<open>Pruning extensions\<close>
 
-text \<open>
-  An extension prunes if it keeps the type environment and, unless it binds a loose name, the
-  measure of the problems.
-\<close>
-
-definition prunes :: "env \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
-  "prunes env env' X \<longleftrightarrow> tyenv env' = tyenv env \<and>
-    (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<union> evars env \<longrightarrow>
-      e \<turnstile> inst \<rho> t : T \<longrightarrow> nfree env' \<longrightarrow> M \<rho> env' t = M \<rho> env t)"
-
-lemma unf_tenv:
-  assumes "tenv env' = tenv env"
-  shows "unf env' = unf env"
-proof -
-  have "uval_step env' = uval_step env" by (intro ext) (simp add: uval_step_def assms)
-  moreover have "dep env' = dep env" by (simp add: dep_def assms)
-  ultimately show ?thesis by (simp add: unf_def uval_def)
-qed
-
-lemma prunes_same: "tenv env' = tenv env \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> prunes env env' X"
-  unfolding prunes_def M_def by (simp add: unf_tenv[of env' env])
-
-lemma prunes_trans:
-  assumes "prunes env env1 X" "prunes env1 env2 X" "extends env1 env2" "extends env env1"
-  shows "prunes env env2 X"
-  unfolding prunes_def
-proof (intro conjI allI impI)
-  show "tyenv env2 = tyenv env" using assms(1,2) by (simp add: prunes_def)
-  fix \<rho> e t T assume a: "wt_env \<rho> env2" "vcons \<rho> (X \<union> evars env2)" "vars t \<subseteq> X \<union> evars env" "e \<turnstile> inst \<rho> t : T"
-    and nf: "nfree env2"
-  have nf1: "nfree env1" by (rule nfree_extends[OF assms(3) nf])
-  have "wt_env \<rho> env1" by (rule wt_env_extends[OF a(1) assms(3)])
-  moreover have "vcons \<rho> (X \<union> evars env1)" using a(2) evars_extends[OF assms(3)] vcons_mono by blast
-  ultimately have "M \<rho> env1 t = M \<rho> env t" using assms(1) a(3,4) nf1 unfolding prunes_def by blast
-  moreover have "evars env \<subseteq> evars env1" by (rule evars_extends[OF assms(4)])
-  then have "vars t \<subseteq> X \<union> evars env1" using a(3) by blast
-  then have "M \<rho> env2 t = M \<rho> env1 t" using assms(2) a(1,2,4) nf unfolding prunes_def by blast
-  ultimately show "M \<rho> env2 t = M \<rho> env t" by simp
-qed
-
 lemma typing_abs_list_inv:
   "e \<turnstile> abs_list bs t : U \<Longrightarrow> \<exists>V. U = map snd bs \<Rrightarrow> V \<and> pushes e (map snd bs) \<turnstile> t : V"
 proof (induction bs arbitrary: e U)
@@ -646,32 +350,6 @@ proof -
   moreover have "length Ks = length ks" using typings_nth[of ?e "map Bound ks" Ks] Ks by simp
   ultimately show ?thesis using U by (intro exI[of _ "arity V"]) (simp add: arity_funs)
 qed
-
-lemma prunes_update:
-  assumes upd: "ok (update (G, Gty) b env) env1"
-    and b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)"
-    and ac: "acyc env" "acyc env1" and cl: "closed_env env" "closed b"
-    and H: "vt_lookup (tenv env1) H = None"
-  shows "prunes env env1 X"
-  unfolding prunes_def
-proof (intro conjI allI impI)
-  note u = ok_update[OF upd]
-  show "tyenv env1 = tyenv env" by (rule u(3))
-  fix \<rho> e t T assume a: "wt_env \<rho> env1" "vcons \<rho> (X \<union> evars env1)" "vars t \<subseteq> X \<union> evars env" "e \<turnstile> inst \<rho> t : T"
-    and nf: "nfree env1"
-  have lk: "vt_lookup (tenv env1) G = Some (Gty, b)" using u(2) by simp
-  have tyb: "e' \<turnstile> inst \<rho> b : tsubst \<rho> Gty" for e' by (rule wt_envD[OF a(1) lk])
-  obtain c where ar: "arity (tsubst \<rho> Gty) = length bs + c" "arity (tsubst \<rho> Hty) = length ks + c"
-    using prune_arity[OF tyb[of e, unfolded b]] by blast
-  have wte: "wt_env \<rho> env" by (rule wt_env_extends[OF a(1) extends_update[OF upd]])
-  have "vars t \<union> evars env1 \<subseteq> X \<union> evars env1" using a(3) evars_extends[OF extends_update[OF upd]] by blast
-  then have vc: "vcons \<rho> (vars t \<union> evars env1)" by (rule vcons_mono[OF a(2)])
-  show "M \<rho> env1 t = M \<rho> env t"
-    by (rule M_prune[OF upd b ac cl H tyb ar wte vc a(4) nf])
-qed
-
-lemma prunes_genvar: "genvar a env T = (env', G) \<Longrightarrow> prunes env env' X"
-  by (rule prunes_same) (simp_all add: genvar_simps)
 
 subsection \<open>Extensions by fresh variables\<close>
 
@@ -1100,17 +778,6 @@ begin
 
 lemma cut_strict [simp]: "cut f m = m"
   unfolding cut_def by simp
-
-lemma termip_unf:
-  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (vars t \<union> evars env)" "e \<turnstile> inst \<rho> t : T"
-  shows "termip (sup beta subt) (unf env t)"
-  by (rule termip_unf[OF assms nfree0])
-
-lemma prunes_def:
-  "prunes env env' X \<longleftrightarrow> tyenv env' = tyenv env \<and>
-    (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<union> evars env \<longrightarrow>
-      e \<turnstile> inst \<rho> t : T \<longrightarrow> M \<rho> env' t = M \<rho> env t)"
-  by (simp add: prunes_def)
 
 lemma vok_winv:
   assumes "einv A K env" "winv env X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"

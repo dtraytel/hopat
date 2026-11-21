@@ -221,10 +221,6 @@ lemma unf_subst:
   "acyc env \<Longrightarrow> closed_env env \<Longrightarrow> 0 \<le> k \<Longrightarrow> unf env (t[s/k]) = (unf env t)[unf env s/k]"
   unfolding unf_def using closed_usubst by simp
 
-lemma unf_lift:
-  "acyc env \<Longrightarrow> closed_env env \<Longrightarrow> 0 \<le> k \<Longrightarrow> unf env (incr_bv n k t) = incr_bv n k (unf env t)"
-  unfolding unf_def using closed_usubst by simp
-
 text \<open>Head normalization reduces the unfolding:\<close>
 
 lemma head_norm_unf:
@@ -344,63 +340,16 @@ proof -
   qed
 qed
 
-
-subsection \<open>The measure\<close>
-
-definition M :: "tinst \<Rightarrow> env \<Rightarrow> pterm \<Rightarrow> nat" where
-  "M \<rho> env t = msz (bnorm (inst \<rho> (unf env t)))"
+subsection \<open>Auxiliary facts on the measure\<close>
 
 lemma inst_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> inst \<rho> s \<rightarrow>\<^sub>\<beta>\<^sup>* inst \<rho> t"
   by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl beta_inst)
-
-text \<open>The measure is invariant under head normalization:\<close>
-
-lemma M_head_norm:
-  assumes "ok (head_norm env t) t'" "acyc env" "closed_env env" "e \<turnstile> inst \<rho> (unf env t) : T"
-  shows "M \<rho> env t' = M \<rho> env t"
-  unfolding M_def
-  using bnorm_typed_reds[OF assms(4) inst_reds[OF head_norm_unf[OF assms(1) refl assms(2,3)]]] by simp
-
-lemma M_Abs: "e \<turnstile> inst \<rho> (unf env (Abs a U t)) : T \<Longrightarrow> M \<rho> env (Abs a U t) = M \<rho> env t + 2"
-  unfolding M_def by (simp add: bnorm_Abs_typed)
 
 lemma inst_rigid: "rigid h \<Longrightarrow> rigid (inst \<rho> h)"
   by (cases h) simp_all
 
 lemma unf_rigid: "rigid h \<Longrightarrow> unf env h = h"
   by (cases h) simp_all
-
-lemma M_rigid:
-  assumes "rigid h" "e \<turnstile> inst \<rho> (unf env (h \<degree>\<degree> ts)) : T"
-  shows "M \<rho> env (h \<degree>\<degree> ts) = 1 + sum_list (map (M \<rho> env) ts)"
-proof -
-  have i: "inst \<rho> (unf env (h \<degree>\<degree> ts)) = inst \<rho> h \<degree>\<degree> map (inst \<rho> \<circ> unf env) ts"
-    using assms(1) by (simp add: unf_apps inst_apps unf_rigid)
-  have r: "rigid (inst \<rho> h)" by (rule inst_rigid[OF assms(1)])
-  then have at: "atom (inst \<rho> h)" by (simp add: rigid_iff)
-  have "M \<rho> env (h \<degree>\<degree> ts) = msz (inst \<rho> h \<degree>\<degree> map (bnorm \<circ> inst \<rho> \<circ> unf env) ts)"
-    using bnorm_atom_apps[OF at assms(2)[unfolded i]] by (simp add: M_def i comp_def)
-  also have "\<dots> = 1 + sum_list (map msz (map (bnorm \<circ> inst \<rho> \<circ> unf env) ts))"
-    by (rule msz_rigid_apps[OF r])
-  also have "\<dots> = 1 + sum_list (map (M \<rho> env) ts)" by (simp add: M_def[abs_def] comp_def)
-  finally show ?thesis .
-qed
-
-lemma M_flex:
-  assumes ac: "acyc env" and "vt_lookup (tenv env) x = None" "e \<turnstile> inst \<rho> (unf env (Var x U \<degree>\<degree> ts)) : T"
-  shows "M \<rho> env (Var x U \<degree>\<degree> ts) = 2 * (arity (tsubst \<rho> U) - length ts) + 1"
-proof -
-  have i: "inst \<rho> (unf env (Var x U \<degree>\<degree> ts)) = Var x (tsubst \<rho> U) \<degree>\<degree> map (inst \<rho> \<circ> unf env) ts"
-    using assms(2) by (simp add: unf_apps inst_apps unf_Var[OF ac])
-  from bnorm_atom_apps[of _ e _ T, OF _ assms(3)[unfolded i]] msz_flex_apps
-  show ?thesis by (simp add: M_def i)
-qed
-
-lemma M_lift:
-  assumes "acyc env" "closed_env env" "0 \<le> k" "e \<turnstile> inst \<rho> (unf env t) : T"
-  shows "M \<rho> env (lift t k) = M \<rho> env t"
-  unfolding M_def using bnorm_lift[OF assms(4,3)]
-  by (simp add: unf_lift[OF assms(1-3)] inst_lift)
 
 subsection \<open>Pruning\<close>
 
@@ -620,96 +569,6 @@ qed
 lemma beta_reds_vsubst: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> closed_subst \<sigma> \<Longrightarrow> vsubst \<sigma> s \<rightarrow>\<^sub>\<beta>\<^sup>* vsubst \<sigma> t"
   by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl beta_vsubst)
 
-text \<open>A single pruning binding:\<close>
-
-lemma unf_prune:
-  assumes upd: "ok (update (G, Gty) b env) env1" and ac: "acyc env" "acyc env1"
-    and b: "unf env1 b = b"
-  shows "unf env1 t = vsubst (\<lambda>x T. if x = G then b else Var x T) (unf env t)"
-proof -
-  let ?\<pi> = "\<lambda>x T. if x = G then b else Var x T"
-  note u = ok_update[OF upd]
-  have lk1: "vt_lookup (tenv env1) x = (if x = G then Some (Gty, b) else vt_lookup (tenv env) x)" for x
-    using u(2) by simp
-  have Var: "unf env1 (Var x T) = vsubst ?\<pi> (unf env (Var x T))" for x T
-  proof (induction x arbitrary: T rule: dep_induct[OF ac(1)])
-    case (1 x)
-    show ?case
-    proof (cases "vt_lookup (tenv env) x")
-      case (Some p)
-      obtain U u where p: "p = (U, u)" by force
-      have xG: "x \<noteq> G" using u(1) Some by auto
-      have "unf env1 u = vsubst (\<lambda>y T'. vsubst ?\<pi> (unf env (Var y T'))) u"
-        unfolding unf_def
-        by (rule vsubst_cong) (use "1.IH"[OF depI[OF Some[unfolded p]]] in \<open>simp add: unf_def\<close>)
-      also have "\<dots> = vsubst ?\<pi> (unf env u)" by (simp add: unf_def vsubst_vsubst)
-      finally show ?thesis using Some p xG by (simp add: unf_Var[OF ac(2)] unf_Var[OF ac(1)] lk1)
-    next
-      case None
-      then show ?thesis using b by (simp add: unf_Var[OF ac(2)] unf_Var[OF ac(1)] lk1)
-    qed
-  qed
-  have "usubst env1 x T = vsubst ?\<pi> (usubst env x T)" for x T using Var[of x T] by (simp add: unf_def)
-  then show ?thesis by (simp add: unf_def vsubst_vsubst)
-qed
-
-lemma inst_vsubst_prune:
-  "(\<And>T. (G, T) \<in> vars X \<Longrightarrow> tsubst \<rho> T = TG) \<Longrightarrow>
-    inst \<rho> (vsubst (\<lambda>x T. if x = G then b else Var x T) X) = vsubst (psubst G TG (inst \<rho> b)) (inst \<rho> X)"
-  by (induction X) (auto simp: psubst_def)
-
-lemma M_prune:
-  assumes upd: "ok (update (G, Gty) b env) env1"
-    and b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)"
-    and ac: "acyc env" "acyc env1" and cl: "closed_env env" "closed b"
-    and H: "vt_lookup (tenv env1) H = None"
-    and tyb: "\<And>e. e \<turnstile> inst \<rho> b : tsubst \<rho> Gty"
-    and ar: "arity (tsubst \<rho> Gty) = length bs + a" "arity (tsubst \<rho> Hty) = length ks + a"
-    and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env1)" and ty: "e \<turnstile> inst \<rho> t : T"
-    and nf: "nfree env1"
-  shows "M \<rho> env1 t = M \<rho> env t"
-proof -
-  let ?TG = "tsubst \<rho> Gty" and ?b = "inst \<rho> b"
-  let ?\<pi> = "psubst G ?TG ?b"
-  have ub: "unf env1 b = b" using H b by (simp add: unf_def vsubst_abs_list vsubst_apps uval_eq[OF ac(2)] comp_def)
-  have Gin: "(G, Gty) \<in> evars env1" using evars_update[OF upd] by simp
-  have ev: "evars env \<subseteq> evars env1" using evars_update[OF upd] by blast
-  have Gl: "G \<notin> loose" using nfreeD[OF nf, of G] ok_update(2)[OF upd] by simp
-  have nf0: "nfree env" unfolding nfree_def
-  proof (intro allI impI)
-    fix x b' assume x: "vt_lookup (tenv env) x = Some b'"
-    with ok_update(1)[OF upd] have "x \<noteq> G" by auto
-    with x ok_update(2)[OF upd] have "vt_lookup (tenv env1) x = Some b'" by simp
-    then show "x \<notin> loose" by (rule nfreeD[OF nf])
-  qed
-  have G: "tsubst \<rho> T' = ?TG" if "(G, T') \<in> vars (unf env t)" for T'
-  proof -
-    have "(G, T') \<in> vars t \<union> evars env1" using vars_unf_sub[OF ac(1)] that ev by blast
-    with Gin show ?thesis using vconsD[OF vc Gl] by blast
-  qed
-  have Y: "inst \<rho> (unf env1 t) = vsubst ?\<pi> (inst \<rho> (unf env t))"
-    by (simp add: unf_prune[OF upd ac ub] inst_vsubst_prune[OF G])
-  have tyY: "e \<turnstile> inst \<rho> (unf env t) : T"
-    by (rule typing_unf[OF ac(1) wte vcons_mono[OF vc] nf0 ty]) (use ev in blast)
-  have wt: "wt_subst ?\<pi>" by (rule wt_psubst) (use cl(2) tyb in \<open>simp_all add: closed_def\<close>)
-  note n = bnorm_typed[OF tyY]
-  have cs: "closed_subst ?\<pi>" using wt by (simp add: wt_subst_def)
-  have "bnorm (vsubst ?\<pi> (bnorm (inst \<rho> (unf env t)))) = bnorm (vsubst ?\<pi> (inst \<rho> (unf env t)))"
-    by (rule bnorm_typed_reds[OF typing_vsubst[OF tyY wt] beta_reds_vsubst[OF conjunct1[OF n] cs]])
-  moreover have "msz (bnorm (vsubst ?\<pi> (bnorm (inst \<rho> (unf env t))))) = msz (bnorm (inst \<rho> (unf env t)))"
-  proof (rule msz_prune)
-    show "?b = abs_list (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) (Var H (tsubst \<rho> Hty) \<degree>\<degree> map Bound ks)"
-      by (simp add: b inst_abs_list inst_apps comp_def)
-    show "closed ?b" using cl(2) by (simp add: closed_def)
-    show "e' \<turnstile> ?b : ?TG" for e' by (rule tyb)
-    show "arity ?TG = length (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) + a" using ar by simp
-    show "arity (tsubst \<rho> Hty) = length ks + a" by (rule ar(2))
-    show "e \<turnstile> bnorm (inst \<rho> (unf env t)) : T" by (rule subject_reduction_beta'[OF conjunct1[OF n] tyY])
-    show "no_redex (bnorm (inst \<rho> (unf env t)))" using n by blast
-  qed
-  ultimately show ?thesis by (simp add: M_def Y)
-qed
-
 text \<open>Environments and their extensions:\<close>
 
 lemma wt_env_extends: "wt_env \<rho> env' \<Longrightarrow> extends env env' \<Longrightarrow> wt_env \<rho> env"
@@ -729,17 +588,6 @@ lemma typing_unf:
   assumes ac: "acyc env" and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env)"
   shows "e \<turnstile> inst \<rho> t : T \<Longrightarrow> e \<turnstile> inst \<rho> (unf env t) : T"
   by (rule typing_unf[OF assms nfree0])
-
-lemma M_prune:
-  assumes upd: "ok (update (G, Gty) b env) env1"
-    and b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)"
-    and ac: "acyc env" "acyc env1" and cl: "closed_env env" "closed b"
-    and H: "vt_lookup (tenv env1) H = None"
-    and tyb: "\<And>e. e \<turnstile> inst \<rho> b : tsubst \<rho> Gty"
-    and ar: "arity (tsubst \<rho> Gty) = length bs + a" "arity (tsubst \<rho> Hty) = length ks + a"
-    and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env1)" and ty: "e \<turnstile> inst \<rho> t : T"
-  shows "M \<rho> env1 t = M \<rho> env t"
-  by (rule M_prune[OF assms nfree0])
 
 end
 
