@@ -1355,7 +1355,22 @@ text \<open>
 \<close>
 
 definition confW :: "uexn \<Rightarrow> bool" where
-  "confW e \<longleftrightarrow> (\<exists>ts. e = PExn (Term_Error (STR ''add_ffpair: Var name confusion'') ts))"
+  "confW e \<longleftrightarrow> loose \<noteq> {} \<and> (\<exists>ts. e = PExn (Term_Error (STR ''add_ffpair: Var name confusion'') ts))"
+
+text \<open>Two normalized occurrences of a name that is not loose have the same type:\<close>
+
+lemma winv_same_type:
+  assumes ei: "einv A K env" and wi: "winv env Y"
+    and vt: "(v, Tv) \<in> Y \<union> evars env" "(v, Uw) \<in> Y \<union> evars env"
+    and nT: "tnorm (tyenv env) Tv = Tv" "tnorm (tyenv env) Uw = Uw" and v: "v \<notin> loose"
+  shows "Tv = Uw"
+proof -
+  have "vinv (tnorm_inst (tyenv env)) env Y" using winvD[OF wi einv_rho0[OF ei]] by blast
+  then have eq: "tsubst (tnorm_inst (tyenv env)) Tv = tsubst (tnorm_inst (tyenv env)) Uw"
+    using vt v unfolding vinv_def vcons_def by blast
+  have "tnorm (tyenv env) Tv = tnorm (tyenv env) Uw" by (subst (1 2) tnorm_tsubst) (rule eq)
+  then show ?thesis unfolding nT .
+qed
 
 lemma dfdp_mono_ok: "dfdp m P \<Longrightarrow> (\<And>x. m = return x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> dfdp m Q"
   by (simp add: dfdp_def)
@@ -1446,7 +1461,18 @@ proof -
       ultimately show ?thesis using af True eq fv by simp
     next
       case False
-      then show ?thesis using af True by (simp add: confW_def)
+      have "v \<in> loose"
+      proof (rule ccontr)
+        assume "v \<notin> loose"
+        moreover have "(v, Tv) \<in> Y' \<union> evars env" "(v, Uw) \<in> Y' \<union> evars env"
+          using True by (auto simp: Y'_def t u vars_apps)
+        moreover have "tnorm (tyenv env) Tv = Tv" "tnorm (tyenv env) Uw = Uw"
+          using nt(2) nu(2) by (auto simp: npostc_def hds)
+        ultimately have "Tv = Uw" using winv_same_type[OF ei wi'] True by blast
+        with False show False by simp
+      qed
+      then have "loose \<noteq> {}" by blast
+      then show ?thesis using af True False by (simp add: confW_def)
     qed
   next
     case vw: False
@@ -1731,7 +1757,25 @@ next
             with af True k[of t u] f[of t u] fv show ?thesis by auto
           next
             case False
-            with af True show ?thesis by (simp add: ffexn_def confW_def)
+            have ds: "dstep env [(rb, t0, u0)] env [(rb, t, u)]"
+              by (rule norm_term_dstep[OF nt0[unfolded return_def] nu0[unfolded return_def]])
+            from dstep_pokc[OF ds wi p ei refl] ttu pd(5)
+            have wi': "winv env (Y \<union> vars t \<union> vars u)" by auto
+            have "F \<in> loose"
+            proof (rule ccontr)
+              assume "F \<notin> loose"
+              moreover have "(F, Tv) \<in> vars t" by (subst t) (simp add: vars_apps)
+              moreover have "(G, Uw) \<in> vars u" by (subst u) (simp add: vars_apps)
+              ultimately have "(F, Tv) \<in> (Y \<union> vars t \<union> vars u) \<union> evars env"
+                "(F, Uw) \<in> (Y \<union> vars t \<union> vars u) \<union> evars env" "F \<notin> loose"
+                using True by auto
+              moreover have "tnorm (tyenv env) Tv = Tv" "tnorm (tyenv env) Uw = Uw"
+                using nt nu True hds by (auto simp: npostc_def)
+              ultimately have "Tv = Uw" using winv_same_type[OF ei wi'] True by blast
+              with False show False by simp
+            qed
+            then have "loose \<noteq> {}" by blast
+            with af True False show ?thesis by (simp add: ffexn_def confW_def)
           qed
         next
           case False
@@ -1873,6 +1917,76 @@ proof -
   from foldrW_add_ffpair_gen[OF assms(1,2) this] show ?thesis by simp
 qed
 
+
+end
+
+
+subsection \<open>The statements of theory \<open>Unify_Flexflex_Term\<close>\<close>
+
+context pure_sig_gen
+begin
+
+text \<open>
+  The old statements, for results that bind no loose name: normalization terminates if the names
+  of the term and of the environment have one type modulo the type environment (\<^const>\<open>vok\<close>);
+  this is the statement above in the locale without loose names.
+\<close>
+
+lemma cxokE_lxokE_loose: "cxokE Xe m P \<Longrightarrow> (\<And>e. Xe e \<Longrightarrow> loose \<noteq> {}) \<Longrightarrow> lxokE (\<lambda>_. False) f m P"
+  unfolding cxokE_def lxokE_def by (auto simp: clashW_def clashx_def)
+
+
+interpretation one: pure_sig alg ar ctab
+  by (simp add: pure_sig_iff wf_algebra_axioms)
+
+theorem norm_term_term:
+  assumes ei: "einv A K env" and vk: "vok env (vars t \<union> evars env)" and tv: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and wte: "wt_env (rho0 env) env" and vc: "vcons (rho0 env) (vars t \<union> evars env)"
+    and ty: "e \<turnstile> inst (rho0 env) t : T" and nf: "nfree env"
+  shows "\<exists>t'. norm_term env t = return t' \<and> npost A env t'"
+proof -
+  have "one.tok env (vars t \<union> evars env)" using vk by (simp add: one.tok_def vok_def)
+  from one.norm_term_dfd[OF ei this tv wte ty] show ?thesis
+  proof (rule one.dfdp_cases)
+    fix x assume "one.clashx x" then show ?thesis by (simp add: one.clashx_def)
+  next
+    fix t' assume "norm_term env t = return t'" "one.npostc A env t'"
+    then show ?thesis by (auto simp: one.npostc_def one.tok_def npost_def vok_def)
+  qed
+qed
+
+
+theorem add_ffpair_term:
+  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "upok A env rb Y t0 u0"
+    and ar: "\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t0 : T \<and> e \<turnstile> inst (rho0 env) u0 : T \<and> arity T = 0"
+    and ft: "flexb env0 t0" and fu: "flexb env0 u0"
+    and tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A"
+    and tf: "\<forall>(t', u')\<in>set tps. flexb env0 t' \<and> flexb env0 u'"
+    and nf: "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (add_ffpair alg (rb, t0, u0) (env, tps)) (\<lambda>(env', tps'). finv A K env0 env' \<and>
+    (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
+    (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u'))"
+  by (rule cxokE_lxokE_loose[OF add_ffpair_dfd[OF fv wi p ar ft fu tk tf]]) (simp add: confW_def)
+
+theorem foldrW_add_ffpair_term:
+  assumes si: "sinv A K X env ffs" and sh: "\<forall>dp\<in>set ffs. ff_shape env dp \<and> ffeta env dp"
+    and tp: "ffres A K X env tps" and tfl: "\<forall>(t, u)\<in>set tps. flexb env t \<and> flexb env u"
+    and nf: "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (foldrW (add_ffpair alg) ffs (env, tps)) (\<lambda>(env', tps').
+    ffres A K (X \<union> dvars (tdps tps')) env' tps' \<and> extends env env' \<and> tyenv env' = tyenv env \<and>
+    iflex env env' \<and> (\<forall>(t, u)\<in>set tps'. flexb env t \<and> flexb env u) \<and>
+    dstep env (ffs @ tdps tps) env' (tdps tps'))"
+  by (rule cxokE_lxokE_loose[OF foldrW_add_ffpair_dfd[OF si sh tp tfl]]) (simp add: confW_def)
+
+corollary foldrW_add_ffpair_term_Nil:
+  assumes "sinv A K X env ffs" "\<forall>dp\<in>set ffs. ff_shape env dp \<and> ffeta env dp" "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (foldrW (add_ffpair alg) ffs (env, [])) (\<lambda>(env', tps').
+    ffres A K (X \<union> dvars (tdps tps')) env' tps' \<and> extends env env' \<and> tyenv env' = tyenv env \<and>
+    iflex env env' \<and> (\<forall>(t, u)\<in>set tps'. flexb env t \<and> flexb env u) \<and> dstep env ffs env' (tdps tps'))"
+proof -
+  have "ffres A K X env []" using assms(1) by (simp add: ffres_def sinv_def)
+  from foldrW_add_ffpair_term[OF assms(1,2) this _ assms(3)] show ?thesis by simp
+qed
 
 end
 

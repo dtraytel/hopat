@@ -97,6 +97,17 @@ proof -
   qed
 qed
 
+text \<open>
+  The clash occurs only with loose names, so a computation that terminates with the clash or a
+  result satisfies the statements of theory \<open>Unify_Simpl_Term\<close> for results that bind no loose name:
+\<close>
+
+lemma cxokE_lxokE: "cxokE Xe m P \<Longrightarrow> lxokE Xe f m P"
+  unfolding cxokE_def lxokE_def by (auto simp: clashW_def clashx_def)
+
+lemma cxokE_okW_P: "cxokE Xe m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
+  unfolding cxokE_def by auto
+
 lemma cxokE_defined: "cxokE Xe m P \<Longrightarrow> m \<noteq> None"
   unfolding cxokE_def by auto
 
@@ -1242,6 +1253,61 @@ proof -
   with si show ?thesis by blast
 qed
 
+
+end
+
+
+subsection \<open>Without loose names\<close>
+
+text \<open>
+  Without loose names, the clash cannot occur, and the statements above say that the computations
+  terminate without exceptions other than the given ones.
+\<close>
+
+context pure_sig
+begin
+
+lemma clashx_pure [simp]: "\<not> clashx e"
+  by (simp add: clashx_def)
+
+lemma clashW_pure [simp]: "\<not> clashW e"
+  by (simp add: clashW_def)
+
+lemma cxokE_pure: "cxokE (\<lambda>e. e = E) m P \<longleftrightarrow> xokW E m P"
+  by (simp add: cxokE_def xokW_def)
+
+lemma dfd_pure: "dfd m \<longleftrightarrow> (\<exists>x. m = Some (Ok x))"
+proof (cases m)
+  case (Some a)
+  then show ?thesis by (cases a) (auto simp: dfd_def)
+qed (simp add: dfd_def)
+
+theorem head_norm_dpair_term:
+  assumes finK: "finite K" and ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
+  shows "cuok (head_norm_dpair alg env (rb, t, u)) (\<lambda>(dp', env'). hpostc A K X env (rb, t, u) dp' env')"
+  using head_norm_dpair_dfd[OF assms] by (simp add: cxokE_pure)
+
+theorem assignment_term:
+  assumes finX: "finite X" and finK: "finite K" and ei: "einv A K env" and wi: "winv env X"
+    and p: "upok A env rb X t u" and ah: "ahd env t"
+  shows "(\<exists>evs. assignment alg rb t u env = Some (evs, Err ASSIGN)) \<or>
+    cuok (assignment alg rb t u env) (apost A K X env)"
+  using assignment_dfd[OF assms] by (auto simp: cxokE_def xokW_def)
+
+theorem SIMPL0_term:
+  assumes fin: "finite X" "finite K" and si: "sinv A K X env [dp]"
+  shows "cuok (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)"
+  using SIMPL0_dfd[OF assms] by (simp add: cxokE_pure)
+
+lemma foldrW_SIMPL0_term:
+  assumes fin: "finite X" "finite K"
+  shows "sinv A K X env dps \<Longrightarrow> cuok (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
+  using foldrW_SIMPL0_dfd[OF assms] by (simp add: cxokE_pure)
+
+theorem SIMPL_term:
+  assumes fin: "finite X" "finite K" and si: "sinv A K X env dps"
+  shows "cuok (SIMPL alg env dps) (simpl_post A K X env)"
+  using SIMPL_dfd[OF assms] by (simp add: cxokE_pure)
 
 end
 

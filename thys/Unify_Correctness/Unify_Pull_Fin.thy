@@ -7,7 +7,7 @@ begin
 text \<open>
   The search of \<^const>\<open>hounifiers\<close> terminates without an exception, after finitely many
   unifiers: the depth of the search is bounded by \<^const>\<open>cfg_search_bound\<close>, each node simplifies
-  its problem (\<^const>\<open>SIMPL\<close>, theorem @{thm [source] pure_sig_gen.SIMPL_term}) and enumerates finitely
+  its problem (\<^const>\<open>SIMPL\<close>, theorem @{thm [source] pure_sig_gen.SIMPL_dfd}) and enumerates finitely
   many new problems by \<^const>\<open>MATCH\<close> (theorem @{thm [source] pure_sig_gen.MATCH_fin}). A leaf
   without flex-rigid pairs returns a unifier after the treatment of its flex-flex pairs by
   \<^const>\<open>add_ffpair\<close>, which raises no exception on the flex-flex pairs of \<^const>\<open>SIMPL\<close>
@@ -269,7 +269,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
     then show "tnew A0 env0 A env'" by (rule tnew_trans[OF tn0 _ extends_maxidx[OF dstepD(1)[OF d0]]])
   qed
   show ?case
-  proof (rule lfin_AddUnify[where cfg = cfg, unfolded cfg, OF fR SIMPL_term[OF fin si nf]])
+  proof (rule lfin_AddUnify[where cfg = cfg, unfolded cfg, OF fR cxokE_lxokE[OF SIMPL_dfd[OF fin si]]])
     fix env' ffs
     assume ok: "okW (SIMPL alg env dps) (env', ffs, [])" and sp: "simpl_post A K X env (env', ffs, [])"
       and nf': "nfree env'"

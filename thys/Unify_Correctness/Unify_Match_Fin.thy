@@ -1,7 +1,7 @@
 section \<open>Finiteness of \<open>MATCH\<close>\<close>
 
 theory Unify_Match_Fin
-  imports Unify_Simpl_Term Unify_Match_Sound
+  imports Unify_Simpl_Dfd Unify_Match_Sound
 begin
 
 text \<open>
@@ -461,20 +461,15 @@ next
   qed
 qed
 
-subsection \<open>The occurs check terminates\<close>
+lemma upok_Xmono:
+  "upok A env rb X t u \<Longrightarrow> X \<subseteq> X' \<Longrightarrow> vtvars X' \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> upok A env rb X' t u"
+  unfolding upok_def by blast
 
-lemma occurs_list_term:
-  assumes ac: "acyc env" "tacyc (tyenv env)" "tcons_env (tyenv env)"
-  shows "\<forall>t\<in>set ts. vok env (vars t \<union> evars env) \<Longrightarrow> \<exists>r. occurs_list env v seen ts = return r"
-proof (induction ts arbitrary: seen)
-  case (Cons t ts)
-  from occur_term[OF ac order_refl, of t v seen] Cons.prems obtain b s where
-    o: "occur t env v seen = return (b, s)" by auto
-  from Cons.IH[of s] Cons.prems obtain r where "occurs_list env v s ts = return r" by auto
-  with o show ?case by (cases b) auto
-qed (auto simp: return_def)
+lemma vtvars_mlvars_Var:
+  "\<forall>G\<in>set Gs. \<exists>x U. G = Var x U \<and> tvars U \<subseteq> S \<Longrightarrow> vtvars (lvars Gs) \<subseteq> S"
+  by (fastforce simp: vtvars_def)
 
-subsection \<open>Single steps of matching\<close>
+text \<open>The new variables of \<^const>\<open>make_args\<close> keep the invariant:\<close>
 
 lemma einv_maxidx:
   assumes ei: "einv A K env" and e: "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
@@ -486,16 +481,6 @@ proof -
   moreover have "tvinv A env'" using x(1) tinv_mono[OF _ e(3)] e(1,2) unfolding tvinv_def by auto
   ultimately show ?thesis using ei by (simp add: einv_def e(2))
 qed
-
-lemma upok_Xmono:
-  "upok A env rb X t u \<Longrightarrow> X \<subseteq> X' \<Longrightarrow> vtvars X' \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> upok A env rb X' t u"
-  unfolding upok_def by blast
-
-lemma vtvars_mlvars_Var:
-  "\<forall>G\<in>set Gs. \<exists>x U. G = Var x U \<and> tvars U \<subseteq> S \<Longrightarrow> vtvars (lvars Gs) \<subseteq> S"
-  by (fastforce simp: vtvars_def)
-
-text \<open>The new variables of \<^const>\<open>make_args\<close> keep the invariant:\<close>
 
 lemma sinv_make_args:
   assumes si: "sinv A K X env dps" and ma: "make_args name Ts env Us = (env', args)"

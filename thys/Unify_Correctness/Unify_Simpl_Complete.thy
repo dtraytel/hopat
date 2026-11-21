@@ -1,7 +1,7 @@
 section \<open>Completeness of \<open>SIMPL\<close>\<close>
 
 theory Unify_Simpl_Complete
-  imports Unify_Simpl_Term "Pattern_Correctness.Pattern_Complete"
+  imports Unify_Simpl_Dfd "Pattern_Correctness.Pattern_Complete"
 begin
 
 text \<open>
@@ -1120,12 +1120,12 @@ text \<open>The decomposition of a rigid-rigid pair, with the termination measur
 
 context
   fixes A K X B
-  assumes IHc: "\<And>env1 dp1 ffs1 frs1 \<rho>1 \<sigma>1. (smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
+  assumes IHc: "\<And>env1 dp1 ffs1 frs1 \<rho>1 \<sigma>1. (smeasc K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
       scinv \<rho>1 \<sigma>1 env1 [dp1] X A \<Longrightarrow> ncu (SIMPL0 alg dp1 (env1, ffs1, frs1)) (ccon0 \<rho>1 \<sigma>1 env1 X A ffs1 frs1)"
     and finX: "finite X" and finK: "finite K"
 begin
 
-lemma sc_IHt: "(smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
+lemma sc_IHt: "(smeasc K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
     cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
   by (rule SIMPL0_term[OF finX finK])
 
@@ -1133,7 +1133,7 @@ lemma simrands_complete:
   assumes hh: "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u. h' = f $ u)"
     and B: "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), d0)"
   shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep A K X env0 env \<Longrightarrow>
-    (tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> sum_list (map (dm env) (dzip rb ss ts)) < d0) \<Longrightarrow>
+    (tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> sum_list (map (dmc env) (dzip rb ss ts)) < d0) \<Longrightarrow>
     scinv \<rho> \<sigma> env (dzip rb ss ts) X A \<Longrightarrow>
     ncu (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
 proof (induction ss arbitrary: ts ffs frs env \<rho> \<sigma> rule: rev_induct)
@@ -1146,21 +1146,21 @@ next
     by (cases ts rule: rev_exhaust) auto
   have dz: "dzip rb (ss @ [s]) ts = dzip rb ss ts' @ [(rb, s, t)]" using len ts by simp
   have si0: "sinv A K X env (dzip rb ss ts')" by (rule sinv_mono[OF snoc.prems(2)[unfolded dz]]) auto
-  have lt0: "sum_list (map (dm env) (dzip rb ss ts')) < d0"
+  have lt0: "sum_list (map (dmc env) (dzip rb ss ts')) < d0"
     if "tyenv env = tyenv env0" "tenv env = tenv env0" using snoc.prems(4)[OF that, unfolded dz] by simp
   have inv0: "scinv \<rho> \<sigma> env (dzip rb ss ts') X A" by (rule scinv_mono[OF snoc.prems(5)[unfolded dz]]) auto
   have r0: "ncu (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
     by (rule snoc.IH[OF len si0 snoc.prems(3) lt0 inv0])
-  have IHt': "\<And>env1 dp1 ffs1 frs1. (smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
+  have IHt': "\<And>env1 dp1 ffs1 frs1. (smeasc K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
       cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
     by (rule sc_IHt)
-  have IHg: "lcuok fst (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
-    if "(smeas K X env1 dp1, B) \<in> ulex" "sinv A K X env1 [dp1]" "nfree env1" for env1 dp1 ffs1 frs1
-    using IHt'[OF that(1,2)] by simp
-  have "lcuok fst (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
-    by (rule simrands_term[OF IHg finX finK hh B len si0 snoc.prems(3) lt0 nfree0])
+  have IHg: "ccuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
+    if "(smeasc K X env1 dp1, B) \<in> ulex" "sinv A K X env1 [dp1]" for env1 dp1 ffs1 frs1
+    using IHt'[OF that(1,2)] by (simp add: cxokE_pure)
+  have "ccuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
+    by (rule simrands_dfd[OF IHg finX finK hh B len si0 snoc.prems(3) lt0])
   then have t0: "cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
-    by simp
+    by (simp add: cxokE_pure)
   show ?case unfolding ts simrands_snoc
   proof (rule ncu_bindW[OF ncu_cuok[OF r0 t0]])
     fix st1 assume st1ok: "okW (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) st1"
@@ -1178,13 +1178,13 @@ next
     proof (rule sinv_ext[OF sinv_mono[OF snoc.prems(2)] _ _ s1(4)])
       show "set [(rb, s, t)] \<subseteq> set (dzip rb (ss @ [s]) ts)" unfolding dz by simp
     qed (use s1(3) in \<open>simp_all add: sinv_def\<close>)
-    have m: "(smeas K X env1 (rb, s, t), B) \<in> ulex" unfolding smeas_def B
+    have m: "(smeasc K X env1 (rb, s, t), B) \<in> ulex" unfolding smeasc_def B
     proof (rule ulex_sstep[OF sstep_trans[OF snoc.prems(3) s1(4)]])
       assume e1: "tyenv env1 = tyenv env0" "tenv env1 = tenv env0"
       have e0: "tyenv env = tyenv env0" "tenv env = tenv env0"
         using extends_mid[OF sstepD(1)[OF snoc.prems(3)] sstepD(1)[OF s1(4)]] e1 by auto
-      then have "dm env1 = dm env" using e1 dm_same[of env1 env] by simp
-      with snoc.prems(4)[OF e0, unfolded dz] show "dm env1 (rb, s, t) < d0" by simp
+      then have "dmc env1 = dmc env" using e1 dmc_same[of env1 env] by simp
+      with snoc.prems(4)[OF e0, unfolded dz] show "dmc env1 (rb, s, t) < d0" by simp
     qed
     have inv1: "scinv \<rho>1 \<sigma>1 env1 [(rb, s, t)] X A"
     proof (rule scinv_pairs[OF c1(3)])
@@ -1202,7 +1202,7 @@ next
 qed
 
 lemma rigid_rigid_complete:
-  assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0"
+  assumes hp: "hpostc A K X env0 dp0 (rb, t, u) env" and B: "B = smeasc K X env0 dp0"
     and st2: "sstep A K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
     and rh: "rigid (head_of t)" "rigid (head_of u)"
     and hh: "\<And>\<rho>. tsol (tyenv env2) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> (head_of t) = inst \<rho> (head_of u)"
@@ -1210,8 +1210,8 @@ lemma rigid_rigid_complete:
   shows "ncu (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (ccon0 \<rho> \<sigma> env2 X A ffs frs)"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
-    and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
-    by (simp_all add: hpost_def)
+    and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dmc env (rb, t, u) \<le> dmc env0 dp0"
+    by (simp_all add: hpostc_def)
   define h where "h = head_of t"
   define ss where "ss = snd (strip_comb t)"
   define h' where "h' = head_of u"
@@ -1222,14 +1222,14 @@ proof -
     using upok_mono[OF p sstepD(1,2)[OF st2]] tt uu by simp
   note ra = rigid_args_pok[OF p2 rh[folded h_def h'_def] hh[folded h_def h'_def] einv_rho0[OF ei2]]
   have si2: "sinv A K X env2 (dzip rb ss ts)" by (rule sinv_dzip[OF ei2 wi2 ra(2)])
-  have B': "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), dm env0 dp0)" by (simp add: B smeas_def)
-  have lt: "sum_list (map (dm env2) (dzip rb ss ts)) < dm env0 dp0"
+  have B': "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), dmc env0 dp0)" by (simp add: B smeasc_def)
+  have lt: "sum_list (map (dmc env2) (dzip rb ss ts)) < dmc env0 dp0"
     if e: "tyenv env2 = tyenv env0" "tenv env2 = tenv env0"
   proof -
     have e1: "tyenv env = tyenv env0" by (rule extends_mid(1)[OF sstepD(1)[OF st0] sstepD(1)[OF st2] e(1)])
-    then have "dm env2 = dm env" using e(1) dm_same[OF te2] by simp
-    moreover have "sum_list (map (dm env) (dzip rb ss ts)) < dm env (rb, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)"
-      by (rule dm_args[OF ei wi p[unfolded tt uu] rh[folded h_def h'_def] ra(1)])
+    then have "dmc env2 = dmc env" using e(1) dmc_same[OF te2] by simp
+    moreover have "sum_list (map (dmc env) (dzip rb ss ts)) < dmc env (rb, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)"
+      by (rule dmc_args[OF ei wi p[unfolded tt uu] rh[folded h_def h'_def] ra(1)])
     ultimately show ?thesis using dmle[OF e1] tt uu by simp
   qed
   have hA: "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u'. h' = f $ u')" unfolding h_def h'_def by (simp_all add: head_of_not_App)
@@ -1279,13 +1279,13 @@ next
 qed
 
 lemma SIMPL0_rest_complete:
-  assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0"
+  assumes hp: "hpostc A K X env0 dp0 (rb, t, u) env" and B: "B = smeasc K X env0 dp0"
     and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A" and hs: "hsat0 env (rb, t, u)"
   shows "ncu (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (ccon0 \<rho> \<sigma> env X A ffs frs)"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and aht: "ahd env t" and ahu: "ahd env u"
-    by (simp_all add: hpost_def)
+    by (simp_all add: hpostc_def)
   let ?\<rho> = "rho0 env"
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p] and i = scinvD[OF inv]
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
@@ -1491,7 +1491,7 @@ proof -
 qed
 
 lemma SIMPL0_step_complete:
-  assumes B: "B = smeas K X env0 dp0" and si: "sinv A K X env0 [dp0]" and inv: "scinv \<rho> \<sigma> env0 [dp0] X A"
+  assumes B: "B = smeasc K X env0 dp0" and si: "sinv A K X env0 [dp0]" and inv: "scinv \<rho> \<sigma> env0 [dp0] X A"
   shows "ncu (SIMPL0 alg dp0 (env0, ffs, frs)) (ccon0 \<rho> \<sigma> env0 X A ffs frs)"
 proof -
   obtain rb t u where dp0: "dp0 = (rb, t, u)" by (cases dp0)
@@ -1504,10 +1504,10 @@ proof -
       head_norm_dpair_term[OF finK ei wi p]]])
     fix x assume okx: "okW (head_norm_dpair alg env0 (rb, t, u)) x"
       and P: "(case x of (dp', env') \<Rightarrow> env' = env0 \<and> hsat0 env0 dp' \<and> dsolved \<rho> \<sigma> [dp']) \<and>
-        (case x of (dp', env') \<Rightarrow> hpost A K X env0 (rb, t, u) dp' env')"
+        (case x of (dp', env') \<Rightarrow> hpostc A K X env0 (rb, t, u) dp' env')"
     obtain rb' t' u' env where x: "x = ((rb', t', u'), env)" by (cases x) auto
     from P x have e: "env = env0" and hs: "hsat0 env (rb', t', u')" and ds: "dsolved \<rho> \<sigma> [(rb', t', u')]"
-      and hp: "hpost A K X env0 dp0 (rb', t', u') env" by (auto simp: dp0)
+      and hp: "hpostc A K X env0 dp0 (rb', t', u') env" by (auto simp: dp0)
     have inv': "scinv \<rho> \<sigma> env [(rb', t', u')] X A"
       by (rule scinv_step[OF inv[unfolded dp0] pl head_norm_dpair_sound(2)[OF okx[unfolded x]]])
         (use i(1,4) ds e in simp_all)
@@ -1527,24 +1527,24 @@ text \<open>
   \<^const>\<open>SIMPL0\<close> does not raise \<open>CANTUNIFY\<close> on a pair with a solution \<open>(\<rho>, \<sigma>)\<close> (for the
   invariants \<^const>\<open>sinv\<close> of termination and \<^const>\<open>scinv\<close>), and the new pairs of every result have
   a solution that agrees with \<open>(\<rho>, \<sigma>)\<close> on the old variables. By induction on the measure
-  \<^const>\<open>smeas\<close> of the termination proof.
+  \<^const>\<open>smeasc\<close> of the termination proof.
 \<close>
 
 theorem SIMPL0_complete:
   assumes fin: "finite X" "finite K" and si: "sinv A K X env [dp]" and inv: "scinv \<rho> \<sigma> env [dp] X A"
   shows "ncu (SIMPL0 alg dp (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
 proof -
-  have "\<forall>env dp ffs frs \<rho> \<sigma>. smeas K X env dp = m \<longrightarrow> sinv A K X env [dp] \<longrightarrow> scinv \<rho> \<sigma> env [dp] X A \<longrightarrow>
+  have "\<forall>env dp ffs frs \<rho> \<sigma>. smeasc K X env dp = m \<longrightarrow> sinv A K X env [dp] \<longrightarrow> scinv \<rho> \<sigma> env [dp] X A \<longrightarrow>
       ncu (SIMPL0 alg dp (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)" for m
   proof (induction m rule: wf_induct_rule[OF wf_ulex])
     case (1 m)
     show ?case
     proof (intro allI impI)
-      fix env dp ffs frs \<rho> \<sigma> assume m: "smeas K X env dp = m" and si: "sinv A K X env [dp]"
+      fix env dp ffs frs \<rho> \<sigma> assume m: "smeasc K X env dp = m" and si: "sinv A K X env [dp]"
         and inv: "scinv \<rho> \<sigma> env [dp] X A"
       show "ncu (SIMPL0 alg dp (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
       proof (rule SIMPL0_step_complete[OF _ fin m[symmetric] si inv])
-        fix env1 dp1 ffs1 frs1 \<rho>1 \<sigma>1 assume "(smeas K X env1 dp1, m) \<in> ulex" "sinv A K X env1 [dp1]"
+        fix env1 dp1 ffs1 frs1 \<rho>1 \<sigma>1 assume "(smeasc K X env1 dp1, m) \<in> ulex" "sinv A K X env1 [dp1]"
           "scinv \<rho>1 \<sigma>1 env1 [dp1] X A"
         then show "ncu (SIMPL0 alg dp1 (env1, ffs1, frs1)) (ccon0 \<rho>1 \<sigma>1 env1 X A ffs1 frs1)"
           using "1.IH" by blast

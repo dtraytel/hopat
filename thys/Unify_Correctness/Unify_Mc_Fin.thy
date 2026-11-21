@@ -17,6 +17,15 @@ text \<open>
 context pure_sig_gen
 begin
 
+lemma inst_unf_incr:
+  "acyc env \<Longrightarrow> closed_env env \<Longrightarrow>
+    inst \<rho> (unf env (incr_boundvars 1 t $ Bound 0)) = lift (inst \<rho> (unf env t)) 0 $ Bound 0"
+proof -
+  assume ac: "acyc env" and cl: "closed_env env"
+  have "unf env (lift t 0) = lift (unf env t) 0" by (rule unf_lift[OF ac cl]) simp
+  then show ?thesis by (simp only: incr_boundvars_1 unf_simps inst.simps inst_lift)
+qed
+
 subsection \<open>Counting rigid atoms\<close>
 
 text \<open>
@@ -725,7 +734,7 @@ proof -
     unfolding cpinvX_def by blast+
   have sd: "sinv A K X env dps" by (rule sinv_mono[OF si]) auto
   show ?thesis
-  proof (rule lxokE_mono_ok[OF SIMPL_term[OF fin sd nf]])
+  proof (rule lxokE_mono_ok[OF cxokE_lxokE[OF SIMPL_dfd[OF fin sd]]])
     fix st assume sp: "simpl_post A K X env st" and nfs: "nfree (fst st)"
     obtain env3 fr1 ff1 where ste: "st = (env3, fr1, ff1)" by (cases st)
     have "cpinvX A0 envM VM F A K X env3 (fr1 @ ff1)"
