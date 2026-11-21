@@ -115,13 +115,7 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Seq_Loose
     Unify_Mc_Fin
     Unify_Pull_Fin
-    Unify_Sound
-    Unify_Ghost
-    Unify_Smash_Sound
-    Unify_Search_Inv
-    Unify_Acyc_Simpl
-    Unify_Match_Inv
-    Unify_Acyc
+    Unify_Occurs_Sound
     Unify_Unfc
     Unify_Simpl_Dfd
     Unify_Flexflex_Dfd
@@ -129,6 +123,13 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Mc_Dfd
     Unify_Pull_Dfd
     Unify_Pattern_Dfd
+    Unify_Sound
+    Unify_Ghost
+    Unify_Smash_Sound
+    Unify_Search_Inv
+    Unify_Acyc_Simpl
+    Unify_Match_Inv
+    Unify_Acyc
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete

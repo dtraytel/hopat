@@ -370,12 +370,6 @@ proof (induction rule: okW_foldrW_induct)
   qed (use b1 in simp)
 qed simp
 
-lemma set_ins_arg: "set (ins_arg x xs) = insert x (set xs)"
-  by (induction xs) auto
-
-lemma set_sort_args: "set (sort_args xs) = set xs"
-  by (induction xs) (auto simp: set_ins_arg)
-
 
 lemma below_names: "below n X \<longleftrightarrow> (\<forall>x\<in>vnames X. snd x \<le> n)"
   by (auto simp: below_def)

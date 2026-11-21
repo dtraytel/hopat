@@ -390,12 +390,6 @@ lemma tknown_swap: "tknown A env [(bs, t, u)] \<Longrightarrow> tknown A env [(b
 lemma ttvars_apps_args: "s \<in> set ss \<Longrightarrow> ttvars s \<subseteq> ttvars (h \<degree>\<degree> ss)"
   by (auto simp: ttvars_def typs_apps)
 
-lemma ttvars_head: "ttvars (head_of t) \<subseteq> ttvars t"
-proof -
-  have "ttvars h \<subseteq> ttvars (h \<degree>\<degree> ss)" for h ss by (auto simp: ttvars_def typs_apps)
-  then show ?thesis by (metis t_apps)
-qed
-
 lemma head_body_cert:
   assumes ei: "einv A K (tyonly env)" and kt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
     and hd: "head_of t = Var v T" and ty: "e \<turnstile> inst (tnorm_inst (tyenv env)) t : W"

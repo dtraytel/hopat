@@ -1,7 +1,7 @@
 section \<open>Unfolding with Type Checks\<close>
 
 theory Unify_Unfc
-  imports Unify_Acyc
+  imports Unify_Pull_Fin Unify_Occurs_Sound
 begin
 
 text \<open>
