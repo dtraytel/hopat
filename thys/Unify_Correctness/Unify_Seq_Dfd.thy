@@ -16,12 +16,12 @@ context pure_sig_gen
 begin
 
 definition gexn :: "uexn \<Rightarrow> bool" where
-  "gexn e \<longleftrightarrow> clashW e \<or> ffexn e"
+  "gexn e \<longleftrightarrow> clashW e \<or> (loose \<noteq> {} \<and> ffexn e)"
 
 lemma gexn_simps [simp]: "\<not> gexn CANTUNIFY" "\<not> gexn ASSIGN" "\<not> gexn CHANGE_FAIL" "\<not> gexn Bind"
   by (simp_all add: gexn_def ffexn_def confW_def)
 
-lemma gexn_clashW: "clashW e \<Longrightarrow> gexn e" and gexn_ffexn: "ffexn e \<Longrightarrow> gexn e"
+lemma gexn_clashW: "clashW e \<Longrightarrow> gexn e" and gexn_ffexn: "loose \<noteq> {} \<Longrightarrow> ffexn e \<Longrightarrow> gexn e"
   by (simp_all add: gexn_def)
 
 lemma gexn_PExn: "gexn e \<Longrightarrow> \<exists>x. e = PExn x"
@@ -37,6 +37,20 @@ definition cfin :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<Rightarrow> bool
 
 lemma evals_evalx: "evals cfg s xs \<Longrightarrow> evalx cfg s xs"
   by (induction rule: evals.induct) (auto intro: evalx.intros)
+
+text \<open>Without loose names no exception of \<^const>\<open>gexn\<close> occurs, and the enumeration is total:\<close>
+
+lemma gexn_loose: "gexn e \<Longrightarrow> loose \<noteq> {}"
+  by (auto simp: gexn_def clashW_def clashx_def)
+
+lemma evalx_evals: "evalx cfg s xs \<Longrightarrow> loose = {} \<Longrightarrow> evals cfg s xs"
+proof (induction rule: evalx.induct)
+  case (Exn s evs e)
+  from gexn_loose[OF Exn(2)] Exn(3) show ?case by blast
+qed (auto intro: evals.intros)
+
+lemma cfin_fin: "loose = {} \<Longrightarrow> cfin cfg s Q \<Longrightarrow> fin cfg s Q"
+  unfolding fin_def cfin_def using evalx_evals by blast
 
 lemma fin_cfin: "fin cfg s Q \<Longrightarrow> cfin cfg s Q"
   unfolding fin_def cfin_def using evals_evalx by blast

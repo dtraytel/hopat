@@ -76,7 +76,7 @@ lemma cfin_AddUnify:
   assumes fR: "cfin cfg R Q"
     and S: "ccuok (SIMPL (cfg_alg cfg) env dps) P"
     and N: "\<And>env' ffs. okW (SIMPL (cfg_alg cfg) env dps) (env', ffs, []) \<Longrightarrow> P (env', ffs, []) \<Longrightarrow>
-      cxokE ffexn (foldrW (add_ffpair (cfg_alg cfg)) ffs (env', [])) (\<lambda>r. Q (El_R (fst r) (snd r)))"
+      cxokE gexn (foldrW (add_ffpair (cfg_alg cfg)) ffs (env', [])) (\<lambda>r. Q (El_R (fst r) (snd r)))"
     and C: "\<And>env' ffs dp frs'. okW (SIMPL (cfg_alg cfg) env dps) (env', ffs, dp # frs') \<Longrightarrow>
       P (env', ffs, dp # frs') \<Longrightarrow> \<not> td > cfg_search_bound cfg \<Longrightarrow>
       ccuok (MATCH cfg env' dp (frs' @ ffs)) (\<lambda>ms. cfin cfg (S_ItRight (td + 1) ms R) Q)"
@@ -113,13 +113,13 @@ proof -
     proof (cases frs)
       case Nil
       from N[OF ok(1)[unfolded st Nil] ok(2)[unfolded st Nil]]
-      consider (err) evs e where "foldrW (add_ffpair (cfg_alg cfg)) ffs (env', []) = Some (evs, Err e)" "ffexn e \<or> clashW e"
+      consider (err) evs e where "foldrW (add_ffpair (cfg_alg cfg)) ffs (env', []) = Some (evs, Err e)" "gexn e \<or> clashW e"
         | (okr) r0 where "okW (foldrW (add_ffpair (cfg_alg cfg)) ffs (env', [])) r0" "Q (El_R (fst r0) (snd r0))"
         unfolding cxokE_def by blast
       then show ?thesis
       proof cases
         case err
-        have ge: "gexn e" using err(2) by (auto simp: gexn_def)
+        have ge: "gexn e" using err(2) by (auto intro: gexn_clashW)
         have "au_cont cfg td R st = Some (evs, Err e)"
           unfolding st Nil au_cont_def using err(1) by (simp add: bindW_def)
         then have "resW (pull cfg (S_AddUnify td env dps R)) (Err e)"
@@ -212,8 +212,22 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
     assume ok: "okW (SIMPL alg env dps) (env', ffs, [])" and sp: "simpl_post A K X env (env', ffs, [])"
     note p = post[OF ok sp]
     have siff: "sinv A K X env' ffs" using p(1) by simp
-    show "cxokE ffexn (foldrW (add_ffpair alg) ffs (env', [])) (\<lambda>r. ?Q (El_R (fst r) (snd r)))"
-    proof (rule cxokE_mono_ok[OF foldrW_add_ffpair_gen_Nil[OF siff p(2)]])
+    have gen: "cxokE gexn (foldrW (add_ffpair alg) ffs (env', [])) (\<lambda>(env'', tps').
+          ffres A K (X \<union> dvars (tdps tps')) env'' tps' \<and> extends env' env'' \<and> tyenv env'' = tyenv env' \<and>
+          iflex env' env'' \<and> (\<forall>(t, u)\<in>set tps'. flexb env' t \<and> flexb env' u) \<and> dstep env' ffs env'' (tdps tps'))"
+    proof (cases "loose = {}")
+      case False
+      from foldrW_add_ffpair_gen_Nil[OF siff p(2)] show ?thesis
+        by (rule cxokE_mono_exn) (use False in \<open>auto intro: gexn_ffexn\<close>)
+    next
+      case True
+      from SIMPL_add_ffpair_ok[OF fin si ok nfree_strict[OF True]] obtain r where
+        "okW (foldrW (add_ffpair alg) ffs (env', [])) r"
+        by (subst (asm) lxokE_strict[OF True]) auto
+      with foldrW_add_ffpair_gen_Nil[OF siff p(2)] show ?thesis by (auto simp: cxokE_def)
+    qed
+    show "cxokE gexn (foldrW (add_ffpair alg) ffs (env', [])) (\<lambda>r. ?Q (El_R (fst r) (snd r)))"
+    proof (rule cxokE_mono_ok[OF gen])
       fix r assume r0': "okW (foldrW (add_ffpair alg) ffs (env', [])) r"
         and pr: "case r of (env'', tps') \<Rightarrow>
           ffres A K (X \<union> dvars (tdps tps')) env'' tps' \<and> extends env' env'' \<and> tyenv env'' = tyenv env' \<and>
@@ -301,6 +315,41 @@ theorem hounifiers_cfin:
   shows "cfin cfg (hounifiers rb env tus) (\<lambda>x. rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x)"
   unfolding hounifiers_def
   by (rule au_cfin[OF assms(1) refl assms(2-4) order_refl tnew_refl dstep_refl cfin_Empty])
+
+end
+
+
+subsection \<open>The statements of theory \<open>Unify_Pull_Fin\<close>\<close>
+
+context pure_sig_gen
+begin
+
+theorem hounifiers_fin_sound:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
+  shows "lfin cfg (hounifiers rb env tus) (\<lambda>x. rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x)"
+  by (rule lfin_cfin[OF hounifiers_cfin[OF assms]])
+
+theorem hounifiers_fin:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
+  shows "lfin cfg (hounifiers rb env tus) (rres A env)"
+  by (rule lfin_mono[OF hounifiers_fin_sound[OF assms]]) simp
+
+end
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+theorem hounifiers_fin_sound:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
+  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x)"
+  using hounifiers_fin_sound[OF assms] by (simp add: lfin_strict)
+
+theorem hounifiers_fin:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
+  shows "fin cfg (hounifiers rb env tus) (rres A env)"
+  using hounifiers_fin[OF assms] by (simp add: lfin_strict)
 
 end
 

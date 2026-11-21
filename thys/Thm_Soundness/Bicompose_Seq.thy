@@ -63,28 +63,6 @@ text \<open>
   names, the statement is about the elements whose environment binds no loose name.
 \<close>
 
-lemma lfin_pull:
-  assumes "lfin cfg s P" "pull cfg s = Some (evs, Ok (Some (x, s')))"
-  shows "(nfree (eenv x) \<longrightarrow> P x) \<and> lfin cfg s' P"
-proof (cases "loose = {}")
-  case True
-  from assms(1) have "fin cfg s P" by (simp add: lfin_strict[OF True])
-  then show ?thesis
-  proof (cases rule: fin_pull)
-    case (none evs')
-    with assms(2) show ?thesis by simp
-  next
-    case (some evs' x' s'')
-    with assms(2) show ?thesis by (simp add: lfin_strict[OF True])
-  qed
-next
-  case False
-  note e = pull_some_ev[OF assms(2), of x s', simplified]
-  have "P x" if "nfree (eenv x)" using lfin_D[OF assms(1)] e that by blast
-  moreover have "lfin cfg s' P" by (rule lfin_looseI[OF False]) (use lfin_D[OF assms(1)] e in blast)
-  ultimately show ?thesis by blast
-qed
-
 lemma upull_fin:
   assumes "lfin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
   shows "ures env tus (El_R env' tps) \<and> lfin cfg s' (ures env tus)"
@@ -126,11 +104,18 @@ proof -
     with es show ?thesis by (auto simp: LF fin_def)
   next
     case False
-    show ?thesis
-    proof (rule lfin_looseI[OF False])
-      fix x assume "ev cfg s x" "nfree (eenv x)"
-      then show "ures env tus x" unfolding ures_def using lfin_D[OF f] by blast
+    from lfin_loose[OF False f[OF fin si]] obtain xs where es: "evalx cfg s xs" by (auto simp: cfin_def)
+    have "nfree (eenv x) \<longrightarrow> ures env tus x" if x: "x \<in> set xs" for x
+      unfolding ures_def
+    proof (intro impI allI)
+      fix A' K' X' assume nf: "nfree (eenv x)" and h: "finite X'" "finite K'" "sinv A' K' X' env (tdps tus)"
+      from lfin_loose[OF False f[OF h]] obtain ys where
+        "evalx cfg s ys" "\<forall>y\<in>set ys. nfree (eenv y) \<longrightarrow> uresult A' env tus y" by (auto simp: cfin_def)
+      with evalx_det[OF es] x nf show "uresult A' env tus x" by blast
     qed
+    then have "cfin cfg s (\<lambda>x. nfree (eenv x) \<longrightarrow> ures env tus x)"
+      unfolding cfin_def using es by blast
+    then show ?thesis by (rule lfin_looseI[OF False])
   qed
 qed
 

@@ -1,12 +1,13 @@
 section \<open>Finiteness of the Copies of \<open>mc\<close> with Names at Two Types\<close>
 
 theory Unify_Mc_Dfd
-  imports Unify_Seq_Dfd Unify_Mc_Fin
+  imports Unify_Seq_Dfd Unify_Shape_Sound
 begin
 
 text \<open>
-  The counterpart of theory \<^theory>\<open>Unify_Correctness.Unify_Mc_Fin\<close> without a hypothesis
-  on the names: the measure uses \<open>unfc\<close>, and the enumerations may end with the clash.
+  The copies of \<open>MATCH\<close> and its enumeration are finite, without a hypothesis on the names: the
+  measure counts the rigid atoms of the unfolding with type checks (\<open>unfc\<close>), and the
+  enumerations may end with the clash.
 \<close>
 
 context pure_sig_gen
@@ -258,7 +259,7 @@ proof (intro ballI, clarify)
       \<not> loose_bvar t (ilength rb) \<and> \<not> loose_bvar u (ilength rb)" by blast
 qed
 
-lemma sinv_dvars_c: "sinv A K X env dps \<Longrightarrow> dvars dps \<subseteq> X \<union> evars env"
+lemma sinv_dvars: "sinv A K X env dps \<Longrightarrow> dvars dps \<subseteq> X \<union> evars env"
   unfolding sinv_def dvars_def by (fastforce dest: upokD(1,2))
 
 lemma sinv_dstep_c:
@@ -276,7 +277,7 @@ proof -
     have \<rho>0: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF \<rho>(1) ext])
     from winvD[OF wi \<rho>0 \<rho>(2)] have w: "wt_env \<rho> env" and v: "vinv \<rho> env X" by blast+
     have "vinv \<rho> env (X \<union> evars env)" using vinv_absorb[of "evars env" env \<rho> X] v by simp
-    then have v': "vinv \<rho> env (X \<union> dvars dps)" by (rule vinv_mono) (use sinv_dvars_c[OF si] in blast)
+    then have v': "vinv \<rho> env (X \<union> dvars dps)" by (rule vinv_mono) (use sinv_dvars[OF si] in blast)
     from dstepDg(1)[OF d \<rho>(1) extends_refl w sinv_dtyped0_c[OF si \<rho>0 \<rho>(2)] v'] show ?thesis by blast
   qed
   have "winv env' (X \<union> dvars dps')" unfolding winv_def using R by blast
@@ -527,7 +528,7 @@ proof (rule sinv_dstep_c[OF si _ ei'])
   qed
   then show "\<forall>(rb, t, u)\<in>set (F @ dps'). ttvars t \<union> ttvars u \<union> btvars rb \<subseteq> tvars_env (tyenv env') \<union> A'"
     by blast
-  have "dvars F \<subseteq> X \<union> evars env" using sinv_dvars_c[OF sinv_mono[OF si]] by auto
+  have "dvars F \<subseteq> X \<union> evars env" using sinv_dvars[OF sinv_mono[OF si]] by auto
   then have "vtvars (dvars F) \<subseteq> vtvars X \<union> vtvars (evars env)" by (auto simp: vtvars_def)
   also have "\<dots> \<subseteq> tvars_env (tyenv env') \<union> A'"
     using vX vtvars_evars[OF einvD(1)[OF ei]] tvs AA by blast
@@ -564,7 +565,7 @@ abbreviation CQc :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarr
 lemma tnew_same_c: "tvars_env (tyenv env') = tvars_env (tyenv env) \<Longrightarrow> tnew A env A env'"
   by (auto simp: tnew_def)
 
-lemma ttvars_combound_c: "ttvars (combound t m k) = ttvars t"
+lemma ttvars_combound: "ttvars (combound t m k) = ttvars t"
   by (simp add: combound_apps ttvars_apps)
 
 text \<open>The unfolding of a copied term in \<open>envM\<close> is well-typed:\<close>
@@ -581,7 +582,7 @@ qed
 
 declare ttvars_types_abs [simp]
 
-lemma finite_dvars_c [simp]: "finite (dvars dps)"
+lemma finite_dvars [simp]: "finite (dvars dps)"
   by (auto simp: dvars_def)
 
 lemma vtvars_mono_c: "Y \<subseteq> Z \<Longrightarrow> vtvars Y \<subseteq> vtvars Z"
@@ -767,7 +768,7 @@ proof -
   show "lvars targs \<subseteq> X \<union> evars env" using pd(1) by (auto simp: vars_apps)
   show vtXE: "vtvars (X \<union> evars env) \<subseteq> tvars_env (tyenv env) \<union> A"
     using mcs_pre_c(8) vtvars_evars[OF e(1)] by simp
-  show dvF: "dvars (F @ dps) \<subseteq> X \<union> evars env" using sinv_dvars_c[OF sinv_mono[OF si]] by auto
+  show dvF: "dvars (F @ dps) \<subseteq> X \<union> evars env" using sinv_dvars[OF sinv_mono[OF si]] by auto
   then show "vtvars (dvars F) \<subseteq> tvars_env (tyenv env) \<union> A"
     using vtvars_mono_c[of "dvars F" "X \<union> evars env"] vtXE by auto
   show "\<forall>(rb', t', u')\<in>set (F @ dps). ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -880,7 +881,7 @@ proof -
     show "closed ?s0" by (rule closed_types_abs) (use lbs cb in simp)
     show "snd v \<le> maxidx env" by (fact vb)
     show "tvars TX \<union> ttvars ?s0 \<subseteq> tvars_env (tyenv env) \<union> A"
-      using tvX ty6 tvTa tvY by (auto simp: ttvars_combound_c)
+      using tvX ty6 tvTa tvY by (auto simp: ttvars_combound)
   qed
   have tt: "\<forall>(rb', t', u')\<in>set (pb # dps). ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv env'') \<union> A"
   proof -
@@ -973,7 +974,7 @@ proof -
         \<open>simp add: combound_bvs loose_bvar_apps closed_loose_bvar\<close>)
     show "snd v \<le> maxidx env" by (fact vb)
     show "tvars TX \<union> ttvars ?s0 \<subseteq> tvars_env (tyenv env) \<union> A"
-      using tvX ty6 tvN by (auto simp: ttvars_combound_c)
+      using tvX ty6 tvN by (auto simp: ttvars_combound)
   qed
   have tt: "\<forall>(rb', t', u')\<in>set ((rb, newhd \<degree>\<degree> targs, u) # dps).
       ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv env'') \<union> A"
@@ -1107,7 +1108,7 @@ proof -
       unfolding ty2 by (rule order_trans[OF tlhs Un_least[OF vG]])
     then show ?thesis using tvF tve2 pd(4,5) by fastforce
   qed
-  have dvF: "dvars (F @ ?P # dps) \<subseteq> X \<union> evars env" by (rule sinv_dvars_c[OF si])
+  have dvF: "dvars (F @ ?P # dps) \<subseteq> X \<union> evars env" by (rule sinv_dvars[OF si])
   have vtXE: "vtvars (X \<union> evars env) \<subseteq> tvars_env (tyenv env) \<union> A"
     using vX vtvars_evars[OF e(1)] by simp
   have vt: "vtvars (dvars ((rb, ?lhs, u) # dps)) \<subseteq> tvars_env (tyenv env2) \<union> ?A"
@@ -1279,7 +1280,7 @@ proof -
       using pd(4) that by (auto simp: u ttvars_apps)
     ultimately show ?thesis using tvF pd(5) tvGs gus unfolding ty'' by (fastforce simp: ttvars_apps)
   qed
-  have dvF: "dvars (F @ ?P # dps) \<subseteq> X \<union> evars env" by (rule sinv_dvars_c[OF si])
+  have dvF: "dvars (F @ ?P # dps) \<subseteq> X \<union> evars env" by (rule sinv_dvars[OF si])
   have vtXE: "vtvars (X \<union> evars env) \<subseteq> tvars_env (tyenv env) \<union> A"
     using vX vtvars_evars[OF e(1)] by simp
   have vt: "vtvars (dvars (?ps @ dps)) \<subseteq> tvars_env (tyenv env'') \<union> A"
@@ -1727,7 +1728,7 @@ proof -
     using si by (fastforce simp: sinv_def dest: upokD(3,4,5))
   have tt: "\<forall>(rb', t', u')\<in>set ((rb, G \<degree>\<degree> targs, u2) # d). ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv en) \<union> A"
     using tvF pd(3,5) tv2 by fastforce
-  have dvF: "dvars (F @ (rb, G \<degree>\<degree> targs, uarg) # d) \<subseteq> X \<union> evars en" by (rule sinv_dvars_c[OF si])
+  have dvF: "dvars (F @ (rb, G \<degree>\<degree> targs, uarg) # d) \<subseteq> X \<union> evars en" by (rule sinv_dvars[OF si])
   have vtXE: "vtvars (X \<union> evars en) \<subseteq> tvars_env (tyenv en) \<union> A"
     using vX vtvars_evars[OF E(1)] by simp
   have dv2: "dvars (F @ (rb, G \<degree>\<degree> targs, u2) # d) \<subseteq> X \<union> evars en" using dvF vu2 VX by auto
@@ -2005,6 +2006,20 @@ proof -
   then show ?thesis unfolding MATCH_def dp prod.case st
     by (simp only: pterm.case) (intro cxokE_liftM_return[OF bt(1)])
 qed
+
+end
+
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+theorem MATCH_fin:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K"
+    and "sinv A K X env (dp # dps)" "fr_shape env dp" "MATCH_ok env dp"
+  shows "cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A env))"
+  using MATCH_fin_c[OF assms] by (auto simp: cxokE_pure xokW_def intro: cfin_fin)
 
 end
 

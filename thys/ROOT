@@ -113,7 +113,6 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Ffeta
     Unify_Match_Fin
     Unify_Seq_Loose
-    Unify_Mc_Fin
     Unify_Pull_Fin
     Unify_Occurs_Sound
     Unify_Unfc
