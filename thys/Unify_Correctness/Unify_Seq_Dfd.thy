@@ -1,7 +1,7 @@
 section \<open>Finite Enumerations with Names at Two Types\<close>
 
 theory Unify_Seq_Dfd
-  imports Unify_Flexflex_Dfd
+  imports Unify_Flexflex_Dfd Unify_Match_Fin
 begin
 
 text \<open>

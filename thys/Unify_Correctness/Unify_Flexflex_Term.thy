@@ -2117,6 +2117,65 @@ proof -
   with G show ?thesis by blast
 qed
 
+
+subsection \<open>Heads of flex-flex pairs, and pairs that are kept\<close>
+
+definition hd1 :: "pterm \<Rightarrow> (indexname \<times> nat) set" where
+  "hd1 s = {(F, length (snd (strip_comb s))) | F T. head_of s = Var F T}"
+
+definition hds :: "dpair \<Rightarrow> (indexname \<times> nat) set" where
+  "hds dp = (case dp of (rb, t, u) \<Rightarrow> hd1 t \<union> hd1 u)"
+
+lemma flexargs_CHANGE_FAIL:
+  "length js = length ts \<Longrightarrow> length ts \<noteq> length Ts \<Longrightarrow> flexargs js ts Ts = raiseW CHANGE_FAIL"
+  by (induction js ts Ts rule: flexargs.induct) (auto simp: bindW_def raiseW_def)
+
+lemma clean_term_CHANGE_FAIL:
+  assumes t: "t = Var v T0 \<degree>\<degree> ts" and st: "strip_type env T0 = return (Ts, U)" and l: "length ts \<noteq> length Ts"
+  shows "clean_term banned env t = raiseW CHANGE_FAIL"
+proof -
+  have sc: "strip_comb t = (Var v T0, ts)" by (simp add: t strip_comb_atom_apps)
+  have "flexargs (downto0_list (length ts)) ts Ts = raiseW CHANGE_FAIL"
+    by (rule flexargs_CHANGE_FAIL[OF _ l]) (simp add: downto0_list_def)
+  then show ?thesis by (simp add: clean_term_def sc st Let_def bindW_def raiseW_def returnW_def)
+qed
+
+lemma clean_ffpair_CHANGE_FAIL:
+  assumes "\<And>banned. clean_term banned env t = raiseW CHANGE_FAIL"
+  shows "clean_ffpair al rb t u env tps = returnW (env, add_tpair rb t u tps)"
+  using assms by (simp add: clean_ffpair_def Let_def bindW_def handleW_def raiseW_def returnW_def split: prod.splits)
+
+lemma arity_tbody: "arity (tbody T) = 0"
+  by (induction T rule: tbody.induct) auto
+
+text \<open>A flexible term with fewer arguments than the arity of the type of its head is not cleaned:\<close>
+
+lemma clean_term_unsat:
+  assumes ei: "einv A K env" and t: "t = Var v T0 \<degree>\<degree> ts"
+    and tt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and ty: "e \<turnstile> inst (rho0 env) t : T" and a: "arity T \<noteq> 0"
+  shows "clean_term banned env t = raiseW CHANGE_FAIL"
+proof -
+  note e = einvD[OF ei]
+  let ?\<rho> = "rho0 env"
+  have tvT0: "tvars T0 \<subseteq> tvars_env (tyenv env) \<union> A" using tt by (simp add: t ttvars_apps)
+  from binder_types_tvars[OF e(2) refl tvT0] obtain Ts where Ts: "binder_types env T0 = return Ts" by blast
+  from body_type_tnorm[OF e(2) refl tvT0] obtain U where U: "body_type env T0 = return U"
+    "tnorm (tyenv env) U = tbody (tnorm (tyenv env) T0)" by blast
+  have st: "strip_type env T0 = return (Ts, U)" by (simp add: strip_type_def Ts(1) U(1))
+  have eq: "tsubst ?\<rho> T0 = map (tsubst ?\<rho>) Ts \<Rrightarrow> tsubst ?\<rho> U"
+    by (rule strip_type_sound[OF st[unfolded return_def] einv_rho0(1)[OF ei]])
+  have "arity (tsubst ?\<rho> T0) = length Ts + arity (tsubst ?\<rho> U)"
+    unfolding eq arity_funs by simp
+  moreover have "arity (tsubst ?\<rho> U) = 0" using U(2) arity_tbody by simp
+  ultimately have a1: "arity (tsubst ?\<rho> T0) = length Ts" by simp
+  from ff_typed_Var_apps[OF ty[unfolded t]] obtain Us where
+    "tsubst ?\<rho> T0 = Us \<Rrightarrow> T" "length Us = length ts" by blast
+  then have "arity (tsubst ?\<rho> T0) = length ts + arity T" by (simp add: arity_funs)
+  with a1 a have "length ts \<noteq> length Ts" by simp
+  from clean_term_CHANGE_FAIL[OF t st this] show ?thesis .
+qed
+
 end
 
 end

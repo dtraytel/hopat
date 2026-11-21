@@ -1,7 +1,7 @@
 section \<open>Termination of the Treatment of Flex-Flex Pairs with Names at Two Types\<close>
 
 theory Unify_Flexflex_Dfd
-  imports Unify_Simpl_Dfd
+  imports Unify_Simpl_Dfd Unify_Flexflex_Term
 begin
 
 text \<open>
