@@ -266,11 +266,10 @@ end
 subsection \<open>Unification keeps the environment acyclic\<close>
 
 text \<open>
-  The solution \<open>gsol\<close> needs an acyclic environment. The proof in
-  @{theory Pattern_Correctness.Pattern_Term_Unif} that unification keeps the environment acyclic
-  assumes that the resulting environment binds no loose name. The proof below does not use types:
-  a new binding is to a new variable, to an unbound variable, or to a term that passed the
-  occurs check.
+  The solution \<open>gsol\<close> needs an acyclic environment. The termination proof
+  (@{theory Pattern_Correctness.Pattern_Term_Dfd}, \<open>unify_inv\<close>) gives acyclicity for problems that
+  satisfy its invariants, which include typing. The proof below does not use types: a new binding
+  is to a new variable, to an unbound variable, or to a term that passed the occurs check.
 \<close>
 
 context pure_sig
