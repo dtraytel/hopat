@@ -1,8 +1,13 @@
-section \<open>Termination of the Treatment of Flex-Flex Pairs\<close>
+section \<open>Invariants of the Treatment of Flex-Flex Pairs\<close>
 
 theory Unify_Flexflex_Term
   imports Unify_Simpl_Term Unify_Flexflex_Sound
 begin
+
+text \<open>
+  The invariants and auxiliary facts of the termination proof of the treatment of flex-flex
+  pairs (theory \<open>Unify_Flexflex_Dfd\<close>).
+\<close>
 
 context pure_sig_gen
 begin
@@ -43,27 +48,6 @@ text \<open>The properties of the results of normalization that we need:\<close>
 definition npost :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> pterm \<Rightarrow> bool" where
   "npost A env t' \<longleftrightarrow> vok env (vars t' \<union> evars env) \<and> ttvars t' \<subseteq> tvars_env (tyenv env) \<union> A \<and>
     (\<forall>x T. head_of t' = Var x T \<longrightarrow> vt_lookup (tenv env) x = None \<and> tnorm (tyenv env) T = T)"
-
-lemma ff_vok_Var_unbound:
-  "vok env (evars env) \<Longrightarrow> tcons (tyenv env) T \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> vok env (vars (Var x T) \<union> evars env)"
-  unfolding vok_def by auto
-
-lemma ff_vok_Un: "vok env (X \<union> Y) \<longleftrightarrow> vok env X \<and> vok env Y"
-  unfolding vok_def ball_Un by (rule refl)
-
-lemma ff_vok_App: "vok env (vars (f $ u) \<union> evars env) \<longleftrightarrow> vok env (vars f \<union> evars env) \<and> vok env (vars u \<union> evars env)"
-  by (auto simp: ff_vok_Un)
-
-lemma ff_lookup1_ok:
-  assumes "vt_is_empty (tyenv env)" "vok env ({(x, T)} \<union> evars env)"
-  shows "lookup1 (tenv env) x T = return (map_option snd (vt_lookup (tenv env) x))"
-proof (cases "vt_lookup (tenv env) x")
-  case (Some b)
-  obtain U u where b: "b = (U, u)" by force
-  have "tnorm (tyenv env) T = tnorm (tyenv env) U" using vokD(2)[OF assms(2), of x T U u] Some b by simp
-  then have "T = U" by (simp add: tnorm_empty[OF assms(1)])
-  with Some b show ?thesis by (simp add: lookup1_def)
-qed (simp add: lookup1_def)
 
 context
   fixes A K env assumes ei: "einv A K env"
@@ -638,19 +622,6 @@ proof -
   ultimately show ?thesis using tvinvD(2)[OF einvD(1)[OF ei(1)] yb(1)] by blast
 qed
 
-lemma ff_vok_vcons:
-  assumes "\<forall>(x, T)\<in>Z \<union> evars env. tcons (tyenv env) T" "vcons (rho0 env) (Z \<union> evars env)"
-    "nfree env"
-  shows "vok env (Z \<union> evars env)"
-  unfolding vok_def
-proof (intro ballI, clarify, intro conjI allI impI)
-  fix x T assume xT: "(x, T) \<in> Z \<union> evars env"
-  then show "tcons (tyenv env) T" using assms(1) by blast
-  fix U u assume lk: "vt_lookup (tenv env) x = Some (U, u)"
-  then have "(x, U) \<in> Z \<union> evars env" using evarsI by blast
-  from vconsD[OF assms(2) nfreeD[OF assms(3) lk] xT this] show "tnorm (tyenv env) T = tnorm (tyenv env) U" by simp
-qed
-
 lemma ff_vinv_vars_evars: "vars t \<subseteq> Y \<union> evars env \<Longrightarrow> vinv \<rho> env Y \<Longrightarrow> vinv \<rho> env (Y \<union> vars t)"
 proof -
   assume "vars t \<subseteq> Y \<union> evars env" "vinv \<rho> env Y"
@@ -665,14 +636,6 @@ lemma ff_tvars_funs: "tvars (Ts \<Rrightarrow> T) = \<Union> (tvars ` set Ts) \<
   by (induction Ts) auto
 
 subsection \<open>Cleaning pairs\<close>
-
-lemma ff_okW_xok: "okW m x \<Longrightarrow> Q x \<Longrightarrow> xokW E m Q"
-  by (auto simp: xokW_def)
-
-lemma xok_handleW:
-  assumes "xokW E m Q" "\<exists>x. okW (h E) x \<and> Q x"
-  shows "\<exists>x. okW (handleW m h) x \<and> Q x"
-  using assms unfolding xokW_def okW_handleW by blast
 
 lemma ff_add_tpair_set:
   "(t', u') \<in> set (add_tpair rb t u tps) \<Longrightarrow> (t', u') \<in> set tps \<or> (t' = rlist_abs rb t \<and> u' = rlist_abs rb u)"

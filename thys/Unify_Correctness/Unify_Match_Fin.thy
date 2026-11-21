@@ -1,13 +1,13 @@
-section \<open>Finiteness of \<open>MATCH\<close>\<close>
+section \<open>Invariants of \<open>MATCH\<close>\<close>
 
 theory Unify_Match_Fin
   imports Unify_Simpl_Dfd Unify_Match_Sound
 begin
 
 text \<open>
-  \<^const>\<open>MATCH\<close> on a flex-rigid pair of \<^const>\<open>SIMPL\<close> terminates, raising at most
-  \<open>CANTUNIFY\<close>, with a finite enumeration of new problems in the invariant of the termination of
-  \<^const>\<open>SIMPL\<close> (theory \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>). The arity guesses and the
+  The invariants and auxiliary facts of the termination proof of \<^const>\<open>MATCH\<close> (theory
+  \<open>Unify_Mc_Dfd\<close>): its new problems are in the invariant of
+  \<^const>\<open>SIMPL\<close> (theory \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>); the arity guesses and the
   \<open>\<eta>\<close>-expansion keep the invariant, with new type variables for the guesses.
 \<close>
 
@@ -34,21 +34,6 @@ proof -
   have "tnew A0 env0 A env" by (rule tnew_trans[OF assms(3) x(5) assms(4)])
   with x assms(2) show ?thesis unfolding mres_def by blast
 qed
-
-lemma fin_mres_mono:
-  "fin cfg s (mres A1 env1) \<Longrightarrow> A0 \<subseteq> A1 \<Longrightarrow> tnew A0 env0 A1 env1 \<Longrightarrow> maxidx env0 \<le> maxidx env1 \<Longrightarrow>
-    fin cfg s (mres A0 env0)"
-  by (erule fin_mono) (rule mres_mono)
-
-lemma cuok_handle_CANTUNIFY_ret:
-  assumes "cuok m P" "\<And>x. P x \<Longrightarrow> Q x" "Q r"
-  shows "cuok (handleW m (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
-  using assms unfolding xokW_def
-  by (auto simp: handleW_def returnW_def split: option.splits xres.splits)
-
-lemma cuok_liftM_return: "m = return x \<Longrightarrow> cuok (f x) Q \<Longrightarrow> cuok (bindW (liftM m) f) Q"
-  by (rule xokW_bindW[of _ _ "\<lambda>y. y = x"]) (simp_all add: xokW_def return_def)
-
 
 subsection \<open>Type unification keeps the invariant\<close>
 
@@ -422,7 +407,6 @@ lemma fr_shape_tenv:
   unfolding fr_shape_def using hunb_tenv[OF assms, of dp] by simp
 
 
-
 subsection \<open>New variables\<close>
 
 text \<open>The new arguments of a projection or an imitation:\<close>
@@ -567,16 +551,6 @@ qed
 
 text \<open>The rigid side of a saturated flex-rigid pair has the body type of its head:\<close>
 
-lemma funs_nonarrow_eq:
-  "Vs \<Rrightarrow> A = Zs \<Rrightarrow> B \<Longrightarrow> (\<forall>C D. A \<noteq> C \<rightarrow>\<^sub>T D) \<Longrightarrow> (\<forall>C D. B \<noteq> C \<rightarrow>\<^sub>T D) \<Longrightarrow> Vs = Zs \<and> A = B"
-proof (induction Vs arbitrary: Zs)
-  case Nil
-  then show ?case by (cases Zs) auto
-next
-  case (Cons V Vs)
-  then show ?case by (cases Zs) auto
-qed
-
 lemma mf_body_type_sound:
   assumes bt: "body_type env T = Some r"
   shows "r = Ok B \<Longrightarrow> tacyc (tyenv env) \<Longrightarrow> (\<forall>C D. tnorm (tyenv env) B \<noteq> C \<rightarrow>\<^sub>T D) \<and>
@@ -627,60 +601,6 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
   qed
 qed
 
-lemma pair_base:
-  assumes ei: "einv A K env" and p: "upok A env rb X t u" and st: "strip_comb t = (Var v T, targs)"
-    and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
-    and T0: "ok (fastype env rb (fst (strip_comb u))) T0" and base: "ok (body_type env T0) base"
-    and tvb: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A"
-    and \<rho>: "tsol (tyenv env) \<rho>" and tyt: "e \<turnstile> inst \<rho> t : U"
-  shows "U = tsubst \<rho> base" "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> base"
-    "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
-proof -
-  note x = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
-  let ?\<theta> = "tyenv env"
-  from mf_binder_types_sound[OF bt[unfolded return_def] refl x(6)] obtain W where
-    W: "\<And>\<rho>. tsol ?\<theta> \<rho> \<Longrightarrow> tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> W" "\<forall>A B. tnorm ?\<theta> W \<noteq> A \<rightarrow>\<^sub>T B"
-      "tvars W \<subseteq> tvars T \<union> tvars_env ?\<theta>"
-    by blast
-  from mf_body_type_sound[of env T0 "Ok base" base] base x(6) obtain Zs where
-    nb: "\<forall>A B. tnorm ?\<theta> base \<noteq> A \<rightarrow>\<^sub>T B" and Zs: "\<And>\<rho>. tsol ?\<theta> \<rho> \<Longrightarrow> tsubst \<rho> T0 = map (tsubst \<rho>) Zs \<Rrightarrow> tsubst \<rho> base"
-    by (auto simp: return_def)
-  have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
-  define uh where "uh = fst (strip_comb u)"
-  define uargs where "uargs = snd (strip_comb u)"
-  have u: "u = uh \<degree>\<degree> uargs" by (simp add: uh_def uargs_def strip_comb_apps)
-  have tys: "Us = map (tsubst \<rho>') Ts \<and> U' = tsubst \<rho>' W"
-    if "e' \<turnstile> inst \<rho>' t : U'" "tsol ?\<theta> \<rho>'" "e' \<tturnstile> map (inst \<rho>') targs : Us" for e' \<rho>' U' Us
-  proof -
-    from that(1)[unfolded t inst_apps] obtain Us' where tyv: "e' \<turnstile> inst \<rho>' (Var v T) : Us' \<Rrightarrow> U'"
-      and tyas: "e' \<tturnstile> map (inst \<rho>') targs : Us'" by (rule list_app_typeE)
-    have "Us' = Us" by (rule typings_unique[OF tyas that(3)])
-    moreover have "length Us' = length Ts" using typings_nth[OF tyas] len by simp
-    moreover from tyv W(1)[OF that(2)] have "Us' \<Rrightarrow> U' = map (tsubst \<rho>') Ts \<Rrightarrow> tsubst \<rho>' W" by auto
-    ultimately show ?thesis using funs_eq[of Us' "map (tsubst \<rho>') Ts"] by simp
-  qed
-  have Wb: "tnorm ?\<theta> W = tnorm ?\<theta> base"
-  proof -
-    from pd(9)[OF r0] obtain e0 U0 where bs0: "bs_env (rho0 env) e0 rb" and t0: "e0 \<turnstile> inst (rho0 env) t : U0"
-      and u0: "e0 \<turnstile> inst (rho0 env) u : U0" by blast
-    from t0[unfolded t inst_apps] obtain Us0 where "e0 \<tturnstile> map (inst (rho0 env)) targs : Us0"
-      by (rule list_app_typeE)
-    from tys[OF t0 r0(1) this] have U0: "U0 = tnorm ?\<theta> W" by simp
-    from u0[unfolded u inst_apps] obtain Vs where tyh: "e0 \<turnstile> inst (rho0 env) uh : Vs \<Rrightarrow> U0" by (rule list_app_typeE)
-    have "tsubst (rho0 env) T0 = Vs \<Rrightarrow> U0" by (rule fastype_sound[OF T0[folded uh_def] r0(1) bs0 tyh])
-    with Zs[OF r0(1)] have "Vs \<Rrightarrow> tnorm ?\<theta> W = map (tsubst (rho0 env)) Zs \<Rrightarrow> tnorm ?\<theta> base" by (simp add: U0)
-    from funs_nonarrow_eq[OF this W(2) nb] show ?thesis by simp
-  qed
-  have tcW: "tcons ?\<theta> W" and tcb: "tcons ?\<theta> base"
-    using tinv_tcons[OF x(2)] W(3) head_tvars_strip_comb[OF st] pd(3) tvb by blast+
-  have Wb\<rho>: "tsubst \<rho> W = tsubst \<rho> base"
-    using tsubst_tnorm[OF x(6,7) \<rho> tcW] tsubst_tnorm[OF x(6,7) \<rho> tcb] Wb by simp
-  from tyt[unfolded t inst_apps] obtain Us where tya: "e \<tturnstile> map (inst \<rho>) targs : Us" by (rule list_app_typeE)
-  from tys[OF tyt \<rho> tya] Wb\<rho> W(1)[OF \<rho>] tya
-  show "U = tsubst \<rho> base" "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> base"
-    "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts" by simp_all
-qed
-
 subsection \<open>The copies of a single step\<close>
 
 lemma ttvars_types_abs: "ttvars (types_abs Ts u) = (\<Union>T\<in>set Ts. tvars T) \<union> ttvars u"
@@ -692,9 +612,6 @@ proof (induction Ts arbitrary: targs)
   then obtain targ targs' where "targs = targ # targs'" by (cases targs) auto
   with Cons show ?case by fastforce
 qed auto
-
-lemma cuok_okW: "okW m x \<Longrightarrow> P x \<Longrightarrow> cuok m P"
-  by (auto simp: xokW_def)
 
 lemma mapM_fastype_term:
   assumes ei: "einv A K env"
@@ -712,24 +629,6 @@ proof (induction ss)
     "\<forall>S\<in>set Ss. tvars S \<subseteq> tvars_env (tyenv env) \<union> A" by auto
   ultimately show ?case by (auto simp: fastype_def[abs_def])
 qed simp
-
-lemma mapM_fastype_types:
-  assumes "ok (mapM (fastype env rb) ts) Ts'" "tsol (tyenv env) \<rho>" "bs_env \<rho> e rb" "e \<tturnstile> map (inst \<rho>) ts : Us"
-  shows "map (tsubst \<rho>) Ts' = Us"
-proof -
-  from assms(1) have l: "list_all2 (\<lambda>t T. ok (fastype env rb t) T) ts Ts'" by (simp add: ok_mapM)
-  from l assms(4) show ?thesis
-  proof (induction ts Ts' arbitrary: Us rule: list_all2_induct)
-    case (Cons t ts T Ts')
-    from Cons.prems obtain U Us' where Us: "Us = U # Us'" and tt: "e \<turnstile> inst \<rho> t : U"
-      and tts: "e \<tturnstile> map (inst \<rho>) ts : Us'"
-      by (auto split: list.splits)
-    from fastype_sound[OF Cons.hyps(1) assms(2,3) tt] Cons.IH[OF tts] Us show ?case by simp
-  qed simp
-qed
-
-lemma rtrancl_dep_unbound: "vt_lookup (tenv env) y = None \<Longrightarrow> (x, y) \<in> (dep env)\<^sup>* \<Longrightarrow> x = y"
-  by (erule rtranclE) (auto simp: dep_def)
 
 lemma evars_tenv: "tenv env' = tenv env \<Longrightarrow> evars env' = evars env"
   by (simp add: evars_def bnds_def)
@@ -768,21 +667,6 @@ proof -
 qed
 
 text \<open>The new variables are unbound and do not reach \<open>v\<close>:\<close>
-
-lemma head_var_props:
-  assumes p: "upok A env rb X t u" and st: "strip_comb t = (Var v T, targs)" and fr: "fr_shape env (rb, t, u)"
-  shows "(v, T) \<in> X \<union> evars env" "vt_lookup (tenv env) v = None" "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
-    "\<forall>s\<in>set targs. vars s \<subseteq> X \<union> evars env \<and> ttvars s \<subseteq> tvars_env (tyenv env) \<union> A \<and> \<not> loose_bvar s (ilength rb)"
-proof -
-  have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
-  note pd = upokD[OF p]
-  show "(v, T) \<in> X \<union> evars env" using pd(1) t by (auto simp: vars_apps)
-  have "head_of t = Var v T" using st by (simp add: head_of_strip_comb)
-  then show "vt_lookup (tenv env) v = None" using fr by (cases v) (auto simp: fr_shape_def hunb_def)
-  show "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" using head_tvars_strip_comb[OF st] pd(3) by blast
-  show "\<forall>s\<in>set targs. vars s \<subseteq> X \<union> evars env \<and> ttvars s \<subseteq> tvars_env (tyenv env) \<union> A \<and> \<not> loose_bvar s (ilength rb)"
-    using pd(1,3,7) t by (auto simp: vars_apps ttvars_apps loose_bvar_apps)
-qed
 
 lemma below_head:
   assumes "sinv A K X env dps" "(v, T) \<in> X \<union> evars env"

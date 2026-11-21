@@ -1,14 +1,15 @@
-section \<open>Termination of \<open>SIMPL\<close>\<close>
+section \<open>Invariants and Measure of \<open>SIMPL\<close>\<close>
 
 theory Unify_Simpl_Term
   imports Unify_Simpl_Sound Unify_Seq "Pattern_Correctness.Pattern_Term_Unif"
 begin
 
 text \<open>
-  \<^const>\<open>SIMPL0\<close> and \<^const>\<open>SIMPL\<close> terminate on problems that satisfy the invariants of the
-  termination proof of pattern unification (theory \<^theory>\<open>Pattern_Correctness.Pattern_Term_Unif\<close>),
-  raising at most \<open>CANTUNIFY\<close>, and their results satisfy the invariants again and have the shapes
-  that \<open>MATCH\<close> expects. The measure is lexicographic: the number of unbound type variables
+  The invariants, the measure and the auxiliary facts of the termination proof of
+  \<^const>\<open>SIMPL0\<close> and \<^const>\<open>SIMPL\<close> (theory \<open>Unify_Simpl_Dfd\<close>):
+  problems satisfy the invariants of the termination proof of pattern unification (theory
+  \<^theory>\<open>Pattern_Correctness.Pattern_Term_Unif\<close>), and the results of \<^const>\<open>SIMPL\<close> satisfy
+  them again and have the shapes that \<open>MATCH\<close> expects. The measure is lexicographic: the number of unbound type variables
   reachable from a finite set \<open>K\<close>, the number of unbound variables of the problem, and the size of
   the \<open>\<eta>\<close>-long \<open>\<beta>\<close>-normal form of the instances of the pairs under the most general solution of
   the type environment (the \<open>\<eta>\<close>-expansion of \<open>unify.ML\<close> keeps it, and decomposition reduces it).
@@ -38,24 +39,12 @@ definition lxokE :: "(uexn \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> e
 abbreviation lxok :: "uexn \<Rightarrow> ('a \<Rightarrow> env) \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
   "lxok E \<equiv> lxokE (\<lambda>e. e = E)"
 
-abbreviation lcuok :: "('a \<Rightarrow> env) \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "lcuok \<equiv> lxok CANTUNIFY"
-
 lemma lxokE_D: "lxokE Xe f m P \<Longrightarrow> okW m x \<Longrightarrow> nfree (f x) \<Longrightarrow> P x"
   unfolding lxokE_def by (auto split: if_splits)
 
 lemma lxokE_strict: "loose = {} \<Longrightarrow>
     lxokE Xe f m P \<longleftrightarrow> (\<exists>evs e. m = Some (evs, Err e) \<and> Xe e) \<or> (\<exists>x. okW m x \<and> P x)"
   unfolding lxokE_def by simp
-
-lemma lxok_xokW: "xokW E m P \<Longrightarrow> lxok E f m P"
-  unfolding lxokE_def xokW_def by auto
-
-lemma lxokE_xokW: "xokW E m P \<Longrightarrow> Xe E \<Longrightarrow> lxokE Xe f m P"
-  unfolding lxokE_def xokW_def by auto
-
-lemma lxokE_okI: "okW m x \<Longrightarrow> (nfree (f x) \<Longrightarrow> P x) \<Longrightarrow> lxokE Xe f m P"
-  unfolding lxokE_def using nfree_strict by auto
 
 lemma lxokE_errI: "m = Some (evs, Err e) \<Longrightarrow> Xe e \<Longrightarrow> lxokE Xe f m P"
   unfolding lxokE_def by auto
@@ -107,84 +96,6 @@ next
     from yy obtain x where x: "okW m x" and y: "okW (k x) y" by auto
     have nfx: "nfree (f x)" by (rule anti[OF x y nf])
     from lxokE_D[OF k[OF x lxokE_D[OF m x nfx] nfx] y nf] show "Q y" .
-  qed
-  then show ?thesis unfolding lxokE_def using False by simp
-qed
-
-lemma lxokE_bindW_x:
-  assumes m: "xokW E m P" and E: "Xe E" and k: "\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> lxokE Xe g (k x) Q"
-  shows "lxokE Xe g (bindW m k) Q"
-proof (cases "loose = {}")
-  case True
-  note S = lxokE_strict[OF True]
-  from m[unfolded xokW_def] consider (err) evs where "m = Some (evs, Err E)"
-    | (ok) x where "okW m x" "P x" by blast
-  then show ?thesis
-  proof cases
-    case err
-    then show ?thesis unfolding S using E by (auto simp: bindW_def)
-  next
-    case ok
-    from k[OF ok, unfolded S] ok(1) show ?thesis unfolding S by (auto simp: bindW_def)
-  qed
-next
-  case False
-  have "Q y" if yy: "okW (bindW m k) y" and nf: "nfree (g y)" for y
-  proof -
-    from yy obtain x where x: "okW m x" and y: "okW (k x) y" by auto
-    from m x have "P x" unfolding xokW_def by auto
-    from lxokE_D[OF k[OF x this] y nf] show "Q y" .
-  qed
-  then show ?thesis unfolding lxokE_def using False by simp
-qed
-
-text \<open>The environment at the start may be assumed to bind no loose name:\<close>
-
-lemma lxokE_nfree:
-  assumes "nfree e0 \<Longrightarrow> lxokE Xe f m P" "\<And>x. okW m x \<Longrightarrow> nfree (f x) \<Longrightarrow> nfree e0"
-  shows "lxokE Xe f m P"
-proof (cases "loose = {}")
-  case True
-  then show ?thesis using assms(1) nfree_strict by blast
-next
-  case False
-  have "P x" if "okW m x" "nfree (f x)" for x
-    using lxokE_D[OF assms(1)[OF assms(2)[OF that]] that] .
-  then show ?thesis unfolding lxokE_def using False by simp
-qed
-
-text \<open>A handler for one exception that raises the other ones again:\<close>
-
-lemma lxokE_handleW:
-  assumes m: "lxok E g m Q" and hE: "lxokE Xe g (h E) Q" and hr: "\<And>e y. e \<noteq> E \<Longrightarrow> \<not> okW (h e) y"
-  shows "lxokE Xe g (handleW m h) Q"
-proof (cases "loose = {}")
-  case True
-  note S = lxokE_strict[OF True]
-  from m[unfolded S] consider (err) evs where "m = Some (evs, Err E)" | (ok) x where "okW m x" "Q x" by blast
-  then show ?thesis
-  proof cases
-    case err
-    from hE[unfolded S] show ?thesis unfolding S using err
-      by (auto simp: handleW_def split: option.splits xres.splits)
-  next
-    case ok
-    then show ?thesis unfolding S by (auto simp: handleW_def)
-  qed
-next
-  case False
-  have "Q y" if y: "okW (handleW m h) y" and nf: "nfree (g y)" for y
-  proof -
-    from y[unfolded okW_handleW] consider (ok) "okW m y" | (err) e where "okW (h e) y" by blast
-    then show ?thesis
-    proof cases
-      case ok
-      from lxokE_D[OF m ok nf] show ?thesis .
-    next
-      case err
-      with hr[of e y] have "e = E" by blast
-      with err lxokE_D[OF hE _ nf] show ?thesis by blast
-    qed
   qed
   then show ?thesis unfolding lxokE_def using False by simp
 qed

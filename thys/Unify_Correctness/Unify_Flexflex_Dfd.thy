@@ -16,17 +16,6 @@ begin
 subsection \<open>Definedness with a postcondition\<close>
 
 
-
-
-
-
-
-
-
-
-lemma cxokE_liftM_dfdp: "dfdp m P \<Longrightarrow> cxokE Xe (liftM m) P"
-  by (rule cxokE_liftM) (simp_all add: dfdp_def)
-
 subsection \<open>Normalization\<close>
 
 lemma norm_term1_unfc:
@@ -581,7 +570,6 @@ qed
 end
 
 
-
 subsection \<open>Assignments\<close>
 
 theorem ff_assign_dfd:
@@ -734,7 +722,6 @@ proof -
     qed
   qed
 qed
-
 
 
 subsection \<open>Cleaning terms\<close>
@@ -1059,7 +1046,6 @@ proof -
 qed
 
 
-
 subsection \<open>Cleaning pairs\<close>
 
 lemma dstep_pokc:
@@ -1313,7 +1299,6 @@ proof -
       using qfail by simp
   qed (auto simp: clashW_def)
 qed
-
 
 
 subsection \<open>Flex-flex pairs\<close>
@@ -1618,7 +1603,6 @@ proof -
   have "ffres A K X env []" using assms(1) by (simp add: ffres_def sinv_def)
   from foldrW_add_ffpair_dfd[OF assms(1,2) this] show ?thesis by simp
 qed
-
 
 
 subsection \<open>Flex-flex pairs of any type\<close>

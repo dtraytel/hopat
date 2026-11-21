@@ -108,9 +108,6 @@ lemma cxokE_lxokE: "cxokE Xe m P \<Longrightarrow> lxokE Xe f m P"
 lemma cxokE_okW_P: "cxokE Xe m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
   unfolding cxokE_def by auto
 
-lemma cxokE_defined: "cxokE Xe m P \<Longrightarrow> m \<noteq> None"
-  unfolding cxokE_def by auto
-
 subsection \<open>The measure of a pair\<close>
 
 definition LMc :: "tinst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> nat" where
@@ -324,8 +321,6 @@ end
 subsection \<open>Typing and definedness of the unfolding under the invariants\<close>
 
 
-
-
 lemma upok_unfc:
   assumes "einv A K env" "winv env X" "upok A env rb X t u"
   shows "\<exists>T. bs_env (rho0 env) (benv (rho0 env) rb) rb \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T \<and>
@@ -515,7 +510,6 @@ lemma head_norm_dpair_okW_hn:
   shows "\<exists>t1 u1. head_norm env t = return t1 \<and> head_norm env u = return u1"
   using assms by (auto simp: head_norm_dpair_def liftM_def bindW_def return_def
     split: option.splits xres.splits prod.splits)
-
 
 
 subsection \<open>Assignments\<close>

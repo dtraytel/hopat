@@ -1,12 +1,13 @@
-section \<open>Finiteness of the Search\<close>
+section \<open>Invariants of the Search\<close>
 
 theory Unify_Pull_Fin
   imports Unify_Mc_Dfd Unify_Ffeta Unify_Pull_Sound Unify_Seq_Loose
 begin
 
 text \<open>
-  The search of \<^const>\<open>hounifiers\<close> terminates without an exception, after finitely many
-  unifiers: the depth of the search is bounded by \<^const>\<open>cfg_search_bound\<close>, each node simplifies
+  The invariant of the nodes of the search, for its termination (theory
+  \<open>Unify_Pull_Dfd\<close>, theorem \<open>hounifiers_cfin\<close>): the search of
+  \<^const>\<open>hounifiers\<close> ends after finitely many unifiers: the depth of the search is bounded by \<^const>\<open>cfg_search_bound\<close>, each node simplifies
   its problem (\<^const>\<open>SIMPL\<close>, theorem @{thm [source] pure_sig_gen.SIMPL_dfd}) and enumerates finitely
   many new problems by \<^const>\<open>MATCH\<close> (theorem @{thm [source] pure_sig_gen.MATCH_fin_c}). A leaf
   without flex-rigid pairs returns a unifier after the treatment of its flex-flex pairs by
@@ -51,19 +52,6 @@ proof -
   have "tspine (tyenv env) T1 U1"
     by (rule tspine_tnorm[OF e(6,7) tinv_tcons[OF e(2) ty(3)] tinv_tcons[OF e(2) ty(4)] ty(5)])
   with ty(1,2) show ?thesis by (intro frs_shape_MATCH_ok[OF sh]) (simp_all add: return_def)
-qed
-
-lemma fin_ev_conj: "fin cfg s P \<Longrightarrow> (\<And>x. ev cfg s x \<Longrightarrow> Q x) \<Longrightarrow> fin cfg s (\<lambda>x. P x \<and> Q x)"
-  unfolding fin_def using evals_ev_set by blast
-
-lemma fin_Cons:
-  assumes "resW (pull cfg s) (Ok (Some (x, s')))" "Q x" "fin cfg s' Q"
-  shows "fin cfg s Q"
-proof -
-  from assms(3) obtain xs where xs: "evals cfg s' xs" "\<forall>y\<in>set xs. Q y" by (auto simp: fin_def)
-  from assms(1) obtain evs where "pull cfg s = Some (evs, Ok (Some (x, s')))" by (auto simp: resW_def)
-  from evals.Cons[OF this xs(1)] xs(2) assms(2) show ?thesis
-    unfolding fin_def by (intro exI[of _ "x # xs"]) simp
 qed
 
 lemma resW_handleW_bindW_ok: "okW m x \<Longrightarrow> resW (handleW (bindW m f) h) r \<longleftrightarrow> resW (handleW (f x) h) r"

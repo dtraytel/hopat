@@ -1938,6 +1938,37 @@ proved for the higher-order search.
 None of this affects soundness: an incomplete unifier makes the kernel find fewer results (a
 resolution or `assumption` that fails), not wrong ones.
 
+### Simplification: one termination proof
+
+The termination proofs with names at two types (previous sections) did not replace the older
+proofs for one type per name (`nfree`); both were kept, with copies of most measures and case
+lemmas. They are now merged: the old statements are derived from the general proofs, and the
+old proofs are deleted. No main theorem got weaker; lemmas internal to the old proofs (`unif_term`
+with `upost`, `hn_term`, …) were replaced by their general versions (`unif_term_c` with
+`upostc`, `hn_dfd`, …). The model and the patches did not change.
+
+- **Pattern unification.** The general proof (`Unify_Unfc`, the pattern part of
+  `Unify_Pattern_Dfd`) moved into `Pattern_Correctness` as `Pattern_Unfc` (`unfc`, `tok`, `dfd`,
+  head normalization) and `Pattern_Term_Dfd` (`unif_term_c`, `unify_terminates_c`). It replaces
+  the proofs of `Pattern_Term_Flex`, `Pattern_Term_Proj`, `Pattern_Term_Unif` and the old
+  measure `M` with `prunes`; those theories keep the definitions and invariants (`upok`, `einv`,
+  `winv`, …). `unify_terminates` (with `cut id`, errors `Unif` and `Pattern`) and `unify_inv` are
+  derived from `unify_terminates_c` by `cut_perrI`; both no longer need the premise that the
+  input environment binds no loose name. For this the errors of `unify_terminates_c` were made
+  more precise: `Fail "mk_ff_list"` needs loose names (`perr`; without them the two types of a
+  head have the same arity under the most general solution, `case_flexflex_c`), so
+  `unifiers_cfin` says so as well.
+- **`SIMPL`, flex-flex pairs, `MATCH`, the search.** `SIMPL0_term`, `SIMPL_term`,
+  `head_norm_dpair_term`, `assignment_term`, `norm_term_term`, `add_ffpair_term`, `MATCH_fin`,
+  `hounifiers_fin`, `hounifiers_fin_sound` are derived in `pure_sig` / `pure_sig_gen` from the
+  `_dfd` / `_c` / `cfin` theorems (`cxokE_pure`, `dfd_pure`, `cfin_fin`, `lfin_cfin`); `lfin` is
+  defined from `cfin`. `Unify_Mc_Fin` is deleted; `Unify_Simpl_Term`, `Unify_Flexflex_Term`,
+  `Unify_Match_Fin`, `Unify_Pull_Fin` keep the invariants and auxiliary facts. The proofs that
+  used the old lemmas (completeness: `Unify_Simpl_Complete`, `Unify_Match_Complete`; `Unify_Ffeta`;
+  `Unify_Results`; `Bicompose_Seq`) use the general ones.
+- **Size.** The theories went from 155,699 to about 148,000 lines (all sessions); the build of
+  `Unify_Correctness`, `Thm_Correctness` and `Thm_Model_ZFC` succeeds.
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof
