@@ -1195,12 +1195,6 @@ lemma tmap_sub:
   shows "vars (tmap \<phi> s) \<subseteq> vars (tmap \<phi> t)" "typs (tmap \<phi> s) \<subseteq> typs (tmap \<phi> t)"
   using assms by (auto simp: vars_map_types typs_map_types)
 
-definition resM :: "'a M \<Rightarrow> 'a option" where
-  "resM m = (case m of Some (Ok x) \<Rightarrow> Some x | _ \<Rightarrow> None)"
-
-lemma resM_Some: "resM m = Some x \<longleftrightarrow> ok m x"
-  by (auto simp: resM_def split: option.splits xres.splits)
-
 lemma full_prop_of_sub:
   assumes f: "ok (full_prop_of tps P) P1" and X: "X \<in> insert P (fst ` set tps \<union> snd ` set tps)"
   shows "vars X \<subseteq> vars P1" "typs X \<subseteq> typs P1"

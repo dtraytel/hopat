@@ -22,23 +22,6 @@ lemma loose_bvar_generalize_term [simp]: "loose_bvar (generalize_term [] frees i
 lemma bad_term_frees: "\<not> bad_term [] frees t \<Longrightarrow> (b, U) \<in> pfrees t \<Longrightarrow> b \<notin> set frees"
   by (induction t) (auto split: if_splits)
 
-lemma fresh_renaming:
-  assumes "finite (N :: name set)" "distinct fs"
-  obtains Gs where "length Gs = length fs" "distinct Gs" "set Gs \<inter> N = {}"
-    "\<And>c. c \<in> set fs \<Longrightarrow> \<exists>G. map_of (zip fs Gs) c = Some G \<and> G \<in> set Gs \<and> map_of (zip Gs fs) G = Some c"
-proof -
-  obtain Gs where Gs: "length Gs = length fs" "distinct Gs" "set Gs \<inter> N = {}"
-    by (rule fresh_name_list[OF assms(1)])
-  have "\<exists>G. map_of (zip fs Gs) c = Some G \<and> G \<in> set Gs \<and> map_of (zip Gs fs) G = Some c" if "c \<in> set fs" for c
-  proof -
-    from that obtain i where i: "i < length fs" "fs ! i = c" by (auto simp: in_set_conv_nth)
-    have "map_of (zip fs Gs) c = Some (Gs ! i)" using map_of_zip_nth[of fs Gs i] Gs(1) assms(2) i by simp
-    moreover have "map_of (zip Gs fs) (Gs ! i) = Some c" using map_of_zip_nth[of Gs fs i] Gs(1,2) i by simp
-    ultimately show ?thesis using Gs(1) i by auto
-  qed
-  with Gs show thesis by (intro that) auto
-qed
-
 context pure_model_gen
 begin
 

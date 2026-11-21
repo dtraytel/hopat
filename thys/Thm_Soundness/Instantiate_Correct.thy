@@ -164,15 +164,6 @@ lemma check_inst_eq: "okT (check_inst insts) () \<Longrightarrow> ((v, T), (u, U
   by (induction insts rule: check_inst.induct) (auto simp: raiseW_def split: if_splits)
 
 
-
-lemma vars_cert: "e \<turnstile> t : T \<Longrightarrow> (x, U) \<in> vars t \<Longrightarrow> cert_typ alg ar U"
-  by (induction rule: typing.induct) auto
-
-lemma thm_vars_inst:
-  "thm_vars (map (inst \<rho>) hs) (map (\<lambda>(t, u). (inst \<rho> t, inst \<rho> u)) tps) (inst \<rho> P) =
-    (\<lambda>(x, T). (x, tsubst \<rho> T)) ` thm_vars hs tps P"
-  by (auto simp: thm_vars_def vars_inst image_Un image_UN split: prod.splits) force+
-
 text \<open>
   An instance of a valid theorem by a certified type instantiation and a substitution of closed
   well-typed terms is valid. Distinct variables of the theorem may become equal in the instance;

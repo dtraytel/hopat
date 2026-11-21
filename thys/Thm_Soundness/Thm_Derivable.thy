@@ -50,9 +50,6 @@ definition dsem :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
 lemma dsem_nosig: "\<not> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> dsem U d"
   by (auto simp: dsem_def thm_sem_def cons_ok_def)
 
-lemma dsem_rep: "dsem TYPE('u) (rep_thm (th :: 'u pure_thm))"
-  by (simp add: dsem_def thm_sem_rep)
-
 lemma rep_Abs: "dsem TYPE('u) d \<Longrightarrow> rep_thm (Abs_thm d :: 'u pure_thm) = d"
   by (simp add: dsem_def rep_Abs_thm)
 
@@ -113,9 +110,6 @@ definition data_scons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" w
 definition data_vcons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" where
   "data_vcons2 d1 d2 \<longleftrightarrow>
     pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig_gen.vars_thm (th_tpairs d2) (th_prop d2))"
-
-lemma data_cons2_iff: "data_cons2 d1 d2 \<longleftrightarrow> data_scons2 d1 d2 \<and> data_vcons2 d1 d2"
-  by (simp add: data_cons2_def data_scons2_def data_vcons2_def)
 
 lemma thm_cons_raw: "thm_cons th \<longleftrightarrow> data_cons (rep_thm th)"
   and bc_cons_raw: "bc_cons th1 th2 \<longleftrightarrow> data_cons2 (rep_thm th1) (rep_thm th2)"
@@ -515,7 +509,6 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule)) \<Longrightarrow>
     data_names_bres st brules i rule x \<Longrightarrow>
     derivable (bres_data (th_sign st) i st e rule x)"
-
 
 
 subsection \<open>Each rule keeps the invariant\<close>

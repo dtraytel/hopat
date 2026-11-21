@@ -269,9 +269,6 @@ proof -
   with gt show ?thesis by (simp add: M'.good_def M'.good_v_def)
 qed
 
-lemma cert_typ_args: "cert_typ alg ar (Type a Ts) \<Longrightarrow> T \<in> set Ts \<Longrightarrow> cert_typ alg ar T"
-  by (auto simp: cert_typ_def)
-
 lemma csem_ext_eta:
   assumes c: "const_typ_ok ctab c T" and t: "cert_typ alg ar T"
   shows "M'.csem (ext_eta \<eta>) c T = M'.csem \<eta> c T"
@@ -552,19 +549,5 @@ text \<open>\<open>Thm.transfer\<close>, on theorems:\<close>
 definition transfer_thm :: "sign \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
   "transfer_thm c' th =
     (if sign_le (sign_of th) c' then Some (Abs_thm ((rep_thm th)\<lparr>th_sign := c'\<rparr>)) else None)"
-
-lemma transfer_thm_rep:
-  assumes "transfer_thm c' th = Some th'"
-  shows "rep_thm th' = (rep_thm th)\<lparr>th_sign := c'\<rparr>"
-proof -
-  have t: "sign_le (th_sign (rep_thm th)) c'" and th': "th' = Abs_thm ((rep_thm th)\<lparr>th_sign := c'\<rparr>)"
-    using assms by (auto simp: transfer_thm_def split: if_splits)
-  have "cons_ok c' (cons_of th)"
-    using cons_ok_transfer[of "sign_of th" c' "cons_of th"] t by simp
-  then show ?thesis using th' rep_Abs_thm[OF thm_sem_transfer[OF thm_sem_rep t]] by simp
-qed
-
-lemma transfer_thm_Some: "sign_le (sign_of th) c' \<Longrightarrow> \<exists>th'. transfer_thm c' th = Some th'"
-  by (simp add: transfer_thm_def)
 
 end

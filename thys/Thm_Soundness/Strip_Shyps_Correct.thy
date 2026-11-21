@@ -208,9 +208,6 @@ proof
     by (auto simp: class_le_def)
 qed
 
-lemma minimize_sort_ge: "sort_le alg S (minimize_sort alg S)"
-  unfolding sort_le_iff set_minimize_sort using class_le_refl by blast
-
 lemma sort_le_trans: "sort_le alg S1 S2 \<Longrightarrow> sort_le alg S2 S3 \<Longrightarrow> sort_le alg S1 S3"
   unfolding sort_le_iff by (meson class_le_trans)
 

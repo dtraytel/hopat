@@ -45,17 +45,11 @@ lemma is_var_clash_iff:
 lemma is_var_clash_var_clash [simp]: "is_var_clash (var_clash x T U)"
   unfolding is_var_clash_def by blast
 
-lemma is_var_clash_not_ok: "is_var_clash m \<Longrightarrow> \<not> ok m r"
-  by (auto simp: is_var_clash_iff raise_def)
-
 lemma is_var_clash_bind [simp]: "is_var_clash m \<Longrightarrow> is_var_clash (bindM m f)"
   by (auto simp: is_var_clash_iff raise_def bindM_def)
 
 lemma is_var_clash_bind_ok: "ok m x \<Longrightarrow> is_var_clash (f x) \<Longrightarrow> is_var_clash (bindM m f)"
   by (simp add: bindM_def)
-
-lemma is_var_clashT_not_ok: "is_var_clashT m \<Longrightarrow> \<not> okT m r"
-  by (auto simp: is_var_clashT_def)
 
 lemma is_var_clashT_liftMT [simp]: "is_var_clash m \<Longrightarrow> is_var_clashT (liftMT m)"
   by (auto simp: is_var_clash_iff is_var_clashT_def raise_def liftMT_def liftM_def liftWT_def)
@@ -539,11 +533,6 @@ fun mark :: "env \<Rightarrow> name \<Rightarrow> pterm \<Rightarrow> pterm" whe
 lemma srel_mark: "srel env t (mark env m t)"
   by (induction t) (auto intro: srel.intros)
 
-lemma srel_fnames:
-  assumes "srel env t s" "m \<in> fnames s" "m \<notin> fnames t"
-  shows "\<exists>(x, U)\<in>vars t. sclash env x U"
-  using assms by (induction rule: srel.induct) auto
-
 text \<open>
   The marker is kept if it occurs in the normal form of the marked term. Then the
   normalization of the term is the exception.
@@ -577,11 +566,6 @@ text \<open>
   variable itself. Marked, it is its own normal form (here without type bindings), so it is
   kept; and its normalization is the exception.
 \<close>
-
-lemma norm_term_mark_Var:
-  assumes "sclash env x U" "vt_is_empty (tyenv env)"
-  shows "ok (norm_term env (mark env m (Var x U))) (Free m U)"
-  using assms sclash_empty[of env x U] by (auto simp: norm_term_def norm_term1_atom)
 
 corollary norm_term_var_clash:
   assumes "sclash env x U"

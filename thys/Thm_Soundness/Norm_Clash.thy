@@ -30,9 +30,6 @@ text \<open>
 definition clash :: "env \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> bool" where
   "clash env x U \<longleftrightarrow> (\<exists>T u. vt_lookup (tenv env) x = Some (T, u) \<and> \<not> ok (unified (tyenv env) U T) True)"
 
-lemma clash_unbound: "vt_lookup (tenv env) x = None \<Longrightarrow> \<not> clash env x U"
-  by (simp add: clash_def)
-
 lemma clash_empty: "env_is_empty env \<Longrightarrow> \<not> clash env x U"
   by (simp add: clash_def env_is_empty_def vt_is_empty_lookup)
 

@@ -40,11 +40,6 @@ proof -
   show "\<forall>S\<in>set Ss. sort_ok (sg_alg (csign_of ct)) S" by (rule S)
 qed
 
-lemma weaken_sorts_cterm_defined:
-  "(\<forall>S\<in>set Ss. sort_ok (sg_alg (csign_of ct)) S) \<Longrightarrow> weaken_sorts_cterm Ss ct \<noteq> None"
-  by (simp add: weaken_sorts_cterm_def)
-
-
 subsection \<open>Lifting a rule over a goal\<close>
 
 context pure_sig
@@ -194,9 +189,6 @@ definition varifyT_global'_thm :: "(name list \<Rightarrow> name list \<Rightarr
           (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))))
         (resT (varifyT_global vl fixed (hyps_of th) (rep_of th)))
      else None)"
-
-lemma varifyT_global_thm_snd: "varifyT_global_thm vl fixed th = map_option snd (varifyT_global'_thm vl fixed th)"
-  by (simp add: varifyT_global_thm_def varifyT_global'_thm_def option.map_comp comp_def case_prod_unfold)
 
 theorem varifyT_global'_thm:
   assumes "varifyT_global'_thm vl fixed th = Some (names, th')"

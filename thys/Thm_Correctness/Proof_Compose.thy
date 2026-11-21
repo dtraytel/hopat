@@ -11,16 +11,6 @@ text \<open>
   annotations of a proof by equivalent ones.
 \<close>
 
-subsection \<open>Conversion of hypotheses\<close>
-
-context prf_sig_gen
-begin
-
-definition hconv :: "(integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "hconv e h h' \<longleftrightarrow> e \<turnstile> h' : propT \<and> h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h'"
-
-end
-
 
 subsection \<open>Equivalent annotations\<close>
 

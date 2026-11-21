@@ -17,25 +17,6 @@ text \<open>
   and no condition on the names of the variables is needed.
 \<close>
 
-lemma full_prop_of_ex:
-  assumes "\<forall>(t, u)\<in>set tps. closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
-  shows "\<exists>p. ok (full_prop_of tps P) p"
-proof -
-  have S: "pure_sig alg ar" using pure_sig_gen_axioms by (simp add: pure_sig_def)
-  have "\<exists>eqs. mapM mk_equals tps = return eqs" using assms
-  proof (induction tps)
-    case (Cons tu tps)
-    obtain t u where tu: "tu = (t, u)" by (cases tu)
-    from Cons.prems obtain T where t: "closed t" "\<And>e. e \<turnstile> t : T" by (auto simp: tu)
-    have "fastype_of t = return T" using pure_sig.fastype_closed[OF S t(2) t(1)] by (simp add: fastype_of_def)
-    then have "mk_equals tu = return (Const STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT) $ t $ u)"
-      by (simp add: mk_equals_def tu)
-    with Cons.IH Cons.prems show ?case by auto
-  qed (simp add: return_def)
-  then show ?thesis by (auto simp: full_prop_of_def return_def)
-qed
-
-
 subsection \<open>The setting of a result\<close>
 
 text \<open>
@@ -145,9 +126,6 @@ text \<open>Without loose names:\<close>
 lemma bc_names_iff: "bc_names incremented X x \<longleftrightarrow> (incremented \<longrightarrow> vtcons X)"
   by (simp add: bc_names_def)
 
-lemma thm_wf_full_prop_of_ex: "thm_wf m hs tps P \<Longrightarrow> \<exists>p. ok (full_prop_of tps P) p"
-  by (rule full_prop_of_ex) (fastforce simp: thm_wf_def wt_thm_def)
-
 lemma bicompose_setup:
   assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (pthm_of state)
@@ -216,9 +194,6 @@ definition bc_vcons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool
   "bc_vcons state rule \<longleftrightarrow>
     pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
       pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-
-lemma bc_cons_iff: "bc_cons state rule \<longleftrightarrow> bc_scons state rule \<and> bc_vcons state rule"
-  by (simp add: bc_cons_def bc_scons_def bc_vcons_def)
 
 text \<open>The arguments of a composition satisfy the assumptions of the theorems above:\<close>
 

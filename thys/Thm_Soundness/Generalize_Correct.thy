@@ -27,9 +27,6 @@ fun frename :: "(name \<Rightarrow> ptyp \<Rightarrow> name) \<Rightarrow> pterm
 | "frename f (s $ t) = frename f s $ frename f t"
 | "frename f t = t"
 
-lemma frename_fsubst: "frename f t = fsubst (\<lambda>x T. Free (f x T) T) t"
-  by (induction t) simp_all
-
 lemma loose_bvar_frename [simp]: "loose_bvar (frename f t) k \<longleftrightarrow> loose_bvar t k"
   by (induction t arbitrary: k) simp_all
 
@@ -53,33 +50,8 @@ definition vupd :: "pterm \<Rightarrow> 'u \<Rightarrow> 'u vval \<Rightarrow> '
 context pure_sig_gen
 begin
 
-lemma ap_cong_vars:
-  "(\<And>v U. (v, U) \<in> vars t \<Longrightarrow> \<sigma> v (tsubst \<rho> U) = \<sigma>' v (tsubst \<rho> U)) \<Longrightarrow> ap \<rho> \<sigma> t = ap \<rho> \<sigma>' t"
-  unfolding ap_def by (induction t) auto
-
 lemma typing_frename: "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> frename f t : T"
   by (induction rule: typing.induct) auto
-
-lemma ap_frename:
-  "(\<And>x U. (x, U) \<in> pfrees t \<Longrightarrow> f x (tsubst \<rho> U) = x) \<Longrightarrow>
-    frename f (ap \<rho> \<sigma> t) = ap \<rho> (\<lambda>v U. frename f (\<sigma> v U)) t"
-  unfolding ap_def by (induction t) auto
-
-lemma conv_frename:
-  assumes w: "wt s" and c: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
-  shows "frename f s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> frename f t"
-proof -
-  have wt: "wt t" using wt_conv[OF c] w by simp
-  have ws: "wt (frename f s)" "wt (frename f t)"
-    using w wt by (auto simp: wt_def intro: typing_frename)
-  obtain u v where uv: "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* t v" "aconv_term u v"
-    using conv_iff[OF w] c by blast
-  have "aconv_term (frename f u) (frename f v)"
-    using uv(3) by (simp add: aconv_term_unname unname_fsubst frename_fsubst)
-  then show ?thesis
-    using conv_iff[OF ws(1)] ws(2) beta_eta_fsubst[OF uv(1)] beta_eta_fsubst[OF uv(2)]
-    unfolding frename_fsubst by blast
-qed
 
 lemma typing_abstract_over_aux:
   assumes x: "x = Free a T \<or> x = Var z T"
@@ -114,11 +86,6 @@ lemma sem_agree:
   "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> fst \<xi>1 x T = fst \<xi>2 x T) \<Longrightarrow>
     (\<And>a T. (a, T) \<in> pfrees t \<Longrightarrow> snd \<xi>1 a T = snd \<xi>2 a T) \<Longrightarrow> sem \<eta> \<xi>1 bv t = sem \<eta> \<xi>2 bv t"
   by (induction t arbitrary: bv) auto
-
-lemma sem_frename:
-  assumes "fst \<xi>' = fst \<xi>" "\<And>a T. (a, T) \<in> pfrees t \<Longrightarrow> snd \<xi>' (f a T) T = snd \<xi> a T"
-  shows "sem \<eta> \<xi>' bv (frename f t) = sem \<eta> \<xi> bv t"
-  using assms(2) by (induction t arbitrary: bv) (auto simp: assms(1))
 
 lemma sem_abstract_over_aux:
   assumes x: "x = Free a T \<or> x = Var z T"

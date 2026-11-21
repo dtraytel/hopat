@@ -483,9 +483,6 @@ qed (auto simp: bindZ_eq_returnZ)
 
 subsection \<open>Contraction of proof redexes\<close>
 
-lemma prf_atoms_prf_ap_empty: "prf_atoms p = {} \<Longrightarrow> prf_atoms (prf_ap \<rho> \<sigma> p) = {}"
-  by (induction p) (simp_all add: prf_ap_def)
-
 text \<open>
   The contraction of the proof redexes of a tight proof preserves the correctness of every proof
   that agrees with it up to the types of its class proofs:

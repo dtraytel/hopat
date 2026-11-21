@@ -216,9 +216,6 @@ fun zhyps :: "zproof \<Rightarrow> zterm set" where
 | "zhyps (ZAppp p q) = zhyps p \<union> zhyps q"
 | "zhyps _ = {}"
 
-lemma znolb_mono: "znolb k p \<Longrightarrow> k \<le> k' \<Longrightarrow> znolb k' p"
-  by (induction k p arbitrary: k' rule: znolb.induct) (auto dest: zloose_le)
-
 lemma znolb_ZAppps: "znolb k (ZAppps p qs) \<longleftrightarrow> znolb k p \<and> (\<forall>q\<in>set qs. znolb k q)"
   unfolding ZAppps_def by (induction qs arbitrary: p) auto
 

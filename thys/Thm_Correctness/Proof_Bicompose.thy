@@ -99,7 +99,6 @@ proof (induction p)
 qed (auto simp: prf_ap_def option.map_ident id_def intro: prf_aeq.refl)
 
 
-
 subsection \<open>Conversion under a prefix\<close>
 
 fun lap :: "tinst \<Rightarrow> vsubst \<Rightarrow> litem \<Rightarrow> litem" where
@@ -114,56 +113,6 @@ lemma ap_abs_pre: "ap \<rho> \<sigma> (abs_pre p X) = abs_pre (map (lap \<rho> \
 
 lemma litem_ok_lap: "litem_ok i \<Longrightarrow> litem_ok (lap \<rho> \<sigma> i)"
   by (cases i) auto
-
-lemma typing_abs_pre:
-  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> e \<turnstile> lift_pre p X : propT \<Longrightarrow> e \<turnstile> abs_pre p X : ptys p \<Rrightarrow> propT"
-proof (induction p arbitrary: e)
-  case (Cons i p)
-  have oki: "litem_ok i" and okp: "\<forall>i\<in>set p. litem_ok i" using Cons.prems(1) by simp_all
-  show ?case
-  proof (cases i)
-    case (LImp c H)
-    from typing_lift_pre_imp[OF oki Cons.prems(2) LImp] Cons.IH[OF okp] LImp show ?thesis by simp
-  next
-    case (LAll c a T)
-    note t = typing_lift_pre_all[OF oki Cons.prems(2) LAll]
-    have "cert_typ alg ar T" using typing_lift_pre[OF Cons.prems(1,2)] LAll by simp
-    with Cons.IH[OF okp t(2)] LAll show ?thesis by auto
-  qed
-qed simp
-
-lemma conv_lift_pre:
-  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> e \<turnstile> lift_pre p X : propT \<Longrightarrow> e \<turnstile> lift_pre p Y : propT \<Longrightarrow>
-    abs_pre p X \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_pre p Y \<Longrightarrow> lift_pre p X \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift_pre p Y"
-proof (induction p arbitrary: e)
-  case (Cons i p)
-  have oki: "litem_ok i" and okp: "\<forall>i\<in>set p. litem_ok i" using Cons.prems(1) by simp_all
-  have w: "wt (lift_pre (i # p) X)" "wt (lift_pre (i # p) Y)" using Cons.prems(2,3) by (auto simp: wt_def)
-  show ?case
-  proof (cases i)
-    case (LImp c H)
-    note tX = typing_lift_pre_imp[OF oki Cons.prems(2) LImp]
-      and tY = typing_lift_pre_imp[OF oki Cons.prems(3) LImp]
-    have "lift_pre p X \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift_pre p Y"
-      by (rule Cons.IH[OF okp tX(3) tY(3)]) (use Cons.prems(4) LImp in simp)
-    then show ?thesis using w unfolding tX(1) tY(1) by (rule conv_App[rotated 3]) simp_all
-  next
-    case (LAll c a T)
-    note tX = typing_lift_pre_all[OF oki Cons.prems(2) LAll]
-      and tY = typing_lift_pre_all[OF oki Cons.prems(3) LAll]
-    have tA: "e \<turnstile> Abs a T (abs_pre p X) : T \<rightarrow>\<^sub>T (ptys p \<Rrightarrow> propT)"
-      "e \<turnstile> Abs a T (abs_pre p Y) : T \<rightarrow>\<^sub>T (ptys p \<Rrightarrow> propT)"
-      using typing_abs_pre[OF Cons.prems(1,2)] typing_abs_pre[OF Cons.prems(1,3)] LAll by simp_all
-    have "abs_pre p X \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_pre p Y"
-      by (rule conv_Abs_inv(2)[OF tA]) (use Cons.prems(4) LAll in simp)
-    have wA: "wt (Abs a T (lift_pre p X))" "wt (Abs a T (lift_pre p Y))"
-      using Cons.prems(2,3) unfolding tX(1) tY(1) wt_def by auto
-    from Cons.IH[OF okp tX(2) tY(2) \<open>abs_pre p X \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_pre p Y\<close>]
-    have "Abs a T (lift_pre p X) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a T (lift_pre p Y)"
-      by (rule conv_Abs[OF wA])
-    then show ?thesis using w unfolding tX(1) tY(1) by (rule conv_App[rotated 3]) simp_all
-  qed
-qed simp
 
 lemma conv_list_implies:
   "C \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> C' \<Longrightarrow> e \<turnstile> list_implies Ns C : propT \<Longrightarrow> e \<turnstile> list_implies Ns C' : propT \<Longrightarrow>

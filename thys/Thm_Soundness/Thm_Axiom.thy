@@ -278,9 +278,6 @@ qed
 
 subsection \<open>Unconstraining an axiom without sort constraints\<close>
 
-lemma ok_unique: "ok m x \<Longrightarrow> ok m y \<Longrightarrow> x = y"
-  by simp
-
 lemma map_atypsM_ok: "(\<And>U. U \<in> set (atyps T) \<Longrightarrow> ok (h U) (f U)) \<Longrightarrow> ok (map_atypsM h T) (map_atyps f T)"
 proof (induction T)
   case (Type a Ts)

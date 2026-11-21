@@ -29,10 +29,6 @@ lemma term_sorts_tm_sorts: "term_sorts t = tm_sorts t"
 lemma set_insert_term_sorts_tm: "set (insert_term_sorts t Ss) = tm_sorts t \<union> set Ss"
   by (simp add: term_sorts_tm_sorts)
 
-lemma set_env_insert_sorts_tyenv: "set (env_insert_sorts tye Ss) = tyenv_sorts tye \<union> set Ss"
-  by (auto simp: set_env_insert_sorts tyenv_sorts_def typ_sorts_tsorts)
-
-
 subsection \<open>Sort constraints\<close>
 
 lemma smash_atyps_eq: "smash_atyps T = map_atyps smash_atyp T"
@@ -45,15 +41,6 @@ text \<open>The constraints without their theories:\<close>
 
 abbreviation cons_set :: "'t constraint list \<Rightarrow> (ptyp \<times> psort) set" where
   "cons_set cs \<equiv> snd ` set cs"
-
-lemma cons_set_union:
-  "(\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b) \<Longrightarrow> cons_set (union_constraints tord cs cs') = cons_set cs \<union> cons_set cs'"
-  by (simp add: set_union_constraints image_Un)
-
-lemma cons_set_insert:
-  "(\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b) \<Longrightarrow> cons_set (insert_constraint tord thy (T, S) cs) =
-    (if cons_ignored T S then {} else {(map_atyps smash_atyp T, S)}) \<union> cons_set cs"
-  by (auto simp: set_insert_constraint' constraint_ignored_eq smash_atyps_eq)
 
 theorem cons_set_env:
   assumes t: "\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b"

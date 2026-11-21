@@ -595,10 +595,6 @@ proof -
   then show ?thesis by (simp only: variables_of_fold)
 qed
 
-lemma aterms_mk_of_class: "set (aterms (mk_of_class T cl)) = {Const (cl + class_suffix) (Type STR ''itself'' [T] \<rightarrow>\<^sub>T Type STR ''prop'' []),
-    Const STR ''Pure.type'' (Type STR ''itself'' [T])}"
-  by (simp add: mk_of_class_def)
-
 lemma vars_aterms: "a \<in> set (aterms t) \<Longrightarrow> vars a \<subseteq> vars t"
   by (induction t) auto
 

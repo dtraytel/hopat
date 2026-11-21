@@ -58,9 +58,6 @@ lemma atyps_map_atyps: "set (atyps (map_atyps f T)) = (\<Union>A\<in>set (atyps 
 lemma vars_map_types: "vars (map_types f t) = (\<lambda>(x, T). (x, f T)) ` vars t"
   by (induction t) auto
 
-lemma pfrees_map_types: "pfrees (map_types f t) = (\<lambda>(x, T). (x, f T)) ` pfrees t"
-  by (induction t) auto
-
 lemma inst_as_map_types: "inst \<rho> t = map_types (tsubst \<rho>) t"
   by (induction t) simp_all
 
@@ -321,9 +318,6 @@ lemma tatoms_vsubst:
 
 lemma tf_in_vsubst: "tf_in A (vsubst \<sigma> t) \<Longrightarrow> tf_in A t \<or> (\<exists>(x, U)\<in>vars t. tf_in A (\<sigma> x U))"
   unfolding tf_in_def using tatoms_vsubst by fastforce
-
-lemma has_tf_atom: "B \<in> set (atyps U) \<Longrightarrow> has_tf A B \<Longrightarrow> has_tf A U"
-  using atyps_atom_self by (fastforce simp: has_tf_def)
 
 lemma map_atyps_has_tf_id:
   assumes "\<not> has_tf A U" "\<And>a S. (a, S) \<notin> A \<Longrightarrow> \<psi> (TFree a S) = TFree a S" "\<And>v S. \<psi> (TVar v S) = TVar v S"
@@ -789,9 +783,6 @@ lemma finite_typs [simp]: "finite (typs t)"
 lemma finite_ttvars [simp]: "finite (ttvars t)"
   by (simp add: ttvars_def)
 
-lemma has_tf_mono: "has_tf A U \<Longrightarrow> A \<subseteq> B \<Longrightarrow> has_tf B U"
-  by (auto simp: has_tf_def)
-
 lemma tf_in_mono: "tf_in A t \<Longrightarrow> A \<subseteq> B \<Longrightarrow> tf_in B t"
   by (auto simp: tf_in_def)
 
@@ -981,9 +972,6 @@ proof (induction t)
   case (Abs a T t)
   then show ?case by (auto simp: tf_in_def has_tfree_has_tf has_tf_def)
 qed (auto simp: tf_in_def has_tfree_has_tf has_tf_def)
-
-lemma tmap_gen_atom_id: "\<not> tf_in A t \<Longrightarrow> tmap (gen_atom A g) t = t"
-  by (rule map_types_id, rule map_atyps_has_tf_id) (auto simp: tf_in_typs gen_atom_def)
 
 lemma vars_tmap_index: "(x, T) \<in> vars (tmap \<phi> t) \<Longrightarrow> \<exists>U. (x, U) \<in> vars t"
   by (auto simp: vars_map_types)

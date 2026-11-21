@@ -431,63 +431,6 @@ proof -
   qed
 qed
 
-lemma proofs_ok_thm_of_ares:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and cs: "thm_cons state"
-    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
-    and psig: "is_prf_sig (sign_of state)"
-    and po_state: "is_prf_sig (sign_of state) \<Longrightarrow> proofs_ok (rep_thm state)"
-  shows "proofs_ok (thm_of_ares (state :: 'u pure_thm) (aseq_ctx s0) r)"
-proof -
-  let ?c = "sign_of state" and ?th = "thm_of_ares state (aseq_ctx s0) r"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv[OF ps cs] by simp
-  note ti = assumption_thm_inv[OF a res cfg st]
-  obtain tpairs Bs Bi C params asms concl l env tps where
-    "okT (dest_state (rep_of state) i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
-    "s0 = AQ_Try (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) asms 1" "l < length asms"
-    "ures (empty_env (th_maxidx (rep_of state))) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) (El_R env tps)"
-    and nt: "okT (newth (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
-    "sinv (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state))) (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))
-      (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state))) (empty_env (th_maxidx (rep_of state)))
-      (tdps ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs))"
-    by (rule assumption_result[OF a res cfg st])
-  have mx: "th_maxidx (ar_thm r) = maxidx (ar_env r)" using okT_newth[OF nt(1)] by simp
-  have ws: "wt_thm (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using st by (simp add: thm_inv_def)
-  interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-    using psig by (simp add: is_prf_sig_def)
-  have po: "proofs_ok (rep_thm state)" by (rule po_state[OF psig])
-  have sg: "th_sign ?th = ?c" by (simp add: thm_of_ares_def)
-  show ?thesis unfolding proofs_ok_def Let_def sg
-  proof (rule conjI; intro allI impI)
-    fix p assume "th_proof ?th = returnW p"
-    then obtain pf where pf: "proof_of state = returnW pf" and pr: "ares_proof (aseq_ctx s0) r pf = returnW p"
-      by (auto simp: thm_of_ares_def bindP_eq_returnP)
-    have vq: "prf_valid (sg_ax ?c) (set (hyps_of state)) (th_tpairs (rep_of state)) pf (th_prop (rep_of state))"
-      "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-      using po pf by (simp_all add: proofs_ok_def Let_def)
-    from assumption_proof_ok[OF a res cfg st pr vq]
-    show "prf_valid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) p (th_prop ?th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
-      by (simp add: thm_of_ares_def)
-  next
-    fix z assume "th_zproof ?th = return z"
-    then obtain pf where pf: "zproof_of state = return pf"
-      and z: "ares_zproof ztargs (rep_of state) (aseq_ctx s0) r pf = return z"
-      by (auto simp: thm_of_ares_def bindZ_eq_returnZ)
-    have vq: "zvalid (sg_ax ?c) (set (hyps_of state)) (th_tpairs (rep_of state)) pf (th_prop (rep_of state))"
-      "zinv pf" "znolb 0 pf" "zhyps_ok pf"
-      using po pf by (simp_all add: proofs_ok_def Let_def)
-    have H: "\<forall>h\<in>set (hyps_of state). closed h" using ws by (auto simp: wt_thm_def dest: wtpD(1))
-    note zr = assumption_zproof_ok[OF a res cfg st z vq(1-3) H]
-    have "zhyps_ok z" using zhyps_ok_mono[OF vq(4)] zr by blast
-    with zr show "zvalid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) z (th_prop ?th) \<and> zinv z \<and> znolb 0 z \<and>
-        zhyps_ok z"
-      by (simp add: thm_of_ares_def)
-  qed
-qed
-
 lemma proofs_ok_thm_of_ares_gen:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
@@ -551,58 +494,6 @@ proof -
     with zr show "zvalid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) z (th_prop ?th) \<and> zinv z \<and> znolb 0 z \<and>
         zhyps_ok z"
       by (simp add: thm_of_ares_def)
-  qed
-qed
-
-lemma proofs_ok_thm_of_fres:
-  assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and cs: "thm_cons th"
-    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-    and psig: "is_prf_sig (sign_of th)"
-    and po_th: "is_prf_sig (sign_of th) \<Longrightarrow> proofs_ok (rep_thm th)"
-  shows "proofs_ok (thm_of_fres (th :: 'u pure_thm) env r)"
-proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u)")
-  case True
-  then show ?thesis using po_th psig by (simp add: thm_of_fres_def)
-next
-  case False
-  let ?c = "sign_of th" and ?th = "thm_of_fres th env r"
-  have eq: "?th = with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (norm_proof_remove_types env))
-      (bindM (zproof_of th) (flexflex_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
-    unfolding thm_of_fres_def if_not_P[OF False] ..
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using pure_thm_inv[OF ps cs] by simp
-  note ti = flexflex_thm_inv[OF a res cfg st]
-  have ws: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using st by (simp add: thm_inv_def)
-  interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-    using psig by (simp add: is_prf_sig_def)
-  have po: "proofs_ok (rep_thm th)" by (rule po_th[OF psig])
-  show ?thesis unfolding proofs_ok_def Let_def eq with_cons_sel mk_thm_sel
-  proof (rule conjI; intro allI impI)
-    fix p assume "bindW (proof_of th) (norm_proof_remove_types env) = returnW p"
-    then obtain pf where pf: "proof_of th = returnW pf" and nq: "norm_proof_remove_types env pf = returnW p"
-      by (auto simp: bindP_eq_returnP)
-    have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) pf (th_prop (rep_of th))"
-      "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-      using po pf by (simp_all add: proofs_ok_def Let_def)
-    from flexflex_proof_ok[OF a res cfg st False nq vq]
-    show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) p (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p" .
-  next
-    fix z assume "bindM (zproof_of th) (flexflex_zproof ztargs (rep_of th) env) = return z"
-    then obtain pf where pf: "zproof_of th = return pf" and z: "flexflex_zproof ztargs (rep_of th) env pf = return z"
-      by (auto simp: bindZ_eq_returnZ)
-    have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) pf (th_prop (rep_of th))"
-      "zinv pf" "znolb 0 pf" "zhyps_ok pf"
-      using po pf by (simp_all add: proofs_ok_def Let_def)
-    have H: "\<forall>h\<in>set (hyps_of th). closed h" using ws by (auto simp: wt_thm_def dest: wtpD(1))
-    note zr = flexflex_zproof_ok[OF a res cfg st False z vq(1-3) H]
-    have "zhyps_ok z" using zhyps_ok_mono[OF vq(4)] zr by blast
-    with zr show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
-      by blast
   qed
 qed
 

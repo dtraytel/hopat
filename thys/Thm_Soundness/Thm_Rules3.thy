@@ -1259,12 +1259,6 @@ lemma (in pure_sig_gen) lvtcons_vclash: "vclash X \<subseteq> loose \<Longrighta
 lemma (in pure_sig_gen) nfree_binds_none: "binds_none env loose \<Longrightarrow> nfree env"
   unfolding nfree_def binds_none_def by fastforce
 
-lemma vclash_mono: "X \<subseteq> Y \<Longrightarrow> vclash X \<subseteq> vclash Y"
-  unfolding vclash_def by blast
-
-lemma binds_none_mono: "binds_none env L \<Longrightarrow> L' \<subseteq> L \<Longrightarrow> binds_none env L'"
-  unfolding binds_none_def by blast
-
 subsection \<open>The rules on theorems\<close>
 
 text \<open>

@@ -11,9 +11,6 @@ text \<open>
 
 subsection \<open>Proof constants of the equality axioms\<close>
 
-lemma eq_names_zeq_vars: "eq_names = fst ` set zeq_vars"
-  by (simp add: eq_names_def zeq_vars_def insert_commute)
-
 lemma find_zeq_vars:
   assumes "a \<in> fst ` set zeq_vars"
   shows "find (\<lambda>(b, xs). STR ''Pure.'' + a = STR ''Pure.'' + b) zeq_vars = Some (a, the (map_of zeq_vars a))"
@@ -188,10 +185,6 @@ proof -
     by (rule zterm_of_zdec[OF assms(2)]) (use assms(3) in \<open>auto simp: noneg_def tnoneg_def\<close>)
   with assms(1) show ?thesis by auto
 qed
-
-lemma pcerase_PAppt_Some_chain:
-  "pcerase (foldl (\<lambda>p t. PAppt p (Some t)) p ts) = foldl (\<lambda>p t. PAppt p (Some t)) (pcerase p) ts"
-  by (induction ts arbitrary: p) simp_all
 
 text \<open>A missing classic proof is not valid:\<close>
 

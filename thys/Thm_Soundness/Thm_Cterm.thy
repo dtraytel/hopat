@@ -856,9 +856,6 @@ proof -
   show ?thesis using cmap[OF pres c[unfolded adjust_maxidx_pure_cterm_def]] by (simp add: returnW_def)
 qed
 
-lemma adjust_maxidx_pure_cterm_defined: "adjust_maxidx_pure_cterm i ct \<noteq> None"
-  by (simp add: adjust_maxidx_pure_cterm_def cmap_def resT_def returnW_def)
-
 theorem generalize_pure_cterm:
   assumes c: "generalize_pure_cterm tfrees frees gi ct = Some ct'"
   shows "okT (generalize_cterm tfrees frees gi (crep_of ct)) (crep_of ct') \<and>

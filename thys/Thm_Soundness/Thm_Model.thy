@@ -613,9 +613,6 @@ proof (induction T)
   then show ?case by (simp add: comp_def cong: map_cong)
 qed (simp_all add: tinstv_def)
 
-lemma all_dom_tsubst: "all_dom (tsubst \<rho> ((U \<rightarrow>\<^sub>T V) \<rightarrow>\<^sub>T W)) = tsubst \<rho> U"
-  by simp
-
 lemma sem_inst:
   "e \<turnstile> t : T \<Longrightarrow> sem \<eta> \<xi> bv (inst \<rho> t) = sem (tinstv \<eta> \<rho>) (vinstv \<rho> \<xi>) bv t"
 proof (induction arbitrary: bv rule: typing.induct)

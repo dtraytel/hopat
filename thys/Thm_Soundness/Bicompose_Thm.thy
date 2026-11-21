@@ -248,7 +248,6 @@ proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
 qed
 
 
-
 subsection \<open>The new premises of a result\<close>
 
 text \<open>
@@ -1034,9 +1033,6 @@ lemma thm_inv_def:
 
 lemma thm_inv_iff: "thm_inv m hs tps P \<longleftrightarrow> thm_inv0 m hs tps P \<and> vtcons (vars_thm tps P)"
   by (simp add: thm_inv_iff)
-
-lemma vtcons_vimg: "vcons (tnorm_inst \<theta>) S \<Longrightarrow> vtcons (vimg \<theta> S)"
-  using lvtcons_vimg[of \<theta> S] by simp
 
 lemma norm_term_props:
   assumes "einv A K env" "winv env Y" "vars X \<subseteq> Y \<union> evars env"

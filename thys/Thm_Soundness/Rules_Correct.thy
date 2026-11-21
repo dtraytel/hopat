@@ -63,10 +63,6 @@ proof -
   qed
 qed
 
-context pure_sig_gen
-begin
-
-end
 
 context pure_model_gen
 begin
@@ -616,10 +612,6 @@ proof -
     by (rule bfree_ap_incr_idx[OF gsubstD(2)[OF assms(2)]]) (use assms(1) in \<open>simp_all add: closed_def\<close>)
   then show ?thesis by (simp add: incr_indexes_idx)
 qed
-
-lemma wtp_incr_indexes0: "wtp P \<Longrightarrow> wtp (incr_indexes [] inc P)"
-  using typing_incr_idx0[OF wtpD(2) wtpD(1), of P "[]" "\<lambda>_. propT" inc] closed_incr_idx0[OF wtpD(1), of P "[]" inc]
-  by (intro wtpI) (simp_all add: incr_indexes_idx closed_def incr_tvar_tren tsubst_propT)
 
 theorem incr_indexes_thm_valid:
   assumes ok: "okT (incr_indexes_thm i th0) th"

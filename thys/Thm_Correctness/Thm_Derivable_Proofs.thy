@@ -23,24 +23,8 @@ definition dok :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
 lemma dok_iff: "dok U d \<longleftrightarrow> dsem U d \<and> dprf d"
   by (auto simp: dok_def dsem_def dprf_def thm_ok_def)
 
-lemma dok_sem: "dok U d \<Longrightarrow> dsem U d"
-  by (simp add: dok_iff)
-
 lemma dprf_nosig: "\<not> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> dprf d"
   by (auto simp: dprf_def is_prf_sig_def prf_sig_def)
-
-lemma dok_nosig: "\<not> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> dok U d"
-  by (simp add: dok_iff dsem_nosig dprf_nosig)
-
-lemma dok_valid:
-  fixes M :: "'u model"
-  assumes "dok TYPE('u) d" "is_model (th_sign d) M"
-  shows "valid_in (th_sign d) M (th_shyps d) (th_hyps d) (th_tpairs d) (th_prop d)"
-  by (rule dsem_valid[OF dok_sem[OF assms(1)] assms(2)])
-
-lemma dok_proofs: "dok U d \<Longrightarrow> is_prf_sig (th_sign d) \<Longrightarrow> proofs_ok d"
-  by (simp add: dok_iff dprf_def)
-
 
 subsection \<open>Each rule keeps the proofs valid\<close>
 

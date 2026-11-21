@@ -881,9 +881,6 @@ lemma mk_AbsP_AbsPs: "mk_AbsP xs p = mk_AbsPs (map (\<lambda>_. None) xs) p"
 context prf_sig_gen
 begin
 
-lemma list_all2_ann_ok_None: "list_all2 ann_ok (map (\<lambda>_. None) xs) xs"
-  by (induction xs) simp_all
-
 lemma list_all2_ann_ok_None_len: "length xs = length ys \<Longrightarrow> list_all2 ann_ok (map (\<lambda>_. None) xs) ys"
   by (simp add: list_all2_conv_all_nth)
 
@@ -1246,9 +1243,6 @@ proof -
   have red: "Abs x U B $ t \<rightarrow>\<^sub>\<beta> subst_bound t B" by (simp add: subst_bound_subst)
   from prf_ok.conv[OF pr c subject_reduction_beta[OF ty red]] show ?thesis .
 qed
-
-lemma cert_closed_typing: "e \<turnstile> t : T \<Longrightarrow> cert_typ alg ar T" if "\<And>e. e \<turnstile> t : T"
-  using typing_cert[OF that[of "\<lambda>_. propT"]] by simp
 
 theorem reflexive_proof_valid:
   assumes ok: "okT (reflexive (CTerm t T m)) th" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
@@ -2238,11 +2232,6 @@ proof -
   show ?thesis by (simp add: subst_bound_subst subst.simps)
 qed
 
-lemma prf_ok_reflexive:
-  assumes "cert_typ alg ar U" "e \<turnstile> s : U" "closed s"
-  shows "prf_ok ax H E e [] reflexive_proof (eq_const U $ s $ s)"
-  using prf_ok_reflexive_ann[OF assms _ assms(1), of None None] by (simp add: reflexive_proof_def ann_ok_def)
-
 text \<open>The reflexivity axiom applied to \<open>t\<close> with an annotation, as in the tight proofs:\<close>
 
 lemma reflexive_proof_conv_valid_ann:
@@ -2831,16 +2820,6 @@ lemma prf_ap_foldr_Abst:
     foldr (\<lambda>(a, T) p. Abst a (map_option (tsubst \<rho>) (g T)) p) params (prf_ap \<rho> \<sigma> X)"
   by (induction params) (auto simp: prf_ap_def)
 
-lemma prf_ap_rotate_proof:
-  "prf_ap \<rho> \<sigma> (rotate_proof Bs Bi' params asms m p) = rotate_proof Bs Bi' params asms m (prf_ap \<rho> \<sigma> p)"
-proof -
-  have a: "prf_ap \<rho> \<sigma> (mk_Abst params q) = mk_Abst params (prf_ap \<rho> \<sigma> q)" for q
-    by (induction params) (auto simp: mk_Abst_def prf_ap_def)
-  show ?thesis
-    by (simp add: rotate_proof_def Let_def prf_ap_mk_AbsP prf_ap_proof_combP prf_ap_proof_combt a)
-      (simp add: prf_ap_def comp_def ap_def)
-qed
-
 end
 
 context prf_sig_gen
@@ -2977,30 +2956,6 @@ proof -
   have ip: "ilength ps = integer_of_nat (length params)" by (simp add: ilength_eq lps)
   show ?thesis
     unfolding dK using fin unfolding ip .
-qed
-
-lemma prf_ok_rotate:
-  fixes \<rho> :: tinst and params :: binders and ps defines "ps \<equiv> map (\<lambda>(a, T). (a, tsubst \<rho> T)) params"
-  assumes p0: "prf_ok ax H E e [] P (list_implies (aBs @ [list_forall ps (list_implies As c)]) C)"
-    and tBs: "\<And>A. A \<in> set aBs \<Longrightarrow> e \<turnstile> A : propT \<and> closed A"
-    and tB: "e \<turnstile> list_forall ps (list_implies As c) : propT"
-    and cB': "closed (list_forall ps (list_implies (drop K As @ take K As) c))"
-    and K: "K \<le> length As" and l: "length Bsr = length aBs" "length asmsr = length As"
-  shows "prf_ok ax H E e [] (rotate_proof Bsr Bir params asmsr (integer_of_nat K) P)
-    (list_implies (aBs @ [list_forall ps (list_implies (drop K As @ take K As) c)]) C)"
-proof -
-  have a1: "list_all2 ann_ok (map (\<lambda>_. None) (aBs @ [list_forall ps (list_implies (drop K As @ take K As) c)]))
-      (aBs @ [list_forall ps (list_implies (drop K As @ take K As) c)])"
-    and a2: "list_all2 ann_ok (map (\<lambda>_. None) As) As"
-    by (rule list_all2_ann_ok_None)+
-  have tg: "\<forall>(a, T)\<in>set params. tann_ok ((\<lambda>_. None) T) (tsubst \<rho> T)" by auto
-  have m1: "mk_AbsP (Bsr @ [Bir]) X = mk_AbsPs (map (\<lambda>_. None) (aBs @ [list_forall ps (list_implies (drop K As @ take K As) c)])) X"
-    for X by (simp add: mk_AbsP_AbsPs l map_replicate_const)
-  have m2: "mk_AbsP asmsr X = mk_AbsPs (map (\<lambda>_. None) As) X" for X
-    by (simp add: mk_AbsP_AbsPs l map_replicate_const)
-  from prf_ok_rotate_ann[OF p0[unfolded ps_def] tBs tB[unfolded ps_def] cB'[unfolded ps_def] K
-      a1[unfolded ps_def] a2 tg, folded ps_def]
-  show ?thesis by (simp only: rotate_proof_def Let_def m1 m2 l mk_Abst_foldr)
 qed
 
 theorem rotate_proof_valid_ann:
