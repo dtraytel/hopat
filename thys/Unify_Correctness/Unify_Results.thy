@@ -1,7 +1,7 @@
 section \<open>The Results of Higher-Order Unification\<close>
 
 theory Unify_Results
-  imports Unify_Pull_Fin Unify_Smash_Sound
+  imports Unify_Search_Inv Unify_Smash_Sound
 begin
 
 context pure_sig_gen

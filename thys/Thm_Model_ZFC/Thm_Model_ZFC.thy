@@ -1,7 +1,7 @@
 section \<open>A Witness for the Axioms of the Models\<close>
 
 theory Thm_Model_ZFC
-  imports "ZFC_in_HOL.ZFC_Cardinals" "Thm_Soundness.Thm_Consistency" "Thm_Correctness.Thm_Example"
+  imports "ZFC_in_HOL.ZFC_Cardinals" "Thm_Soundness.Thm_Consistency" "Thm_Soundness.Thm_Example"
     "Thm_Soundness.Thm_Classes"
 begin
 

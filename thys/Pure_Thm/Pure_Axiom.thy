@@ -8,7 +8,7 @@ text \<open>
   A literal model of \<open>Thm.axiom\<close> on the proposition of an axiom: the logical part, the classic
   proof \<open>Proofterm.axiom_proof\<close> (with \<open>Proofterm.prop_args\<close> and \<open>Logic.unconstrainT\<close>) and the
   tight proof \<open>ZTerm.axiom_proof\<close>. The lookup of the axiom in the theory is part of the
-  signature (theory \<open>Thm_Correctness.Thm_Rules4\<close>). The names of the type variables that
+  signature (theory \<open>Thm_Soundness.Thm_Lift\<close>). The names of the type variables that
   \<open>Logic.unconstrainT\<close> invents (\<open>Name.invent_global_types\<close>) are a parameter \<open>invent\<close>.
 \<close>
 

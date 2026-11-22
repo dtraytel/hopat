@@ -1,7 +1,7 @@
 section \<open>Completeness of Higher-Order Unification\<close>
 
 theory Unify_Complete
-  imports Unify_Match_Complete Unify_Flexflex_Complete Unify_Pull_Fin Unify_Sound
+  imports Unify_Match_Complete Unify_Flexflex_Complete Unify_Search_Inv Unify_Sound
 begin
 
 context pure_sig

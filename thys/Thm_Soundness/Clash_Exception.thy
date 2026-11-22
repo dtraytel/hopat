@@ -1,11 +1,11 @@
 section \<open>The exception for a kept variable at a second type\<close>
 
 theory Clash_Exception
-  imports Norm_Clash
+  imports Clash_Norm
 begin
 
 text \<open>
-  Theory \<open>Norm_Clash\<close> shows that a result of normalization does not depend on the variables
+  Theory \<open>Clash_Norm\<close> shows that a result of normalization does not depend on the variables
   whose name the environment binds at another type. This theory shows the other half: if such
   a variable is kept, there is no result, and what the code returns is the exception \<open>TYPE\<close>
   of \<open>Envir.lookup\<close>.

@@ -1,7 +1,7 @@
 section \<open>Soundness of Head Normalization\<close>
 
 theory Pattern_Head_Norm
-  imports Pattern_Semantics Pattern_Types
+  imports Pattern_Semantics Pattern_Types_Sound
 begin
 
 context pure_sig_gen

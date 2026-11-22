@@ -1,7 +1,7 @@
 section \<open>Reachability of Type Variables in Type Unification\<close>
 
 theory Pattern_Type_Reach
-  imports Pattern_Types Pattern_Signature
+  imports Pattern_Types_Sound Pattern_Signature
 begin
 
 text \<open>

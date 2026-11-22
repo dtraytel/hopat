@@ -1,7 +1,7 @@
 section \<open>Soundness of the Base Operations of \<open>unify.ML\<close>\<close>
 
 theory Unify_Base_Sound
-  imports Unify_Semantics "Pattern_Correctness.Match_Lemmas"
+  imports Unify_Semantics "Pattern_Correctness.Match_Base"
 begin
 
 context pure_sig_gen

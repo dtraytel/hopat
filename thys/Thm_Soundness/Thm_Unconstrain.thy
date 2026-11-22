@@ -12,7 +12,7 @@ text \<open>
   judgment admits as atoms of the signature; the tight proof box is translated like a classic
   one (\<^const>\<open>zthm_tr\<close>). The classic and tight proofs of the result are valid if the signature
   admits the propositions of the boxes (theory \<open>Thm_Unconstrain_Proofs\<close> of session
-  \<open>Thm_Correctness\<close>).
+  \<open>Thm_Proofs\<close>).
 \<close>
 
 subsection \<open>The context of the unconstrained type variables\<close>
@@ -741,7 +741,7 @@ text \<open>
   tight proof box would have two keys of the same name; a type instantiation of the proof
   (\<open>ZTerm.map_insts\<close>, \<^const>\<open>map_insts\<close>) instantiates the types of the keys and may merge them,
   after which the box no longer has an instance for each variable of its proposition. The
-  invariant of tight proofs (\<open>zconsts_ok\<close>, part of \<open>zinv\<close>, session \<open>Thm_Correctness\<close>) excludes such tables.
+  invariant of tight proofs (\<open>zconsts_ok\<close>, part of \<open>zinv\<close>, session \<open>Thm_Proofs\<close>) excludes such tables.
 \<close>
 
 definition unc_ok :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow> (integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow>

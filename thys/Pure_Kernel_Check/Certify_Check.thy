@@ -8,7 +8,7 @@ text \<open>
   The models of the inference rules take certified terms and types as they are: a certified term
   is closed and well-typed over the signature, with the recorded type, its indices are between
   \<open>0\<close> and the recorded maximal index, and its sorts are recorded (\<open>cterm_ok\<close> in session
-  \<open>Thm_Correctness\<close>). The certification itself, \<open>Sign.certify_term\<close> and \<open>Type.cert_typ\<close> behind
+  \<open>Thm_Proofs\<close>). The certification itself, \<open>Sign.certify_term\<close> and \<open>Type.cert_typ\<close> behind
   \<open>Thm.global_cterm_of\<close> and \<open>Thm.global_ctyp_of\<close>, is not modelled. This test checks that
   assumption on the running system, with a checker of its own: the propositions of the theorems
   of HOL and their subterms are certified and pass the checker, and terms that violate one of

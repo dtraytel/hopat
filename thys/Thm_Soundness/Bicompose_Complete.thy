@@ -1,7 +1,7 @@
 section \<open>Completeness of \<open>bicompose_aux\<close>\<close>
 
 theory Bicompose_Complete
-  imports Bicompose_Fin "Unify_Correctness.Unify_Results2"
+  imports Bicompose_Termination "Unify_Correctness.Unify_Results_Complete"
 begin
 
 text \<open>

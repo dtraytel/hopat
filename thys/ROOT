@@ -50,38 +50,36 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Signature
     Pattern_Semantics
     Pattern_Monad
-    Pattern_Types
+    Pattern_Types_Sound
     Pattern_Head_Norm
-    Pattern_Terms
+    Pattern_Bound_Vars
     Pattern_Vars
     Pattern_Bindings
-    Pattern_Flex
-    Pattern_Proj
+    Pattern_Sound_Flex
+    Pattern_Sound_Proj
     Pattern_Sound
     Pattern_Normal
     Pattern_Complete_Base
     Pattern_Complete_Steps
     Pattern_Complete_Flex
     Pattern_Complete_Proj
-    Pattern_Occurs
+    Pattern_Complete_Occurs
     Pattern_Complete
     Pattern_Acyclic
     Pattern_Size
     Pattern_Type_Reach
+    Pattern_Termination_Base
+    Pattern_Termination_Inv
+    Pattern_Unfold_Checked
     Pattern_Termination
-    Pattern_Term_Flex
-    Pattern_Term_Proj
-    Pattern_Term_Unif
-    Pattern_Unfc
-    Pattern_Term_Dfd
     Pattern_Patterns
-    Pattern_Unify_Patterns
+    Pattern_Patterns_Success
     Pattern_Unify_Correctness
-    Env_Apply
-    Pattern_Ghost
+    Pattern_Most_General
+    Pattern_Typed_Unifier
     Pattern_Example
     Match_Types
-    Match_Lemmas
+    Match_Base
     Match_Sound
     Match_Termination
     Match_Exceptions
@@ -106,38 +104,37 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Seq
     Unify_Base_Sound
     Unify_Simpl_Sound
-    Unify_Simpl_Term
+    Unify_Simpl_Inv
     Unify_Flexflex_Sound
     Unify_Match_Sound
-    Unify_Shape_Sound
-    Unify_Pull_Sound
-    Unify_Flexflex_Term
-    Unify_Ffeta
-    Unify_Match_Fin
-    Unify_Seq_Loose
-    Unify_Pull_Fin
-    Unify_Occurs_Sound
-    Unify_Unfc
-    Unify_Simpl_Dfd
-    Unify_Flexflex_Dfd
-    Unify_Seq_Dfd
-    Unify_Mc_Dfd
-    Unify_Pull_Dfd
-    Unify_Pattern_Dfd
-    Unify_Sound
-    Unify_Ghost
-    Unify_Smash_Sound
-    Unify_Search_Inv
-    Unify_Acyc_Simpl
+    Unify_Shape
+    Unify_Search_Sound
+    Unify_Flexflex_Inv
+    Unify_Flexflex_Simpl
     Unify_Match_Inv
-    Unify_Acyc
+    Unify_Search_Inv
+    Unify_Occurs_Sound
+    Unify_Occurs_Termination
+    Unify_Simpl_Termination
+    Unify_Flexflex_Termination
+    Unify_Seq_Termination
+    Unify_Match_Termination
+    Unify_Search_Termination
+    Unify_Termination
+    Unify_Sound
+    Unify_Typed_Pattern
+    Unify_Smash_Sound
+    Unify_Typed_Inv
+    Unify_Acyclic_Simpl
+    Unify_Typed_Match
+    Unify_Acyclic
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete
     Unify_Complete
-    Unify_Complete_Loose
+    Unify_Complete_Two_Types
     Unify_Results
-    Unify_Results2
+    Unify_Results_Complete
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
@@ -210,11 +207,12 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     theorems (bicompose_aux) rests on the results on higher-order unification of session
     Unify_Correctness. The proofs of theorems are data in this session: no theory imports a
     theory on the correctness of classic or tight proofs; theory Proof_Sig has the
-    definitions on proofs that the statements of the rules mention. The theories Norm_Clash
+    definitions on proofs that the statements of the rules mention. The theories Clash_Norm
     and Clash_Exception describe what normalization by an environment does with a variable
     whose name is bound at another type (the case that the rules that unify exclude by a
     premise): its result does not depend on such a variable, and if one is kept, it is the
-    exception TYPE.
+    exception TYPE. Thm_Example gives a signature that satisfies all assumptions, with
+    derivations in it; Thm_Certify shows that certification yields well-formed types and terms.
   \<close>
   sessions
     Pure_Lambda
@@ -227,58 +225,62 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Thm_Syntax
     Thm_Model
     Thm_Semantics
-    Bicompose_Seq
+    Bicompose_Call
     Bicompose_Norm
-    Bicompose_Sound
+    Bicompose_Compose
     Bicompose_Typing
-    Bicompose_Correct
-    Bicompose_Fin
+    Bicompose_Sound
+    Bicompose_Termination
     Bicompose_Complete
-    Bicompose_Thm
-    Bicompose_Results
+    Bicompose_Theorems
+    Bicompose_Shape
     Lift_Rule
-    Biresolution_Correct
+    Biresolution_Sound
     Free_Subst
     Proof_Sig
-    Rules_Correct
-    Generalize_Correct
-    Instantiate_Correct
-    Equality_Correct
-    Generalize_Rule_Correct
-    Assumption_Correct
-    Eta_Long_Correct
-    Freeze_Correct
-    Varify_Correct
-    Rule_Lemmas
+    Rules_Sound
+    Forall_Intr_Sound
+    Instantiate_Sound
+    Equality_Sound
+    Generalize_Sound
+    Assumption_Sound
+    Eta_Long_Sound
+    Freeze_Sound
+    Varify_Sound
+    Rules_Base
     Thm_Type
     Thm_Rules
-    Thm_Rules2
-    Thm_Rules3
-    Thm_Rules4
+    Thm_Subst_Rules
+    Thm_Assumption
+    Thm_Lift
     Thm_Axiom
-    Strip_Shyps_Correct
+    Strip_Shyps_Sound
     Thm_Cterm
     Thm_Bicompose
     Thm_Strip_Shyps
     Thm_Unconstrain
     Thm_Consistency
     Thm_Transfer
-    Thm_Extra
+    Thm_Hyps
     Thm_Derivable
     Thm_Classes
-    Match_Range
+    Thm_Match_Range
     Thm_Match
-    Norm_Clash
+    Clash_Norm
     Clash_Exception
+    Thm_Example
+    Thm_Clash_Example
+    Thm_Certify
 
-session Thm_Correctness in Thm_Correctness = Thm_Soundness +
+session Thm_Proofs in Thm_Proofs = Thm_Soundness +
   description \<open>
     The classic and tight proofs that the inference rules attach to their results are valid
     proofs of them, on top of session Thm_Soundness: the proof judgments and their properties,
     and for each theory X on rules of Thm_Soundness a theory X_Proofs on the proofs of its
     results. Thm_Derivable_Proofs has derivable_proofs (the proofs of derivable theorems are
-    valid) and derivable_sound (both parts of the invariant of theorems). Thm_Example gives a
-    signature that satisfies all assumptions, with derivations in it.
+    valid) and derivable_sound (both parts of the invariant of theorems). Thm_Example_Proofs
+    shows that the proofs of the example derivations of Thm_Soundness are valid. Every theory of
+    this session is about classic or tight proof terms.
   \<close>
   sessions
     Pure_Lambda
@@ -312,18 +314,16 @@ session Thm_Correctness in Thm_Correctness = Thm_Soundness +
     Proof_Closed
     Thm_Type_Proofs
     Thm_Rules_Proofs
-    Thm_Rules2_Proofs
-    Thm_Rules3_Proofs
-    Thm_Rules4_Proofs
+    Thm_Subst_Rules_Proofs
+    Thm_Assumption_Proofs
+    Thm_Lift_Proofs
     Thm_Axiom_Proofs
     Thm_Bicompose_Proofs
     Thm_Strip_Shyps_Proofs
     Thm_Unconstrain_Proofs
     Thm_Transfer_Proofs
     Thm_Derivable_Proofs
-    Thm_Example
-    Thm_Clash_Example
-    Certify_Correct
+    Thm_Example_Proofs
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
@@ -399,13 +399,13 @@ session Kernel_Digest in Kernel_Digest = HOL +
   theories
     Kernel_Digest
 
-session Thm_Model_ZFC in Thm_Model_ZFC = Thm_Correctness +
+session Thm_Model_ZFC in Thm_Model_ZFC = Thm_Soundness +
   description "
-    A witness for the axioms of the models of Thm_Correctness: the sets of ZFC_in_HOL (AFP) form a
+    A witness for the axioms of the models of Thm_Soundness: the sets of ZFC_in_HOL (AFP) form a
     universe, and every signature has a model in it. Needs the AFP (isabelle build -d AFP/thys).
   "
   sessions
     ZFC_in_HOL
-    Thm_Correctness
+    Thm_Soundness
   theories
     Thm_Model_ZFC

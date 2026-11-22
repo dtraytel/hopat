@@ -1,7 +1,7 @@
 section \<open>Substitution of free variables\<close>
 
 theory Free_Subst
-  imports Biresolution_Correct "Pure_Thm.Pure_Proofterm"
+  imports Biresolution_Sound "Pure_Thm.Pure_Proofterm"
 begin
 
 text \<open>

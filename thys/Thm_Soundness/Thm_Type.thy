@@ -1,7 +1,7 @@
 section \<open>The abstract type of theorems\<close>
 
 theory Thm_Type
-  imports Rule_Lemmas Proof_Sig Bicompose_Results
+  imports Rules_Base Proof_Sig Bicompose_Shape
 begin
 
 text \<open>
@@ -14,7 +14,7 @@ text \<open>
   \<open>Proofterm.thm_of_proof\<close>). Theorems are the records that satisfy the invariant
   \<open>thm_wf\<close> in their signature and are valid in every model of it over a universe
   \<open>'u\<close> that inhabits their sort hypotheses. The proofs are data here; that they are valid
-  proofs of the theorem is shown in session \<open>Thm_Correctness\<close>. Biresolution maps theorems to theorems;
+  proofs of the theorem is shown in session \<open>Thm_Proofs\<close>. Biresolution maps theorems to theorems;
   its results are those of the compositions of the rules with the proof state, and their
   enumeration terminates.
 \<close>

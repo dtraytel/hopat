@@ -1,7 +1,7 @@
 section \<open>Completeness of \<open>SIMPL\<close>\<close>
 
 theory Unify_Simpl_Complete
-  imports Unify_Simpl_Dfd "Pattern_Correctness.Pattern_Complete"
+  imports Unify_Simpl_Termination "Pattern_Correctness.Pattern_Complete"
 begin
 
 text \<open>
@@ -15,7 +15,7 @@ text \<open>
   \<open>?v :: ?'d \<Rightarrow> ?'d\<close> and \<open>c :: (\<alpha> \<Rightarrow> \<alpha>) \<Rightarrow> ?'e\<close> has the solution \<open>?'d, ?'e := \<alpha> \<Rightarrow> \<alpha>\<close>,
   \<open>?v := c\<close>, but \<open>SIMPL\<close> binds \<open>?'d := \<alpha> \<Rightarrow> \<alpha>\<close> when it strips the abstractions of the
   \<open>\<eta>\<close>-expanded pair, and then \<open>?'e := \<alpha>\<close>, the body type of \<open>?'d \<Rightarrow> ?'d\<close>. So we assume the
-  invariants of the termination proof (theory \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>), which
+  invariants of the termination proof (theory \<^theory>\<open>Unify_Correctness.Unify_Simpl_Inv\<close>), which
   require the pairs to be well-typed in every certified solution of the type environment.
 \<close>
 
@@ -453,7 +453,7 @@ text \<open>
   The rigid occurs check \<^const>\<open>rocc\<close> of \<open>unify.ML\<close> follows the bindings of variables and of
   the heads of applications. A rigid occurrence of \<open>v\<close> bounds the measure \<^const>\<open>ld\<close> of the
   normal forms of the instances of the term from below by that of the value of \<open>v\<close>, as for the
-  occurs check of pattern unification (theory \<^theory>\<open>Pattern_Correctness.Pattern_Occurs\<close>).
+  occurs check of pattern unification (theory \<^theory>\<open>Pattern_Correctness.Pattern_Complete_Occurs\<close>).
 \<close>
 
 lemma sc_occomb_rigid:
@@ -1118,7 +1118,7 @@ lemma hsat0_swap: "hsat0 env (rb, t, u) \<Longrightarrow> hsat0 env (rb, u, t)"
   unfolding hsat0_def by blast
 
 text \<open>The decomposition of a rigid-rigid pair, with the termination measure of
-  \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>:\<close>
+  \<^theory>\<open>Unify_Correctness.Unify_Simpl_Inv\<close>:\<close>
 
 context
   fixes A K X B

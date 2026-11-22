@@ -1,7 +1,7 @@
 section \<open>Completeness of the Treatment of Flex-Flex Pairs\<close>
 
 theory Unify_Flexflex_Complete
-  imports Unify_Flexflex_Dfd Unify_Simpl_Complete
+  imports Unify_Flexflex_Termination Unify_Simpl_Complete
 begin
 
 context pure_sig

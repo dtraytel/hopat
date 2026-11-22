@@ -1,7 +1,7 @@
 section \<open>Normalization and Instances\<close>
 
 theory Bicompose_Norm
-  imports Bicompose_Seq
+  imports Bicompose_Call
 begin
 
 text \<open>

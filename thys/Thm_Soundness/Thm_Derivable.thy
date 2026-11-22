@@ -1,7 +1,7 @@
 section \<open>The theorems that the rules derive\<close>
 
 theory Thm_Derivable
-  imports Thm_Consistency Thm_Transfer Thm_Extra Thm_Unconstrain Thm_Bicompose Thm_Cterm Thm_Rules4
+  imports Thm_Consistency Thm_Transfer Thm_Hyps Thm_Unconstrain Thm_Bicompose Thm_Cterm Thm_Lift
     Thm_Axiom Thm_Strip_Shyps
 begin
 
@@ -33,7 +33,7 @@ text \<open>
     (\<open>sign_le\<close>).
 
   The certified terms and types record finitely many sorts over the classes of their signature
-  (\<open>csorts_ok\<close>; theory \<open>Certify_Correct\<close> shows this of the results of certification). Theorem
+  (\<open>csorts_ok\<close>; theory \<open>Thm_Certify\<close> shows this of the results of certification). Theorem
   \<open>derivable_shyps\<close> states that the sort hypotheses of derivable data are of this kind again,
   which \<open>strip_shyps\<close> and \<open>unconstrainT\<close> need.
 \<close>

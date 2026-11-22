@@ -1,7 +1,7 @@
 section \<open>Lifting a rule over a subgoal\<close>
 
 theory Lift_Rule
-  imports Bicompose_Thm "Pure_Thm.Pure_Biresolution"
+  imports Bicompose_Theorems "Pure_Thm.Pure_Biresolution"
 begin
 
 text \<open>

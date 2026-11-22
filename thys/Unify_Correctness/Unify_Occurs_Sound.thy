@@ -1,7 +1,7 @@
 section \<open>Soundness of the Occurs Checks for Names with Several Types\<close>
 
 theory Unify_Occurs_Sound
-  imports Unify_Simpl_Term
+  imports Unify_Simpl_Inv
 begin
 
 text \<open>

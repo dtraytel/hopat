@@ -6,7 +6,7 @@ begin
 
 text \<open>
   The rules \<open>assumption\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> of \<open>derivable\<close> (session
-  \<open>Thm_Correctness\<close>) have a premise that the kernel does not check: the environment of the
+  \<open>Thm_Proofs\<close>) have a premise that the kernel does not check: the environment of the
   result binds no name of a schematic variable that occurs with two types; \<open>flexflex_rule\<close>
   asks for one type for each name. This theory runs the kernel on arguments for which a
   unifier has to bind such a name, and records what the kernel does. It is a list of

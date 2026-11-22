@@ -10,7 +10,7 @@ text \<open>
   variable of a flex-rigid pair before the simplification of the new pairs, as in Huet's
   procedure: each binding is a step (\<open>dstep_bind\<close>). The invariant \<open>seqinv\<close> of the sequences
   below covers those of \<open>MATCH\<close>; the search, whose elements are unifiers, is treated in theory
-  \<open>Unify_Pull_Sound\<close>, as are the copies of the arguments of an imitation.
+  \<open>Unify_Search_Sound\<close>, as are the copies of the arguments of an imitation.
 \<close>
 
 datatype goal =
@@ -168,7 +168,7 @@ text \<open>
   of the variable \<open>X\<close>. The copies of an argument \<open>uarg\<close> into its new variable \<open>G\<close>
   (\<^const>\<open>S_Maps\<close>) follow a step to the pair \<open>G targs =?= uarg\<close> and the pairs \<open>dps1\<close>, whose
   elements \<open>xq\<close> are the copies of the further arguments; the copies of \<open>uarg\<close> are treated by the
-  soundness of the search (theory \<open>Unify_Pull_Sound\<close>). The arguments are normalized in the
+  soundness of the search (theory \<open>Unify_Search_Sound\<close>). The arguments are normalized in the
   environment \<open>envM\<close> of \<open>MATCH\<close>.
 \<close>
 

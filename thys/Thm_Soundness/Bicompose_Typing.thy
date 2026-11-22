@@ -1,7 +1,7 @@
 section \<open>Well-Formed Problems of Unification\<close>
 
 theory Bicompose_Typing
-  imports Bicompose_Sound
+  imports Bicompose_Compose
 begin
 
 text \<open>

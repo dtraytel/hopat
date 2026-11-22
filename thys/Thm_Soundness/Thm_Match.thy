@@ -1,7 +1,7 @@
 section \<open>The Certified Results of Matching\<close>
 
 theory Thm_Match
-  imports Match_Range Thm_Rules2
+  imports Thm_Match_Range Thm_Subst_Rules
 begin
 
 text \<open>

@@ -1,5 +1,78 @@
 # Cleanup plan (proposal for approval)
 
+## Names used in this document
+
+This document is a log; it uses the names of the theories at the time of writing. The theories
+were renamed afterwards (2026-11-22). The session `Thm_Correctness` is now `Thm_Proofs` and
+contains only theories on proof terms: `Thm_Example` and `Thm_Clash_Example` (without the part on
+proofs) and `Certify_Correct` (now `Thm_Certify`) moved to `Thm_Soundness`; the parts of the
+examples on proofs are in `Thm_Example_Proofs`. `Thm_Model_ZFC` builds on `Thm_Soundness`.
+
+| Old theory | New theory |
+|---|---|
+| `Assumption_Correct` | `Assumption_Sound` |
+| `Bicompose_Correct` | `Bicompose_Sound` |
+| `Bicompose_Fin` | `Bicompose_Termination` |
+| `Bicompose_Results` | `Bicompose_Shape` |
+| `Bicompose_Seq` | `Bicompose_Call` |
+| `Bicompose_Sound` | `Bicompose_Compose` |
+| `Bicompose_Thm` | `Bicompose_Theorems` |
+| `Biresolution_Correct` | `Biresolution_Sound` |
+| `Certify_Correct` | `Thm_Certify` |
+| `Env_Apply` | `Pattern_Most_General` |
+| `Equality_Correct` | `Equality_Sound` |
+| `Eta_Long_Correct` | `Eta_Long_Sound` |
+| `Freeze_Correct` | `Freeze_Sound` |
+| `Generalize_Correct` | `Forall_Intr_Sound` |
+| `Generalize_Rule_Correct` | `Generalize_Sound` |
+| `Instantiate_Correct` | `Instantiate_Sound` |
+| `Match_Lemmas` | `Match_Base` |
+| `Match_Range` | `Thm_Match_Range` |
+| `Norm_Clash` | `Clash_Norm` |
+| `Pattern_Flex` | `Pattern_Sound_Flex` |
+| `Pattern_Ghost` | `Pattern_Typed_Unifier` |
+| `Pattern_Occurs` | `Pattern_Complete_Occurs` |
+| `Pattern_Proj` | `Pattern_Sound_Proj` |
+| `Pattern_Term_Dfd` | `Pattern_Termination` |
+| `Pattern_Term_Flex` + `Pattern_Term_Proj` + `Pattern_Term_Unif` | `Pattern_Termination_Inv` |
+| `Pattern_Termination` | `Pattern_Termination_Base` |
+| `Pattern_Terms` | `Pattern_Bound_Vars` |
+| `Pattern_Types` | `Pattern_Types_Sound` |
+| `Pattern_Unfc` | `Pattern_Unfold_Checked` |
+| `Pattern_Unify_Patterns` | `Pattern_Patterns_Success` |
+| `Rule_Lemmas` | `Rules_Base` |
+| `Rules_Correct` | `Rules_Sound` |
+| `Strip_Shyps_Correct` | `Strip_Shyps_Sound` |
+| `Thm_Extra` | `Thm_Hyps` |
+| `Thm_Rules2_Proofs` | `Thm_Subst_Rules_Proofs` |
+| `Thm_Rules2` | `Thm_Subst_Rules` |
+| `Thm_Rules3_Proofs` | `Thm_Assumption_Proofs` |
+| `Thm_Rules3` | `Thm_Assumption` |
+| `Thm_Rules4_Proofs` | `Thm_Lift_Proofs` |
+| `Thm_Rules4` | `Thm_Lift` |
+| `Unify_Acyc_Simpl` | `Unify_Acyclic_Simpl` |
+| `Unify_Acyc` | `Unify_Acyclic` |
+| `Unify_Complete_Loose` | `Unify_Complete_Two_Types` |
+| `Unify_Ffeta` | `Unify_Flexflex_Simpl` |
+| `Unify_Flexflex_Dfd` | `Unify_Flexflex_Termination` |
+| `Unify_Flexflex_Term` | `Unify_Flexflex_Inv` |
+| `Unify_Ghost` | `Unify_Typed_Pattern` |
+| `Unify_Match_Fin` | `Unify_Match_Inv` |
+| `Unify_Match_Inv` | `Unify_Typed_Match` |
+| `Unify_Mc_Dfd` | `Unify_Match_Termination` |
+| `Unify_Pattern_Dfd` | `Unify_Termination` |
+| `Unify_Pull_Dfd` | `Unify_Search_Termination` |
+| `Unify_Pull_Fin` | `Unify_Search_Inv` |
+| `Unify_Pull_Sound` | `Unify_Search_Sound` |
+| `Unify_Results2` | `Unify_Results_Complete` |
+| `Unify_Search_Inv` | `Unify_Typed_Inv` |
+| `Unify_Seq_Dfd` + `Unify_Seq_Loose` | `Unify_Seq_Termination` |
+| `Unify_Shape_Sound` | `Unify_Shape` |
+| `Unify_Simpl_Dfd` | `Unify_Simpl_Termination` |
+| `Unify_Simpl_Term` | `Unify_Simpl_Inv` |
+| `Unify_Unfc` | `Unify_Occurs_Termination` |
+| `Varify_Correct` | `Varify_Sound` |
+
 Guiding principle (Hoare): prefer the design that is so simple that there are
 *obviously* no deficiencies, even if getting there is a large refactoring.
 Size of the change is not a criterion; simplicity of the result is.

@@ -1,7 +1,7 @@
 section \<open>Soundness of Matching\<close>
 
 theory Match_Sound
-  imports Match_Lemmas
+  imports Match_Base
 begin
 
 context pure_sig

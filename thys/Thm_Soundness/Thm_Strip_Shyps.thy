@@ -11,7 +11,7 @@ text \<open>
   (\<open>strip_shyps_sinh\<close>). In the proofs, the type variables that do not occur in the theorem are
   replaced by types of their sorts; such a replacement is a generalization of the free type
   variables among them, followed by an instantiation of type variables (theory
-  \<open>Thm_Strip_Shyps_Proofs\<close> of session \<open>Thm_Correctness\<close> shows that the proofs stay valid).
+  \<open>Thm_Strip_Shyps_Proofs\<close> of session \<open>Thm_Proofs\<close> shows that the proofs stay valid).
 \<close>
 
 subsection \<open>Replacing the hidden atomic types of classic proofs\<close>

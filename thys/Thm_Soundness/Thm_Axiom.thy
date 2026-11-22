@@ -1,7 +1,7 @@
 section \<open>The axiom rule on the abstract type of theorems\<close>
 
 theory Thm_Axiom
-  imports Thm_Rules4 "Pure_Thm.Pure_Axiom"
+  imports Thm_Lift "Pure_Thm.Pure_Axiom"
 begin
 
 text \<open>

@@ -107,7 +107,7 @@ problems, the outcomes do not change.
 
 ## The rules of `thm.ML`: what is proved, what is tested, what is read
 
-The sessions `Pure_Thm`, `Thm_Soundness`, `Thm_Correctness` and `Pure_Thm_Test`
+The sessions `Pure_Thm`, `Thm_Soundness`, `Thm_Proofs` and `Pure_Thm_Test`
 are about the inference rules of the kernel (`thm.ML`, with `proofterm.ML` and `zterm.ML`).
 `AUDIT.md` is a critical review of them; this section states the claim as the
 audit left it.
@@ -115,7 +115,7 @@ audit left it.
 **Proved** (Isabelle/HOL), in two layers. Session `Thm_Soundness` is about
 validity: its theories, up to `Thm_Derivable` with the soundness theorem, do
 not import any theory on the correctness of proof terms, so it can be read
-and checked on its own. Session `Thm_Correctness` adds, on top of it, that
+and checked on its own. Session `Thm_Proofs` adds, on top of it, that
 the classic and the tight proof of a theorem are valid proofs of it (one
 theory `X_Proofs` for each theory `X` on rules, and `Thm_Derivable_Proofs`).
 The predicate `derivable` on the data of theorems (`thm_data`: proposition,
@@ -147,7 +147,7 @@ signature in the universe `'u` (`derivable_valid`); and the sort constraints
 hold in the algebra. Hence no derivable theorem without hypotheses and
 flex-flex pairs is `⋀P. P` if the signature has a model in which the sort
 hypotheses are inhabited (`derivable_consistent`, also in `Thm_Soundness`).
-The second is in `Thm_Correctness`: if the signature has closed proof
+The second is in `Thm_Proofs`: if the signature has closed proof
 constants (`is_prf_sig`), the classic proof and the tight proof, when their
 computation returns one, are proofs of the proposition from the hypotheses in
 the proof judgments `prf_valid` and `zvalid` (`proofs_ok`).
@@ -218,7 +218,7 @@ does not check:
   `flexflex_rule`, has no result, or returns an instance of its arguments.
   That is an argument from the code and experiments, not a theorem
   (`AUDIT.md`, "What the kernel does when the premise fails").
-  One part of it is a theorem about the models (`Norm_Clash.thy` in
+  One part of it is a theorem about the models (`Clash_Norm.thy` in
   `Thm_Soundness`): what the normalization of the new theorem does with a
   variable whose name the environment binds at a type that does not agree
   with its own (a clashing variable, `clash`). Its lookup raises the
@@ -274,9 +274,9 @@ does not check:
   hypothesis on the names (see below); the statements in the old form are
   derived from that proof: in `pure_sig` they are termination with the old
   exceptions, and with loose names they speak about the results that bind
-  none of them: `cut f m` for pattern unification (`Pattern_Termination.thy`;
-  `unify_terminates`, `unify_inv` in `Pattern_Term_Dfd.thy`), `lfin` for the
-  result sequences of the higher-order unifier (`Unify_Seq_Loose.thy`,
+  none of them: `cut f m` for pattern unification (`Pattern_Termination_Base.thy`;
+  `unify_terminates`, `unify_inv` in `Pattern_Termination.thy`), `lfin` for the
+  result sequences of the higher-order unifier (`Unify_Seq_Termination.thy`,
   `unifiers_lfin` in `Unify_Results.thy`). The theories on the rules have general locales next to the
   old ones (`pure_model_gen`, `prf_sig_gen`, `bicompose_call_gen`, …), of
   which the old ones are instances; the theorems on a result of
@@ -296,7 +296,7 @@ does not check:
   step that uses the hypothesis is the flex-flex case with the same head,
   where `pattern.ML` compares names only.
   Without that hypothesis, pattern unification is sound for the typed reading
-  (`Pattern_Ghost.thy`, `unify_typed_unifier`): if `unify` returns `env'` on
+  (`Pattern_Typed_Unifier.thy`, `unify_typed_unifier`): if `unify` returns `env'` on
   closed terms that are well-typed at one type under a solution `ρ` of its
   type environment, in a well-typed acyclic environment, then some `σ` is a
   solution of `env'` that unifies the terms. The proof generalizes the steps
@@ -304,38 +304,38 @@ does not check:
   from the bindings of loose names read at other types (`ghosts`); `gsol`
   solves both, and unification keeps the environment acyclic without types
   (`unify_acyc`); the same holds for the lists of pattern problems that
-  `Unify.unifiers` solves this way (`Unify_Ghost.thy`,
+  `Unify.unifiers` solves this way (`Unify_Typed_Pattern.thy`,
   `unifiers_pattern_typed`). For the higher-order unifier the step predicate
   `dstep` makes no hypothesis on the names either, and every step (`SIMPL`,
   `MATCH` under its hypothesis `MATCH_ok`, the flex-flex treatment, smashing)
   is sound in that reading; the search is sound for every element of its
   enumeration, without termination, given an invariant of its nodes that
-  yields `MATCH_ok` (`hounifiers_ev_sound` in `Unify_Ghost.thy`). Such an
+  yields `MATCH_ok` (`hounifiers_ev_sound` in `Unify_Typed_Pattern.thy`). Such an
   invariant is proved without loose names by the termination invariant
   (`hounifiers_ev_sound_sinv`), and with names at two types by the invariant
-  `ninv` (`Unify_Search_Inv.thy`: kept by `SIMPL`, gives `MATCH_ok`;
-  `Unify_Match_Inv.thy`: kept by the elements of `MATCH`), so the search is
+  `ninv` (`Unify_Typed_Inv.thy`: kept by `SIMPL`, gives `MATCH_ok`;
+  `Unify_Typed_Match.thy`: kept by the elements of `MATCH`), so the search is
   sound without hypothesis on the names (`hounifiers_ev_sound_loose`). The
   environments of its results are acyclic if the input environment is
-  (`hounifiers_acyc` in `Unify_Acyc.thy`; the occurs checks, `SIMPL`, `MATCH`
-  and the flex-flex treatment keep acyclicity, `Unify_Acyc_Simpl.thy`), and
+  (`hounifiers_acyc` in `Unify_Acyclic.thy`; the occurs checks, `SIMPL`, `MATCH`
+  and the flex-flex treatment keep acyclicity, `Unify_Acyclic_Simpl.thy`), and
   the ghost solution of a result solves its bindings and, if it solves the
   remaining flex-flex pairs, the input (`hounifiers_typed_solution`). The
   search also terminates without hypothesis on the names (`hounifiers_cfin` in
-  `Unify_Pull_Dfd.thy`): pulling its sequence ends after finitely many
+  `Unify_Search_Termination.thy`): pulling its sequence ends after finitely many
   unifiers, at the end or with `TYPE` from a lookup at a clashing type or
-  `TERM` from `add_ffpair`. The measures use `unfc` (`Pattern_Unfc.thy`), the
+  `TERM` from `add_ffpair`. The measures use `unfc` (`Pattern_Unfold_Checked.thy`), the
   unfolding that follows a binding only at an agreeing type, as `lookup` does;
   `SIMPL`, the flex-flex treatment and `MATCH` are covered by
-  `Unify_Simpl_Dfd.thy`, `Unify_Flexflex_Dfd.thy` and `Unify_Mc_Dfd.thy`. The
+  `Unify_Simpl_Termination.thy`, `Unify_Flexflex_Termination.thy` and `Unify_Match_Termination.thy`. The
   `TERM` exception `add_ffpair: Vars expected` does occur in Isabelle2026's
   `unify.ML` with a name at two types (`AUDIT.md`, "Additions after the
   eighteenth execution"). Pattern unification terminates as well
-  (`unify_terminates_c` in `Pattern_Term_Dfd.thy`), with `Unif`, `Pattern`,
+  (`unify_terminates_c` in `Pattern_Termination.thy`), with `Unif`, `Pattern`,
   `TYPE` from a clashing lookup, or `Fail "mk_ff_list"` when the heads of a
   flex-flex pair are one loose name with different numbers of arguments (this
   occurs in Isabelle2026's `Pattern.unify` and `Unify.unifiers`), so
-  `unifiers` terminates (`unifiers_cfin` in `Unify_Pattern_Dfd.thy`): it returns a finite sequence or
+  `unifiers` terminates (`unifiers_cfin` in `Unify_Termination.thy`): it returns a finite sequence or
   raises `TYPE` or `Fail "mk_ff_list"`. Open are the rules (`AUDIT.md`,
   "Additions after the fourteenth execution" to "... eighteenth execution").
   Completeness does not hold for solutions that keep a name at two types:
@@ -343,7 +343,7 @@ does not check:
   so `Unify.unifiers` returns no unifier for the solvable
   `?x::prop =?= Pure.all (?x::prop ⇒ prop)` (Isabelle2026 and the model,
   `unify_incomplete_L`, `unifiers_incomplete_L` in
-  `Unify_Complete_Loose.thy`). Pattern completeness holds for the solutions
+  `Unify_Complete_Two_Types.thy`). Pattern completeness holds for the solutions
   that give every name one type, also if the problem has a name at two types
   (`unify_complete_one_type`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
@@ -382,8 +382,8 @@ defines a fragment `pure0` of the signature of `Pure` (no classes, the types
 `prop` and `fun`, equality, the equality axioms as proof constants) and proves
 `pure_sig`, `is_prf_sig`, `sign_eq` and `sign_closed` for it; it derives
 `A ⟹ A` (`assume`, `implies_intr`) and `f A ≡ f A` (`reflexive`,
-`combination`) with `derivable`, computes their proofs, and concludes that the
-proof judgments hold of them. `Thm_Model_ZFC` shows that the sets of
+`combination`) with `derivable`; `Thm_Example_Proofs` computes their proofs
+and concludes that the proof judgments hold of them. `Thm_Model_ZFC` shows that the sets of
 `ZFC_in_HOL` are a model of `pure0` (`zfc_model_pure0`), so that
 `derivable_consistent` applies (`pure0_consistent`). There is no example with
 a resolution step and none with `sign_axioms`.
@@ -402,7 +402,7 @@ has a proper index. These are the premises of the rule `instantiate` of
 `derivable` on its instantiations (the recorded sorts are finite if those of
 the two terms are). It rests on `match_sound` of
 `Pattern_Correctness` and on a new invariant of the bindings
-(`Match_Range.thy`, `match_range`: their variables and type variables are
+(`Thm_Match_Range.thy`, `match_range`: their variables and type variables are
 those of the object, their free type variables those of the object or the
 pattern). The theorem is about the model of `Pattern.match` and a description
 of the records of `gen_match` in its statement, not about generated code;
@@ -418,7 +418,7 @@ abbreviations, the checks of variables and the type checking of
 filter `could_match`) for the types of constants, the second certification
 of the types, and the expansion of constants that are abbreviations
 (`expand_term` with `Envir.expand_atom` and `Term.betapplys`); then the
-maximal index and the sorts that `thm.ML` records. `Certify_Correct.thy`
+maximal index and the sorts that `thm.ML` records. `Thm_Certify.thy`
 proves that a result of these models satisfies the premises of the rules of
 `derivable` (`global_cterm_of_ok`, `global_ctyp_of_ok`: `cterm_ok` or
 `ctyp_ok`, finitely many sorts over the classes of the signature, and the
@@ -535,7 +535,7 @@ patches every tight proof proves its theorem; on the release, 1,328 do not
 of `lift_rule`, resolution and elim-resolution), which is what patches 15–18,
 21, 23 and 25 repair. This checker looks at the type instances of the
 equality axioms; it reports the defect of patch 25 as an instance of the
-wrong type. The proof judgment of `Thm_Correctness` did not look at them when
+wrong type. The proof judgment of `Thm_Proofs` did not look at them when
 that defect was found; it does now (see `zvalid` below). The last
 tests of the session apply resolution and `assumption` to theorems with a
 schematic variable at two types: with the patches, the 225 results have tight
@@ -620,11 +620,11 @@ a patch fails there.
 - `patches/07-thm-rename-flexflex.patch`, `patches/08-thm-rename-lifting.patch`:
   the renaming of variables in the new premises
   of `bicompose_aux` of `thm.ML`. The model of session `Pure_Thm` and its
-  soundness proof (`Bicompose_Correct.thy`, `bicompose_aux_valid`) are for the
+  soundness proof (`Bicompose_Sound.thy`, `bicompose_aux_valid`) are for the
   patched function. For a lifted rule, `rename_bvars` renames variables of the
   new premises after bound variables of the subgoal, but it must keep every
   variable that occurs elsewhere in the result (`newAs_ren` in
-  `Bicompose_Sound.thy`). Isabelle2026 does not keep them all, for two reasons:
+  `Bicompose_Compose.thy`). Isabelle2026 does not keep them all, for two reasons:
   - (07) It passes only the flex-flex pairs that the unifier returns. A variable
     from the flex-flex pairs of the rule that the unifier assigned is no longer
     in them, so it can be renamed in the new premises and escape its
@@ -648,7 +648,7 @@ a patch fails there.
   without premises are still skipped. The model (`test_hyps` and
   `could_bires` in `Pure_Biresolution.thy`) is for the patched function, and
   with it, the quick test skips only rules without results
-  (`compose_result_could_bires` in `Biresolution_Correct.thy`). The fix
+  (`compose_result_could_bires` in `Biresolution_Sound.thy`). The fix
   affects completeness only.
 - `patches/10-thm-assumption.patch`: the classic proof of `Thm.assumption`.
   The unifier considers the assumptions of the subgoal before normalisation
@@ -1107,7 +1107,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `union_constraints`, `insert_constraints`, `insert_constraints_env` of
     `thm.ML`, with the order of theories as a parameter); the wrapper applies
     them to the data of the premises as the rules on theorems of
-    `Thm_Correctness` apply the set operations, and `Thm_Extra.thy` shows that
+    `Thm_Proofs` apply the set operations, and `Thm_Hyps.thy` shows that
     they compute these sets: sort hypotheses and constraints (without their
     theories) exactly, hypotheses up to `α`-equivalence (`hyps_cover`;
     `remove_hyps` removes the first equivalent hypothesis, which is the only
@@ -1173,22 +1173,22 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Sign.certify_term`, `Thm.global_cterm_of` and `Thm.global_ctyp_of` that
     is not part of the generated `thm.ML`) against these functions
     (`Pure_Certify_Test`).
-  - `Thm_Soundness/` and `Thm_Correctness/`: soundness, termination and
+  - `Thm_Soundness/` and `Thm_Proofs/`: soundness, termination and
     completeness of `bicompose_aux` and `biresolution`, the abstract type of
     theorems and the soundness of the rules (session `Thm_Soundness`, theories
     `Thm_Type` to `Thm_Derivable`), and the validity of the classic and tight
-    proofs of the results (session `Thm_Correctness`). Of the theories named
+    proofs of the results (session `Thm_Proofs`). Of the theories named
     below, those on proof terms (`Proof_…`, `ZProof_…`, `Biresolution_Proofs`,
     `Rule_Proofs`, `ZRule_Proofs`, `ZSubst_Proofs`, `ZEq_Proofs`, and a theory
-    `X_Proofs` for each theory `X` on rules) are in `Thm_Correctness/`, with
-    `Thm_Example`, `Thm_Clash_Example` and `Certify_Correct`; all others are in
-    `Thm_Soundness/`, and none of those imports a theory of
-    `Thm_Correctness/`. A theorem of the abstract type is well formed and
+    `X_Proofs` for each theory `X` on rules, and `Thm_Example_Proofs`) are in
+    `Thm_Proofs/`, and every theory there is about proof terms; all others
+    are in `Thm_Soundness/`, and none of those imports a theory of
+    `Thm_Proofs/`. A theorem of the abstract type is well formed and
     valid in every model (`thm_sem`); that its proofs are valid (`proofs_ok`)
     is a separate statement, proved rule by rule in the theories `X_Proofs`
     (`thm_sem_X` in `X`, `proofs_ok_X` in `X_Proofs`). The results are also
     described without the internals of `bicompose_aux`, as those of
-    `Unify.unifiers` are (`bicompose_aux_results` in `Bicompose_Results.thy`,
+    `Unify.unifiers` are (`bicompose_aux_results` in `Bicompose_Shape.thy`,
     `biresolution_thms_shape` in `Thm_Type.thy`): the new theorem is
     `⟦Bs; As'⟧ ⟹ C` with a unifier of the problem of the composition and the
     flex-flex pairs of both theorems applied, up to β-reduction, modulo its own
@@ -1199,10 +1199,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     since the rules that combine two theorems do not keep this; biresolution
     assumes it of its arguments (`thm_cons`).
     The other inference rules of `thm.ML` map valid theorems to valid
-    theorems (`Rules_Correct.thy`, `Generalize_Correct.thy`,
-    `Instantiate_Correct.thy`, `Equality_Correct.thy`,
-    `Generalize_Rule_Correct.thy`, `Assumption_Correct.thy`,
-    `Eta_Long_Correct.thy`, `Freeze_Correct.thy`, `Varify_Correct.thy`):
+    theorems (`Rules_Sound.thy`, `Forall_Intr_Sound.thy`,
+    `Instantiate_Sound.thy`, `Equality_Sound.thy`,
+    `Generalize_Sound.thy`, `Assumption_Sound.thy`,
+    `Eta_Long_Sound.thy`, `Freeze_Sound.thy`, `Varify_Sound.thy`):
     `assume`, `implies_intr`, `implies_elim`, `forall_intr`, `forall_elim`,
     `trivial`, `weaken`, `adjust_maxidx_thm`, `renamed_prop`,
     `incr_indexes`, `rotate_rule`, `permute_prems`, `instantiate`,
@@ -1316,7 +1316,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Sign.certify_term` ensures). So far: `implies_elim`, `symmetric`,
     `transitive`, `equal_intr`, `equal_elim`, `combination`, `assume`,
     `trivial`, `weaken`, `forall_elim`, `reflexive`, `beta_conversion` and
-    `eta_conversion`. `Thm_Rules2.thy` continues with `adjust_maxidx_thm`,
+    `eta_conversion`. `Thm_Subst_Rules.thy` continues with `adjust_maxidx_thm`,
     `renamed_prop`, `incr_indexes`, `implies_intr`, `eta_long_conversion`,
     `permute_prems`, `rotate_rule`, `forall_intr`, `abstract_rule`,
     `generalize`, `varifyT_global`, `legacy_freezeT`, `of_class`, and
@@ -1326,7 +1326,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     that abstract over or generalize free variables require the closures of
     the axioms to have no free (type) variables (`sign_closed`, as
     `Logic.varify_global` and `Logic.unconstrainT` ensure).
-    `Thm_Rules3.thy` completes the rules with `eq_assumption`, `assumption`
+    `Thm_Assumption.thy` completes the rules with `eq_assumption`, `assumption`
     and `flexflex_rule`. The lazy result sequences of the latter two are
     evaluated to the lists of their results (`aevals`, `fevals`), which
     exist for every theorem (`assumption_thms_terminates`,
@@ -1335,7 +1335,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     of the proof state, or of the theorem, by a unifier of the model of
     `Unify` (`assumption_thms_shape`, `flexflex_rule_thms_shape`). As in
     `Thm.flexflex_rule`, the flex-flex pairs of the unifiers are smashed
-    (`Unify.smash_unifiers`). `Thm_Rules4.thy` adds `weaken_sorts` on
+    (`Unify.smash_unifiers`). `Thm_Lift.thy` adds `weaken_sorts` on
     certified terms, `lift_rule` (the rule lifted over a certified
     proposition, with its classic and tight proofs; the sort hypotheses
     include the sorts of the goal) and `varifyT_global'` (with the renaming
@@ -1349,7 +1349,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     valid if the axioms are, as `Theory.add_axiom` makes them, certified
     propositions without free (type) variables and sort constraints whose
     unconstrained versions may be used in proofs under their names with the
-    closures of `Proofterm` (`sign_axioms`). `Strip_Shyps_Correct.thy`
+    closures of `Proofterm` (`sign_axioms`). `Strip_Shyps_Sound.thy`
     shows that `strip_shyps` keeps the theorems valid: in every model, the
     sorts witnessed by `Sorts.witness_sorts` are inhabited if the sorts of
     the present type variables are (`witness_sorts_sound`), the remaining
@@ -1446,10 +1446,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     that `assumption`, `bicompose` and `biresolution` keep the invariant for
     results that bind no name with two types (`sound_…_gen`). `Thm_Example.thy` gives a
     signature that satisfies all assumptions (`pure0`) and derivations in it.
-    `Certify_Correct.thy` shows that the results of the models of
+    `Thm_Certify.thy` shows that the results of the models of
     certification are the certified terms and types that the rules take.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
-    `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
+    `Thm_Soundness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`). It is a model of every signature whose
     axioms are equality axioms (`zfc_is_model`), so no theorem in the
     universe of sets without hypotheses and flex-flex pairs proves `⋀P. P`
@@ -1478,12 +1478,12 @@ The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
       Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
-      Thm_Soundness Thm_Correctness Unpatched_Examples Pure_Kernel_Check Kernel_Digest
+      Thm_Soundness Thm_Proofs Unpatched_Examples Pure_Kernel_Check Kernel_Digest
 
 `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`, `Pure_Thm_Test` on
 `Pure_Thm`; `Unify_Correctness` builds on `Pattern_Correctness`,
-`Thm_Soundness` on `Unify_Correctness`, `Thm_Correctness` on `Thm_Soundness`
-and `Thm_Model_ZFC` on `Thm_Correctness` (so that an interactive session on one of them loads the
+`Thm_Soundness` on `Unify_Correctness`, `Thm_Proofs` and `Thm_Model_ZFC` on
+`Thm_Soundness` (so that an interactive session on one of them loads the
 heap of its parent); the remaining sessions have `HOL` as their parent.
 `Nipkow_Grobauer_Pattern` is independent of the
 others; it loads `HOL-Library` and `HOL-Proofs-Lambda` (for `Commutation` and

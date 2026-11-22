@@ -1,7 +1,7 @@
 section \<open>Variables of Problems\<close>
 
 theory Pattern_Vars
-  imports Pattern_Terms
+  imports Pattern_Bound_Vars
 begin
 
 text \<open>

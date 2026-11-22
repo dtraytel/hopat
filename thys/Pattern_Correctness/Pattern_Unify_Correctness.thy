@@ -1,7 +1,7 @@
 section \<open>Correctness of Pattern Unification\<close>
 
 theory Pattern_Unify_Correctness
-  imports Pattern_Term_Dfd Pattern_Unify_Patterns
+  imports Pattern_Termination Pattern_Patterns_Success
 begin
 
 context pure_sig_gen

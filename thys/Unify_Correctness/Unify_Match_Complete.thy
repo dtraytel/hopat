@@ -1,13 +1,13 @@
 section \<open>Completeness of \<open>MATCH\<close>\<close>
 
 theory Unify_Match_Complete
-  imports Unify_Simpl_Complete Unify_Mc_Dfd Unify_Shape_Sound
+  imports Unify_Simpl_Complete Unify_Match_Termination Unify_Shape
 begin
 
 text \<open>
   The measure of the completeness proof of the search: the size of the \<open>\<eta>\<close>-long \<open>\<beta>\<close>-normal
   forms of the values of the solution. We measure the size with \<open>lsz\<close> of
-  \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>, without the outer abstractions of a value: a value
+  \<^theory>\<open>Unify_Correctness.Unify_Simpl_Inv\<close>, without the outer abstractions of a value: a value
   \<open>\<lambda>x\<^sub>1 \<dots> x\<^sub>n. b\<close> of type \<open>T\<^sub>1 \<Rightarrow> \<dots> \<Rightarrow> T\<^sub>n \<Rightarrow> B\<close> counts as \<open>b\<close>. Then the values \<open>\<lambda>x\<^sub>1 \<dots> x\<^sub>n. b\<^sub>i\<close> of
   the new variables of a projection or an imitation \<open>\<lambda>x\<^sub>1 \<dots> x\<^sub>n. h b\<^sub>1 \<dots> b\<^sub>m\<close> are smaller than
   the value.

@@ -1,7 +1,7 @@
 section \<open>Operations on certified terms\<close>
 
 theory Thm_Cterm
-  imports Strip_Shyps_Correct "Pure_Thm.Pure_Cterm"
+  imports Strip_Shyps_Sound "Pure_Thm.Pure_Cterm"
 begin
 
 text \<open>

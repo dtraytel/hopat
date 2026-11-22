@@ -1,7 +1,7 @@
 section \<open>Completeness of Pattern Unification\<close>
 
 theory Pattern_Complete
-  imports Pattern_Occurs
+  imports Pattern_Complete_Occurs
 begin
 
 context pure_sig_gen

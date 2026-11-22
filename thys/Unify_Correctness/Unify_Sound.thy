@@ -1,7 +1,7 @@
 section \<open>Soundness of Higher-Order Unification\<close>
 
 theory Unify_Sound
-  imports Unify_Pattern_Dfd
+  imports Unify_Termination
 begin
 
 context pure_sig_gen

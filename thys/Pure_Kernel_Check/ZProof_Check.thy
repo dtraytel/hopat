@@ -11,13 +11,13 @@ text \<open>
   another proposition, or of something that is no quantification or implication). An instance
   of a proof constant proves its proposition under the type instances and the instances of the
   variables that the constant records, so the type instances count (as in the proof judgment of
-  session \<open>Thm_Correctness\<close>, whose translation of a proof constant carries them), and the instance
+  session \<open>Thm_Proofs\<close>, whose translation of a proof constant carries them), and the instance
   of a variable must have the type of the variable under the type instances. Propositions are
   compared modulo \<open>\<alpha>\<beta>\<eta>\<close>, and the result must be a certified term.
 
   The theorems are derived by the rules from oracle copies of propositions of HOL, so that every
   proof is complete. The last tests apply the rules that unify to theorems with a schematic
-  variable at two types: the theorems of session \<open>Thm_Correctness\<close> do not cover them, and here
+  variable at two types: the theorems of session \<open>Thm_Proofs\<close> do not cover them, and here
   each result is checked by its proof. With all patches, every tight proof must prove the proposition of its
   theorem from its hypotheses. Without them, the test reports the failures and requires some
   (the release builds wrong tight proofs, see \<^verbatim>\<open>patches/\<close>).

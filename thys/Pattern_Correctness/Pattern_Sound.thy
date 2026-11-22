@@ -1,7 +1,7 @@
 section \<open>Soundness of Pattern Unification\<close>
 
 theory Pattern_Sound
-  imports Pattern_Proj
+  imports Pattern_Sound_Proj
 begin
 
 context pure_sig_gen
