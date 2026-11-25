@@ -21,20 +21,20 @@ subsection \<open>The setting of a result\<close>
 
 text \<open>
   The condition on the names of the variables \<open>X\<close> of the two theorems and a result \<open>x\<close>.
-  Without loose names: for an incremented rule, each name has one type. With loose names: the
-  environment of the result binds no loose name, every name with two types in the theorems or the
-  new premises is loose, and every loose name occurs there.
+  Without loose names: for an incremented rule, each name has one type. With loose names:
+  every name with two types in the theorems or the new premises is loose, and every loose name
+  occurs there. The environment of the result may bind loose names.
 \<close>
 
 definition bc_names :: "bool \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bres \<Rightarrow> bool" where
   "bc_names incremented X x \<longleftrightarrow>
-    (loose = {} \<longrightarrow> incremented \<longrightarrow> vtcons X) \<and> nfree (br_env x) \<and>
+    (loose = {} \<longrightarrow> incremented \<longrightarrow> vtcons X) \<and>
     (loose \<noteq> {} \<longrightarrow> lvtcons (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))) \<and>
     loose \<subseteq> fst ` (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
 
 lemma bc_namesD:
   assumes "bc_names incremented X x"
-  shows "loose = {} \<Longrightarrow> incremented \<Longrightarrow> vtcons X" and "nfree (br_env x)"
+  shows "loose = {} \<Longrightarrow> incremented \<Longrightarrow> vtcons X"
     and "loose \<noteq> {} \<Longrightarrow> lvtcons (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
     and "loose \<subseteq> fst ` (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
   using assms unfolding bc_names_def by blast+
@@ -47,7 +47,7 @@ proof (cases "loose = {}")
   from bc_namesD(1)[OF assms(1) True assms(2)] show ?thesis by (rule vtcons_lvtcons)
 next
   case False
-  show ?thesis by (rule lvtcons_mono[OF bc_namesD(3)[OF assms(1) False]]) blast
+  show ?thesis by (rule lvtcons_mono[OF bc_namesD(2)[OF assms(1) False]]) blast
 qed
 
 lemma bicompose_setup:
@@ -84,10 +84,10 @@ proof -
     using bc_names_inc[OF nm] tp SP by simp
   have lV': "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs rule) (th_prop rule) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
-    using nmD(3) tp SP by simp
+    using nmD(2) tp SP by simp
   have lL': "loose \<subseteq> fst ` (vars_thm stpairs ?S \<union> vars_thm (th_tpairs rule) (th_prop rule) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
-    using nmD(4) tp SP by simp
+    using nmD(3) tp SP by simp
   have ok1: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (?smax, stpairs, ?S)
       (stpairs, Bs, Bi, C) False eres_flg (th_maxidx rule, th_tpairs rule, th_prop rule) nsubgoal) xq"
     using ok tp SP by (simp add: pthm_of_def)
@@ -97,7 +97,7 @@ proof -
     and rc: "rchar (call_spec cfg vl env flatten match_flg ?smax stpairs Bs Bi C False eres_flg (th_tpairs rule) rAs B) x"
     by (rule bicompose_aux_rchar[OF ok1 rx cfg ws wr lo tv' vc']) blast
   have ti: "thm_inv (maxidx (br_env x)) (hs @ hr) (br_tpairs x) (br_prop x) \<and> bres_inv x"
-    by (rule bicompose_aux_thm_inv_gen[OF ok1 rx cfg sS ru lo tv' vc' vl nmD(2) lV' lL'])
+    by (rule bicompose_aux_thm_inv_gen[OF ok1 rx cfg sS ru lo tv' vc' vl lV' lL'])
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
   define BBi where "BBi = (B, Bi)"
   define ctx where "ctx = BCtx flatten match_flg False ?smax Bs Bi C (th_tpairs rule) nlift BBi
@@ -319,8 +319,8 @@ proof -
 qed
 
 text \<open>
-  The same without the condition on the names of the variables, for a result whose environment
-  binds no name that has two types:
+  The same without the condition on the names of the variables. The environment of the result
+  may bind names that have two types:
 \<close>
 
 text \<open>
@@ -341,7 +341,6 @@ lemma cons_ok_thm_of_bc_gen:
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nb: "binds_none (br_env x) (bc_clash state rule x)"
   shows "cons_ok (sign_of state) (cons_of rule \<union> cons_of (state :: 'u pure_thm) \<union> env_constraints (br_env x))"
 proof -
   let ?c = "sign_of state"
@@ -361,10 +360,9 @@ proof -
   have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
     using pure_thm_inv0[of rule] ps s2 sr by simp
   have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
-  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
   have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
   have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
-  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h3 h4 by blast
   have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
   have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
   then have "tsorted (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
@@ -379,7 +377,6 @@ lemma sorts_ok_thm_of_bc_gen:
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nb: "binds_none (br_env x) (bc_clash state rule x)"
   shows "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
 proof -
   let ?c = "sign_of state"
@@ -399,10 +396,9 @@ proof -
   have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
     using pure_thm_inv0[of rule] ps s2 sr by simp
   have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
-  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
   have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
   have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
-  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h3 h4 by blast
   have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
   have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
   then have "scert (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
@@ -417,7 +413,6 @@ lemma thm_sem_thm_of_bc_gen:
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nb: "binds_none (br_env x) (bc_clash state rule x)"
   shows "thm_sem TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
 proof -
   let ?c = "sign_of state"
@@ -437,10 +432,9 @@ proof -
   have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
     using pure_thm_inv0[of rule] ps s2 sr by simp
   have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
-  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
   have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
   have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
-  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h3 h4 by blast
   have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
   obtain rAs B env where tp: "stpairs = th_tpairs (rep_of state)"
     and SP: "th_prop (rep_of state) = list_implies (Bs @ [Bi]) C"
@@ -472,7 +466,7 @@ proof -
       by unfold_locales (use cfg ws wr tv vc' tp SP vl in simp_all)
     have "valid (shyps_of state \<union> shyps_of rule \<union> tyenv_sorts (tyenv (br_env x))) (hyps_of state @ hyps_of rule)
         (br_tpairs x) (br_prop x)"
-      by (rule bc.bicompose_aux_valid[OF ok1 rx vS vr h2])
+      by (rule bc.bicompose_aux_valid[OF ok1 rx vS vr])
     then show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
   qed
   then show ?thesis using ti by (simp add: thm_sem_def thm_of_bc_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)

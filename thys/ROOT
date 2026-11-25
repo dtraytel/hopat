@@ -134,6 +134,7 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Complete
     Unify_Complete_Two_Types
     Unify_Results
+    Unify_Typed_Results
     Unify_Results_Complete
 
 session Pure_Pattern in Pure_Pattern = HOL +

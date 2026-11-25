@@ -46,7 +46,7 @@ proof -
     using p by (simp add: bc_proof_def some bres_proof_sel bres_nlift_def)
   note bp = bres_inv_props[OF bi]
   have "prf_valid ax (set (hs @ hr)) (br_tpairs x) p (br_prop x)"
-  proof (rule bicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ vl p' bc_namesD(2)[OF nm]])
+  proof (rule bicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ vl p'])
     show "prf_valid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -132,8 +132,7 @@ proof -
   have pS: "pnn (list_implies (Bs @ [Bi]) C)" using thm_inv0_pnn(1)[OF st] SP by simp
   have pP: "pnn (th_prop rule)" by (rule thm_inv0_pnn(1)[OF ru])
   have "zvalid ax (set (hs @ hr)) (br_tpairs x) p (br_prop x)"
-  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb
-      bc_namesD(2)[OF nm]])
+  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb])
     show "zvalid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -297,7 +296,6 @@ lemma proofs_ok_thm_of_bc_gen:
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nb: "binds_none (br_env x) (bc_clash state rule x)"
     and psig: "is_prf_sig (sign_of state)"
     and po_state: "is_prf_sig (sign_of state) \<Longrightarrow> proofs_ok (rep_thm state)"
     and po_rule: "is_prf_sig (sign_of rule) \<Longrightarrow> proofs_ok (rep_thm rule)"
@@ -320,10 +318,9 @@ proof -
   have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
     using pure_thm_inv0[of rule] ps s2 sr by simp
   have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
-  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
   have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
   have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
-  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h3 h4 by blast
   have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
   obtain rAs B env where tp: "stpairs = th_tpairs (rep_of state)"
     and SP: "th_prop (rep_of state) = list_implies (Bs @ [Bi]) C"

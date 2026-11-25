@@ -190,12 +190,13 @@ text \<open>
 
 lemma ures_solves_eqv:
   assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus"
-    and sol: "solution \<rho> \<sigma> env'" and ci: "cert_inst \<rho>"
+    and gs: "gsolution \<rho> \<sigma> env'" and ci: "cert_inst \<rho>"
     and ts: "\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
-    and tu: "(t, u) \<in> set tus" and nf': "nfree env'"
+    and tu: "(t, u) \<in> set tus"
   shows "eqv F e (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
 proof -
-  from ures_pwf[OF ur pw nf'] obtain A where "uresult A env tus (El_R env' tps)" .
+  note sol = gsolutionD(1)[OF gs]
+  from ures_pwf[OF ur pw] obtain A where "uresult A env tus (El_R env' tps)" .
   then have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1))
   from pw obtain A0 K X where si: "sinv A0 K X env (tdps tus)" by (auto simp: pwf_def)
   have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
@@ -203,11 +204,11 @@ proof -
   from winvD[OF _ tt ci] si have w: "wt_env \<rho> env" "vinv \<rho> env X" by (auto simp: sinv_def)
   have v: "vinv \<rho> env ({} \<union> dvars (tdps tus))"
     using ur_vinv_sub[OF w(2)] sinv_dvars[OF si] by simp
-  from ures_inv[OF ur pw nf'] obtain A' K' X' where wi': "winv env' X'" by blast
+  from ures_inv[OF ur pw] obtain A' K' X' where wi': "winv env' X'" by blast
   have wte': "wt_env \<rho> env'" using winvD[OF wi' t' ci] by blast
-  let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> (tdps tps)"
+  let ?E = "ebinds \<rho> env' \<union> dp_eqs \<rho> (tdps tps)"
   have D: "deqv ?E \<rho> (tdps tus)"
-    by (rule dstepD(3)[OF ds t' extends_refl w(1) sinv_dtyped[OF si tt ci] v nf'])
+    by (rule dstepDg(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si tt ci] v])
   have ws: "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
   from si tu have ok: "upok A0 env [] X t u" by (auto simp: sinv_def)
   then have c: "closed (inst \<rho> t)" "closed (inst \<rho> u)" by (auto simp: upok_def closed_def)
@@ -219,13 +220,11 @@ proof -
   proof (rule eqv_vsubst_map[OF _ ws])
     fix l r e' V assume lr: "(l, r) \<in> ?E" and tl: "e' \<turnstile> l : V" "e' \<turnstile> r : V"
     show "eqv F e' (vsubst \<sigma> l) (vsubst \<sigma> r)"
-    proof (cases "(l, r) \<in> binds \<rho> env'")
+    proof (cases "(l, r) \<in> ebinds \<rho> env'")
       case True
-      then obtain x U s where l: "l = Var x (tsubst \<rho> U)" and r: "r = inst \<rho> s"
-        and lk: "vt_lookup (tenv env') x = Some (U, s)" unfolding binds_def by blast
       show ?thesis
-        by (rule eqv.eqv_conv[OF _ typing_vsubst[OF tl(1) ws] typing_vsubst[OF tl(2) ws]])
-          (use solutionD(4)[OF sol lk] in \<open>simp add: l r ap_def\<close>)
+        by (rule eqv.eqv_conv[OF gsolution_ebinds[OF gs True tl]
+              typing_vsubst[OF tl(1) ws] typing_vsubst[OF tl(2) ws]])
     next
       case False
       with lr obtain t0 u0 where "(t0, u0) \<in> set tps" "l = inst \<rho> t0" "r = inst \<rho> u0"
@@ -287,14 +286,14 @@ qed
 lemma bresult_inst_eqv:
   assumes its: "itsok sp A na tus" and pa: "pinv_all sp" and ur: "ures (sp_env sp) tus (El_R env' tps)"
     and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r"
-    and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and nf': "nfree env'"
+    and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
   obtains \<rho>' \<sigma>' where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
     "\<And>t u e. (t, u) \<in> set tus \<Longrightarrow> eqv (ceqs (pmap (ap \<rho> \<sigma>) (set (br_tpairs r)))) e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
 proof -
-  from ures_inv[OF ur itsok_pwf[OF its pa] nf'] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
+  from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
     and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
   obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
-    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma> nf']) blast
+    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma>]) blast
   note i = iextD[OF ie]
   have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
   have tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T)"
@@ -307,7 +306,7 @@ proof -
   qed
   have "eqv (ceqs (pmap (ap \<rho> \<sigma>) (set (br_tpairs r)))) e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
     if "(t, u) \<in> set tus" for t u e
-    by (rule ures_solves_eqv[OF ur itsok_pwf[OF its pa] i(3) ci' _ that nf'])
+    by (rule ures_solves_eqv[OF ur itsok_pwf[OF its pa] i(8) ci' _ that])
       (rule addth_tpairs_eqv[OF ad ie \<sigma> tw])
   with ie show thesis by (rule that)
 qed
@@ -379,7 +378,6 @@ theorem bicompose_proof_valid:
     and res: "bicompose_proof (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
       (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1)
       (ren_prf (na_ren (br_newas r)) rprf) sprf = returnW p"
-    and nf: "nfree (br_env r)"
   shows "prf_valid ax (set (hs @ hr)) (br_tpairs r) p (br_prop r)"
 proof -
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -408,7 +406,6 @@ proof -
     by (rule rchar_data[OF sp' ctx_def nlift_def r]) blast
   have rr: "br_env r = env' \<and> br_A r = A1o \<and> br_newas r = na"
     using ad by (cases rule: addth_cases) auto
-  have nf': "nfree env'" using nf rr by simp
   have wS: "\<forall>X\<in>set Bs. wtp X" "wtp Bi" "wtp C"
     using wtp_list_implies[of "Bs @ [Bi]" "Bs @ [Bi]" C C] state(2) by simp_all
   have iS: "\<forall>X\<in>set Bs. ibelow smax X" "ibelow smax Bi" "ibelow smax C" using state(3) by simp_all
@@ -420,7 +417,7 @@ proof -
     using lr0 by (induction Pre) (auto dest: lifted_rule_Cons)
   have pv: "\<forall>v\<in>pvars p. snd (fst v) \<le> smax" if "lsplit Bi = (p, Bi0)" for p Bi0
     using iS(2) lsplit_ok[OF that] by (auto simp: ibelow_def vars_lift_pre)
-  from ures_inv[OF ur itsok_pwf[OF its pa, unfolded sp_sel(5)] nf'] obtain A' K' X' where ei': "einv A' K' env'" by blast
+  from ures_inv[OF ur itsok_pwf[OF its pa, unfolded sp_sel(5)]] obtain A' K' X' where ei': "einv A' K' env'" by blast
   have tac: "tacyc (tyenv env')" "tcons_env (tyenv env')" using einvD(6,7)[OF ei'] .
   have lr': "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B" using lr by (simp add: ctx_sel)
   have ib: "ibelow (bc_smax ctx) (bc_Bi ctx)" using iS(2) by (simp add: ctx_sel)
@@ -682,7 +679,7 @@ proof -
     let ?F = "pmap (ap \<rho> \<sigma>) (set (br_tpairs r))"
     obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
       and dsol: "\<And>t u e. (t, u) \<in> set tus \<Longrightarrow> eqv (ceqs ?F) e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
-      by (rule bresult_inst_eqv[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma> nf']) blast
+      by (rule bresult_inst_eqv[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     have hS0: "prf_ok ax (set hs) (pmap (ap \<rho>' \<sigma>') (set stpairs)) e [] (prf_ap \<rho>' \<sigma>' sprf)
         (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"

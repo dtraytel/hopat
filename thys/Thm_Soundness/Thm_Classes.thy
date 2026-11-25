@@ -552,6 +552,6 @@ qed
 corollary extends_by_transfer:
   assumes "extends_by c0 c" "sign_le c0 c0" "derivable th" "th_sign th = c0"
   shows "derivable (th\<lparr>th_sign := c\<rparr>)"
-  by (rule derivable.transfer[OF assms(3)]) (use extends_by_sign_le[OF assms(1,2)] assms(4) in simp)
+  by (rule derivable_gen.transfer[OF assms(3)]) (use extends_by_sign_le[OF assms(1,2)] assms(4) in simp)
 
 end

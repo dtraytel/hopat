@@ -9,9 +9,11 @@ text \<open>
   as much as needed (\<^const>\<open>addth\<close>). An instance \<open>(\<rho>, \<sigma>)\<close> of the new theorem is extended to
   an instance \<open>(\<rho>', \<sigma>')\<close> that solves the environment and agrees with \<open>(\<rho>, \<sigma>)\<close> on the
   variables and type variables that the environment does not bind: \<open>\<rho>'\<close> composes \<open>\<rho>\<close> with the
-  normal forms of the type environment (\<open>tsol0\<close>), \<open>\<sigma>'\<close> composes \<open>\<sigma>\<close> with the unfolded
-  bindings (\<open>esol\<close>). Normalized terms contain only unbound variables, so their
-  \<open>(\<rho>, \<sigma>)\<close>-instance is equivalent to the \<open>(\<rho>', \<sigma>')\<close>-instance of the original term.
+  normal forms of the type environment (\<open>tsol0\<close>), \<open>\<sigma>'\<close> composes \<open>\<sigma>\<close> with the typed
+  solution of the bindings (\<open>gsol\<close>), which gives to a variable whose name is bound the
+  binding read at the type of the variable, where that is well-typed. So the environment may
+  bind names that occur with several types. Normalized terms contain only unbound variables,
+  so their \<open>(\<rho>, \<sigma>)\<close>-instance is equivalent to the \<open>(\<rho>', \<sigma>')\<close>-instance of the original term.
 \<close>
 
 context pure_sig_gen
@@ -184,26 +186,14 @@ lemma above_unb: "above env m \<Longrightarrow> ibelow m t \<Longrightarrow> unb
 
 subsection \<open>Extending instances\<close>
 
-text \<open>Composition of substitutions:\<close>
-
-lemma wt_subst_comp:
-  assumes "wt_subst \<sigma>" "wt_subst \<tau>"
-  shows "wt_subst (\<lambda>x T. vsubst \<sigma> (\<tau> x T))"
-proof -
-  have "closed (vsubst \<sigma> (\<tau> x T))" for x T
-    using assms closed_substD[of \<tau> x T] by (simp add: wt_subst_def closed_def)
-  moreover have "e \<turnstile> vsubst \<sigma> (\<tau> x T) : T" if "cert_typ alg ar T" for e x T
-    using typing_vsubst[OF wt_subst_typing[OF assms(2) that] assms(1)] .
-  ultimately show ?thesis by (auto simp: wt_subst_def closed_subst_def)
-qed
-
 text \<open>
   \<open>(\<rho>', \<sigma>')\<close> extends \<open>(\<rho>, \<sigma>)\<close> by the environment \<open>env\<close>: it is a solution of \<open>env\<close> at which
-  the bindings are well-typed, and it agrees with \<open>(\<rho>, \<sigma>)\<close> on unbound variables.
+  the bindings are well-typed, it also satisfies the bindings read at other types
+  (\<^const>\<open>gsolution\<close>), and it agrees with \<open>(\<rho>, \<sigma>)\<close> on unbound variables.
 \<close>
 
 definition iext :: "env \<Rightarrow> tinst \<Rightarrow> vsubst \<Rightarrow> tinst \<Rightarrow> vsubst \<Rightarrow> bool" where
-  "iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longleftrightarrow> cinst \<rho>' \<and> gsubst \<sigma>' \<and> solution \<rho>' \<sigma>' env \<and> wt_env \<rho>' env \<and>
+  "iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longleftrightarrow> cinst \<rho>' \<and> gsubst \<sigma>' \<and> gsolution \<rho>' \<sigma>' env \<and> wt_env \<rho>' env \<and>
     (\<forall>v S. vt_lookup (tyenv env) v = None \<longrightarrow> \<rho>' v S = \<rho> v S) \<and>
     (\<forall>x T. vt_lookup (tenv env) x = None \<longrightarrow> \<sigma>' x T = \<sigma> x T)"
 
@@ -212,7 +202,8 @@ lemma iextD:
   shows "cinst \<rho>'" "gsubst \<sigma>'" "solution \<rho>' \<sigma>' env" "wt_env \<rho>' env" "tsol (tyenv env) \<rho>'"
     "vt_lookup (tyenv env) v = None \<Longrightarrow> \<rho>' v S = \<rho> v S"
     "vt_lookup (tenv env) x = None \<Longrightarrow> \<sigma>' x T = \<sigma> x T"
-  using assms solutionD(2) unfolding iext_def by blast+
+    "gsolution \<rho>' \<sigma>' env"
+  using assms solutionD(2) gsolutionD(1) unfolding iext_def by blast+
 
 lemma tsol_comp: "tsol \<theta> \<rho>0 \<Longrightarrow> tsol \<theta> (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
   by (auto simp: tsol_def tsubst_tsubst)
@@ -278,7 +269,6 @@ qed
 
 lemma iext_exists_sb:
   assumes ei: "einv A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and nf: "nfree env"
   obtains \<rho>' \<sigma>' \<rho>0 where "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env))"
     "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
@@ -289,28 +279,17 @@ proof -
   define \<rho>' where "\<rho>' v S = tsubst \<rho> (tsol0 ?\<theta> v S)" for v S
   have c': "cinst \<rho>'" unfolding \<rho>'_def by (rule cinst_comp[OF \<rho>]) (use t0 in \<open>simp add: cinst_def\<close>)
   have ts': "tsol ?\<theta> \<rho>'" unfolding \<rho>'_def by (rule tsol_comp[OF t0(1)])
-  from winvD[OF wi ts' cinstD(2)[OF c']] have wte: "wt_env \<rho>' env" and vi: "vinv \<rho>' env X" by blast+
-  have vc: "vcons \<rho>' (evars env)" using vi by (auto simp: vinv_def intro: vcons_mono)
-  have sol0: "solution \<rho>' (esol \<rho>' env) env"
-    by (rule esol_solution[OF e(3) wte vc cinstD(1)[OF c'] ts' nf])
-  define \<sigma>' where "\<sigma>' = (\<lambda>x T. vsubst \<sigma> (esol \<rho>' env x T))"
-  have ws: "wt_subst \<sigma>'"
-    unfolding \<sigma>'_def by (rule wt_subst_comp[OF gsubstD(1)[OF \<sigma>] solutionD(3)[OF sol0]])
-  have gs: "gsubst \<sigma>'" using ws \<sigma> by (simp add: gsubst_def \<sigma>'_def)
-  have "solution \<rho>' \<sigma>' env"
-    unfolding solution_def
-  proof (intro conjI allI impI)
-    show "wsinst alg \<rho>'" "tsol ?\<theta> \<rho>'" "wt_subst \<sigma>'" using c' ts' ws by (simp_all add: cinst_def)
-    fix x U u assume b: "vt_lookup (tenv env) x = Some (U, u)"
-    have "esol \<rho>' env x (tsubst \<rho>' U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' (esol \<rho>' env) u" by (rule solutionD(4)[OF sol0 b])
-    from conv_vsubst[OF this gsubstD(1)[OF \<sigma>]]
-    show "\<sigma>' x (tsubst \<rho>' U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" by (simp add: \<sigma>'_def ap_def vsubst_vsubst)
-  qed
-  moreover have "\<rho>' v S = \<rho> v S" if "vt_lookup ?\<theta> v = None" for v S
+  from winvD[OF wi ts' cinstD(2)[OF c']] have wte: "wt_env \<rho>' env" by blast
+  define \<sigma>' where "\<sigma>' = (\<lambda>x T. vsubst \<sigma> (gsol \<rho>' env x T))"
+  have gs: "gsolution \<rho>' \<sigma>' env"
+    unfolding \<sigma>'_def by (rule gsolution_gsol[OF e(3) wte cinstD(1)[OF c'] ts' gsubstD(1)[OF \<sigma>]])
+  have ws: "wt_subst \<sigma>'" by (rule solutionD(3)[OF gsolutionD(1)[OF gs]])
+  have gsb: "gsubst \<sigma>'" using ws \<sigma> by (simp add: gsubst_def \<sigma>'_def)
+  have "\<rho>' v S = \<rho> v S" if "vt_lookup ?\<theta> v = None" for v S
     using that by (simp add: \<rho>'_def tsol0_def)
   moreover have "\<sigma>' x T = \<sigma> x T" if "vt_lookup (tenv env) x = None" for x T
-    using that by (simp add: \<sigma>'_def esol_def)
-  ultimately have "iext env \<rho> \<sigma> \<rho>' \<sigma>'" using c' gs wte by (simp add: iext_def)
+    using that by (simp add: \<sigma>'_def gsol_unbound[OF e(3)])
+  ultimately have "iext env \<rho> \<sigma> \<rho>' \<sigma>'" using c' gsb gs wte by (simp add: iext_def)
   moreover have "cinst (tsol0 ?\<theta>)" using t0 by (simp add: cinst_def)
   ultimately show thesis using sbound_tsol0[OF e(6)] by (rule that) (simp add: \<rho>'_def)
 qed

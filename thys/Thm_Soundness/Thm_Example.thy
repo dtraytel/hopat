@@ -163,7 +163,7 @@ definition thA :: thm_data where
   "thA = mk_thm (mk_rep (-1) [] A0) {} [A0] pure0 (returnW (Hyp A0)) (return (ZHyp (ZVar (STR ''A'', -1) ZProp)))"
 
 lemma derivable_thA: "derivable thA"
-  using derivable.assumeI[OF cterm_ok_ctA, of "mk_rep (-1) [] A0"]
+  using derivable_gen.assumeI[OF cterm_ok_ctA, of "mk_rep (-1) [] A0"]
   by (simp add: thA_def ctA_def assume_rule_def adjust_maxidx_cterm_def zassume_proof_def A0_def propT_def)
 
 definition thAA :: thm_data where
@@ -172,7 +172,7 @@ definition thAA :: thm_data where
     (return (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))))"
 
 lemma derivable_thAA: "derivable thAA"
-  using derivable.implies_intr[OF cterm_ok_ctA _ derivable_thA, of "mk_rep (-1) [] (mk_implies A0 A0)"]
+  using derivable_gen.implies_intr[OF cterm_ok_ctA _ derivable_thA, of "mk_rep (-1) [] (mk_implies A0 A0)"]
   by (simp add: thAA_def implies_intr_def implies_intr_proof_def zimplies_intr_proof_def ctA_def thA_def
       mk_rep_def A0_def propT_def)
 
@@ -193,12 +193,12 @@ definition th_reflF :: thm_data where
 
 lemma derivable_th_reflA: "derivable th_reflA"
   unfolding th_reflA_def
-  by (rule derivable.reflexive[OF cterm_ok_ctA])
+  by (rule derivable_gen.reflexive[OF cterm_ok_ctA])
     (simp_all add: sign_eq0 ctA_def reflexive_def mk_rep_def A0_def mk_equals_def fastype_of_def)
 
 lemma derivable_th_reflF: "derivable th_reflF"
   unfolding th_reflF_def
-  by (rule derivable.reflexive[OF cterm_ok_ctF])
+  by (rule derivable_gen.reflexive[OF cterm_ok_ctF])
     (simp_all add: sign_eq0 ctF_def reflexive_def mk_rep_def F0_def mk_equals_def fastype_of_def)
 
 definition th_comb :: thm_data where
@@ -208,7 +208,7 @@ definition th_comb :: thm_data where
       zcombination_proof ztargs0 propT propT F0 F0 A0 A0 p q))))"
 
 lemma derivable_th_comb: "derivable th_comb"
-  using derivable.combination[OF derivable_th_reflF derivable_th_reflA,
+  using derivable_gen.combination[OF derivable_th_reflF derivable_th_reflA,
     of "mk_rep (-1) [] (eq_const propT $ (F0 $ A0) $ (F0 $ A0))" propT propT F0 F0 A0 A0]
   by (simp add: th_comb_def th_reflF_def th_reflA_def conv_datar_def ctA_def ctF_def sign_eq0 combination_res_def
       combination_data_def mk_rep_def F0_def A0_def mk_equals_def fastype_of_def union_tpairs_def)

@@ -1224,7 +1224,7 @@ text \<open>Consistent variables stay consistent in the environment of a unifier
 
 lemma uresult_winv:
   assumes ur: "uresult A0 env tus (El_R env' tps)" and si: "sinv A K X env (tdps tus)"
-    and wy: "winv env (Y \<union> dvars (tdps tus))" and nf': "nfree env'"
+    and wy: "winv env (Y \<union> dvars (tdps tus))"
   shows "winv env' Y"
 proof -
   have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF ur])
@@ -1234,7 +1234,7 @@ proof -
     fix \<rho> assume t': "tsol (tyenv env') \<rho>" and c: "cert_inst \<rho>"
     have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
     from winvD[OF wy t c] have w: "wt_env \<rho> env" "vinv \<rho> env (Y \<union> dvars (tdps tus))" by blast+
-    from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2) nf']
+    from dstepDg(1)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2)]
     show "wt_env \<rho> env' \<and> vinv \<rho> env' (Y \<union> dvars (tdps tps))" by blast
   qed
   then show ?thesis by (rule ur_winv_sub) blast
@@ -1414,11 +1414,6 @@ lemma winv_reindex:
     and "\<And>x T. (x, T) \<in> Z \<Longrightarrow> (h x, T) \<in> X \<and> snd (h x) = snd x"
   shows "winv env Z"
   by (rule winv_reindex[OF assms]) simp_all
-
-lemma uresult_winv:
-  assumes "uresult A0 env tus (El_R env' tps)" "sinv A K X env (tdps tus)" "winv env (Y \<union> dvars (tdps tus))"
-  shows "winv env' Y"
-  by (rule uresult_winv[OF assms nfree0])
 
 text \<open>
   The new theorem can be built for every unifier of a call with a well-typed proof state and

@@ -291,50 +291,50 @@ lemma unc_ok_iff:
 
 subsection \<open>Derivable theorems\<close>
 
-inductive derivable :: "thm_data \<Rightarrow> bool" where
+inductive derivable_gen :: "bool \<Rightarrow> thm_data \<Rightarrow> bool" for uc where
   assumeI: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> okT (assume_rule (cd_rep ct)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (mk_thm r (cd_sorts ct) [ct_t (cd_rep ct)] (cd_sign ct) (returnW (Hyp (ct_t (cd_rep ct))))
       (zassume_proof (pure_sig_gen.ztargs (sg_consts (cd_sign ct))) (ct_t (cd_rep ct))))"
-| implies_intr: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| implies_intr: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable_gen uc th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> okT (implies_intr (cd_rep ct) (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (filter (\<lambda>h.
       \<not> aconv_term (ct_t (cd_rep ct)) h) (th_hyps th)) (th_sign th) (bindW (th_proof th)
       (\<lambda>p. returnW (implies_intr_proof (ct_t (cd_rep ct)) p))) (bindM (th_zproof th)
       (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (th_sign th))) (ct_t (cd_rep ct))))))"
-| implies_elim: "derivable thAB \<Longrightarrow> derivable thA \<Longrightarrow> th_sign thAB = th_sign thA
+| implies_elim: "derivable_gen uc thAB \<Longrightarrow> derivable_gen uc thA \<Longrightarrow> th_sign thAB = th_sign thA
     \<Longrightarrow> okT (implies_elim (rp thAB) (rp thA)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints thA \<union> th_constraints thAB) (mk_thm r (th_shyps thAB \<union>
       th_shyps thA) (th_hyps thA @ th_hyps thAB) (th_sign thAB) (bindW (th_proof thAB)
       (\<lambda>p. bindW (th_proof thA) (\<lambda>q. returnW (PAppp p q)))) (bindM (th_zproof
       thAB) (\<lambda>p. bindM (th_zproof thA) (\<lambda>q. return (ZAppp p q))))))"
-| forall_intr: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| forall_intr: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable_gen uc th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow> okT (forall_intr (th_hyps th)
     (cd_rep ct) (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (th_hyps th) (th_sign
       th) (bindW (th_proof th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (cd_rep
       ct))) (ct_t (cd_rep ct)) p))) (bindM (th_zproof th) (zforall_intr_proof (pure_sig_gen.ztargs
       (sg_consts (th_sign th))) (ct_T (cd_rep ct)) (var_name (ct_t (cd_rep ct))) (ct_t (cd_rep
       ct))))))"
-| forall_elim: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| forall_elim: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable_gen uc th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> okT (forall_elim (cd_rep ct) (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (th_hyps th) (th_sign
       th) (bindW (th_proof th) (\<lambda>p. returnW (PAppt p (Some (ct_t (cd_rep ct)))))) (bindM
       (th_zproof th) (\<lambda>p. zforall_elim_proof (pure_sig_gen.ztargs (sg_consts (th_sign th)))
       (ct_t (cd_rep ct)) p))))"
-| symmetric: "derivable th \<Longrightarrow> sign_eq (th_sign th) \<Longrightarrow> okT (symmetric (rp th)) r \<Longrightarrow>
-    derivable
+| symmetric: "derivable_gen uc th \<Longrightarrow> sign_eq (th_sign th) \<Longrightarrow> okT (symmetric (rp th)) r \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th) (bindW (th_proof
       th) (\<lambda>p. returnW (symmetric_proof p))) (bindM (th_zproof th) (\<lambda>p. case
       eq_args (th_prop (rp th)) of Some (T, t, u) \<Rightarrow> zsymmetric_proof (pure_sig_gen.ztargs
       (sg_consts (th_sign th))) T t u p | None \<Rightarrow> raise undefined))))"
-| transitive: "derivable th1 \<Longrightarrow> derivable th2 \<Longrightarrow> th_sign th1 = th_sign th2
+| transitive: "derivable_gen uc th1 \<Longrightarrow> derivable_gen uc th2 \<Longrightarrow> th_sign th1 = th_sign th2
     \<Longrightarrow> sign_eq (th_sign th1) \<Longrightarrow> okT (transitive (rp th1) (rp th2)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th1 \<union> th_constraints th2) (mk_thm r (th_shyps th1 \<union>
       th_shyps th2) (th_hyps th1 @ th_hyps th2) (th_sign th1) (bindW (th_proof th1) (\<lambda>p.
       bindW (th_proof th2) (\<lambda>q. case eq_args (th_prop (rp th1)) of Some (T, t1, u)
@@ -343,89 +343,89 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
       (th_prop (rp th1)), eq_args (th_prop (rp th2))) of (Some (T, t1, u), Some (_, _, t2))
       \<Rightarrow> ztransitive_proof (pure_sig_gen.ztargs (sg_consts (th_sign th1))) T t1 u t2 p q |
       _ \<Rightarrow> raise undefined)))))"
-| abstract_rule: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| abstract_rule: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable_gen uc th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> sign_eq (th_sign th) \<Longrightarrow> sign_closed (th_sign th)
     \<Longrightarrow> okT (abstract_rule_res b (th_hyps th) (cd_rep ct) (rp th)) (r, U, f, g) \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (th_hyps th) (th_sign
       th) (bindW (th_proof th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (cd_rep ct)) p)))
       (bindM (th_zproof th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (th_sign th))) (ct_T
       (cd_rep ct)) U b (ct_t (cd_rep ct)) f g))))"
-| combination: "derivable th1 \<Longrightarrow> derivable th2 \<Longrightarrow> th_sign th1 = th_sign th2
+| combination: "derivable_gen uc th1 \<Longrightarrow> derivable_gen uc th2 \<Longrightarrow> th_sign th1 = th_sign th2
     \<Longrightarrow> sign_eq (th_sign th1) \<Longrightarrow> okT (combination_res (rp th1) (rp
     th2)) (r, T1, U, f, g, t, u) \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th1 \<union> th_constraints th2) (mk_thm r (th_shyps th1 \<union>
       th_shyps th2) (th_hyps th1 @ th_hyps th2) (th_sign th1) (bindW (th_proof th1) (\<lambda>p.
       bindW (th_proof th2) (\<lambda>q. combination_proof f g t u p q))) (bindM (th_zproof th1)
       (\<lambda>p. bindM (th_zproof th2) (\<lambda>q. zcombination_proof (pure_sig_gen.ztargs
       (sg_consts (th_sign th1))) T1 U f g t u p q)))))"
-| equal_intr: "derivable th1 \<Longrightarrow> derivable th2 \<Longrightarrow> th_sign th1 = th_sign th2
+| equal_intr: "derivable_gen uc th1 \<Longrightarrow> derivable_gen uc th2 \<Longrightarrow> th_sign th1 = th_sign th2
     \<Longrightarrow> sign_eq (th_sign th1) \<Longrightarrow> okT (equal_intr (rp th1) (rp th2)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th1 \<union> th_constraints th2) (mk_thm r (th_shyps th1 \<union>
       th_shyps th2) (th_hyps th1 @ th_hyps th2) (th_sign th1) (prf2r equal_intr_proof th1 th2)
       (zprf2r zequal_intr_proof th1 th2)))"
-| equal_elim: "derivable th1 \<Longrightarrow> derivable th2 \<Longrightarrow> th_sign th1 = th_sign th2
+| equal_elim: "derivable_gen uc th1 \<Longrightarrow> derivable_gen uc th2 \<Longrightarrow> th_sign th1 = th_sign th2
     \<Longrightarrow> sign_eq (th_sign th1) \<Longrightarrow> okT (equal_elim (rp th1) (rp th2)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th1 \<union> th_constraints th2) (mk_thm r (th_shyps th1 \<union>
       th_shyps th2) (th_hyps th1 @ th_hyps th2) (th_sign th1) (prf2r equal_elim_proof th1 th2)
       (zprf2r zequal_elim_proof th1 th2)))"
 | trivial: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> okT (trivial (cd_rep ct)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (mk_thm r (cd_sorts ct) [] (cd_sign ct) (returnW trivial_proof) (ztrivial_proof (pure_sig_gen.ztargs
       (sg_consts (cd_sign ct))) (ct_t (cd_rep ct))))"
-| weaken: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| weaken: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable_gen uc th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> okT (weaken (cd_rep ct) (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (ct_t (cd_rep ct) #
       th_hyps th) (th_sign th) (th_proof th) (th_zproof th)))"
-| renamed_prop: "derivable th \<Longrightarrow> okT (renamed_prop P (rp th)) r \<Longrightarrow>
-    derivable
+| renamed_prop: "derivable_gen uc th \<Longrightarrow> okT (renamed_prop P (rp th)) r \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th) (th_proof th)
       (th_zproof th)))"
-| incr_indexes: "derivable th \<Longrightarrow> okT (incr_indexes_thm i (rp th)) r \<Longrightarrow>
-    derivable
+| incr_indexes: "derivable_gen uc th \<Longrightarrow> okT (incr_indexes_thm i (rp th)) r \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th) (incr_indexes_prf
       i (th_proof th)) (incr_indexes_zprf i (th_zproof th))))"
-| permute_prems: "derivable th \<Longrightarrow> okT (permute_data j k (rp th)) (r, prems', m) \<Longrightarrow>
-    derivable
+| permute_prems: "derivable_gen uc th \<Longrightarrow> okT (permute_data j k (rp th)) (r, prems', m) \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th) (bindW (th_proof
       th) (\<lambda>p. returnW (permute_prems_proof prems' j m p))) (bindM (th_zproof th)
       (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (th_sign th))) prems' j m))))"
-| rotate_rule: "derivable th \<Longrightarrow> okT (rotate_data k i (rp th)) (r, Bs, Bi', params, asms, m) \<Longrightarrow>
-    derivable
+| rotate_rule: "derivable_gen uc th \<Longrightarrow> okT (rotate_data k i (rp th)) (r, Bs, Bi', params, asms, m) \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th) (bindW (th_proof
       th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p))) (bindM (th_zproof th)
       (zrotate_proof (pure_sig_gen.ztargs (sg_consts (th_sign th))) Bs Bi' params asms m))))"
-| varifyT_global: "derivable th \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow> okT (varifyT_global vl
+| varifyT_global: "derivable_gen uc th \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow> okT (varifyT_global vl
     fixed (th_hyps th) (rp th)) (names, r) \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th) (bindW (th_proof
       th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (th_zproof th) (zvarifyT_proof
       names))))"
-| adjust_maxidx: "derivable th \<Longrightarrow>
-    derivable
+| adjust_maxidx: "derivable_gen uc th \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm (adjust_maxidx_thm i (rp th)) (th_shyps th) (th_hyps th)
       (th_sign th) (th_proof th) (th_zproof th)))"
 | reflexive: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (reflexive (cd_rep ct)) r \<Longrightarrow>
-    derivable (conv_datar ct r)"
+    derivable_gen uc (conv_datar ct r)"
 | beta_conversion: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (beta_conversion full (cd_rep ct)) r \<Longrightarrow>
-    derivable (conv_datar ct r)"
+    derivable_gen uc (conv_datar ct r)"
 | eta_conversion: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (eta_conversion (cd_rep ct)) r \<Longrightarrow>
-    derivable (conv_datar ct r)"
+    derivable_gen uc (conv_datar ct r)"
 | eta_long_conversion: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow>
-    okT (eta_long_conversion (cd_rep ct)) r \<Longrightarrow> derivable (conv_datar ct r)"
-| generalize: "derivable th \<Longrightarrow> \<not> (tfrees = [] \<and> frees = []) \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
+    okT (eta_long_conversion (cd_rep ct)) r \<Longrightarrow> derivable_gen uc (conv_datar ct r)"
+| generalize: "derivable_gen uc th \<Longrightarrow> \<not> (tfrees = [] \<and> frees = []) \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
     okT (generalize tfrees frees gi (th_hyps th) (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (\<lambda>p. returnW (generalize_thm_proof tfrees frees gi (th_tpairs th) (th_prop th) p)))
       (bindM (th_zproof th) (zgeneralize_proof tfrees frees gi))))"
-| legacy_freezeT: "derivable th \<Longrightarrow> ok (full_prop_of (th_tpairs th) (th_prop th)) P1 \<Longrightarrow>
+| legacy_freezeT: "derivable_gen uc th \<Longrightarrow> ok (full_prop_of (th_tpairs th) (th_prop th)) P1 \<Longrightarrow>
     okT (legacy_freezeT vl (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (\<lambda>p. returnW (legacy_freezeT_proof vl P1 p)))
       (bindM (th_zproof th) (zlegacy_freezeT_proof vl P1))))"
@@ -433,41 +433,41 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     tm_sorts (mk_of_class T c) \<subseteq> cd_sorts ct \<Longrightarrow>
     pure_sig_gen.class_const (sg_alg (cd_sign ct)) (sg_consts (cd_sign ct)) (c + STR ''_class'') c \<Longrightarrow>
     sign_eq (cd_sign ct) \<Longrightarrow> okT (Pure_Subst_Rules.of_class (sg_alg (cd_sign ct)) T c) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (solve_data (mk_thm r (cd_sorts ct) [] (cd_sign ct) (returnW (PClass T c))
       (return (OFCLASSp (ztyp_of T) c))))"
-| eq_assumption: "derivable th \<Longrightarrow> okT (eq_assumption i (rp th)) (n, r) \<Longrightarrow>
+| eq_assumption: "derivable_gen uc th \<Longrightarrow> okT (eq_assumption i (rp th)) (n, r) \<Longrightarrow>
     okT (dest_state (rp th) i) (tpairs, Bs, Bi, C) \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
       (bindM (th_zproof th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (th_sign th))) Bs Bi n))))"
-| lift_rule: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> ct_T (cd_rep ct) = propT \<Longrightarrow> cd_sign ct = th_sign th \<Longrightarrow>
-    derivable
+| lift_rule: "cterm_ok ct \<Longrightarrow> csorts_ok (cd_sign ct) (cd_sorts ct) \<Longrightarrow> derivable_gen uc th \<Longrightarrow> ct_T (cd_rep ct) = propT \<Longrightarrow> cd_sign ct = th_sign th \<Longrightarrow>
+    derivable_gen uc
      (with_cons (th_constraints th)
       (mk_thm (lift_rule (ct_t (cd_rep ct)) (ct_maxidx (cd_rep ct)) (rp th)) (th_shyps th \<union> cd_sorts ct)
         (th_hyps th) (th_sign th)
         (bindW (th_proof th) (\<lambda>p. returnW (lift_rule_proof (ct_t (cd_rep ct)) (ct_maxidx (cd_rep ct)) (rp th) p)))
         (bindM (th_zproof th) (lift_rule_zproof (pure_sig_gen.ztargs (sg_consts (th_sign th))) (ct_t (cd_rep ct))
           (ct_maxidx (cd_rep ct)) (rp th)))))"
-| axiom: "sg_axioms c a = Some A \<Longrightarrow> sign_axioms invent c \<Longrightarrow> derivable (axiom_data invent c a A)"
-| strip_shyps: "derivable th \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
+| axiom: "sg_axioms c a = Some A \<Longrightarrow> sign_axioms invent c \<Longrightarrow> derivable_gen uc (axiom_data invent c a A)"
+| strip_shyps: "derivable_gen uc th \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
     d = strip_shyps_rep (sg_alg (th_sign th)) gts (shyps_list (th_shyps th)) (th_hyps th) (rp th) \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (mk_thm (rp th) (case d of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (strip_shyps_proof (sg_alg (th_sign th)) d))
       (bindM (th_zproof th) (zstrip_shyps_proof (sg_alg (th_sign th)) d)))"
-| unconstrainT: "derivable th \<Longrightarrow>
+| unconstrainT: "derivable_gen uc th \<Longrightarrow>
     okT (unconstrainT_rep invent (shyps_list (th_shyps th)) (th_hyps th) (rp th)) r \<Longrightarrow>
     unc_sig_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (mk_thm r {[]} [] (th_sign th)
       (bindW (th_proof th) (\<lambda>_. liftMP (unconstrain_thm_proof box invent (shyps_list (th_shyps th)) (th_prop th))))
       (bindM (th_zproof th) (\<lambda>_. zunconstrain_proof (pure_sig_gen.ztargs (sg_consts (th_sign th))) zn invent
         (shyps_list (th_shyps th)) (th_prop th))))"
-| transfer: "derivable th \<Longrightarrow> sign_le (th_sign th) c' \<Longrightarrow> derivable (th\<lparr>th_sign := c'\<rparr>)"
-| solve_constraints: "derivable th \<Longrightarrow> derivable (solve_data th)"
-| instantiate: "derivable th \<Longrightarrow>
+| transfer: "derivable_gen uc th \<Longrightarrow> sign_le (th_sign th) c' \<Longrightarrow> derivable_gen uc (th\<lparr>th_sign := c'\<rparr>)"
+| solve_constraints: "derivable_gen uc th \<Longrightarrow> derivable_gen uc (solve_data th)"
+| instantiate: "derivable_gen uc th \<Longrightarrow>
     \<forall>(v, cT)\<in>set cTs. ctyp_ok cT \<and> cty_sign cT = th_sign th \<Longrightarrow>
     \<forall>(v, ct)\<in>set cts. cterm_ok ct \<and> cd_sign ct = th_sign th \<Longrightarrow>
     \<forall>(v, cT)\<in>set cTs. csorts_ok (cty_sign cT) (cty_sorts cT) \<Longrightarrow>
@@ -475,7 +475,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     \<not> (cTs = [] \<and> cts = []) \<Longrightarrow>
     okT (instantiate (sg_alg (th_sign th)) bt (map (\<lambda>(v, cT). (v, (cty_T cT, cty_maxidx cT))) cTs)
       (map (\<lambda>(v, ct). (v, (ct_t (cd_rep ct), ct_T (cd_rep ct), ct_maxidx (cd_rep ct)))) cts) (rp th)) r \<Longrightarrow>
-    derivable
+    derivable_gen uc
      (solve_data (mk_thm r
       (th_shyps th \<union> ((\<Union>(v, cT)\<in>set cTs. cty_sorts cT) \<union> (\<Union>(v, ct)\<in>set cts. cd_sorts ct)))
       (th_hyps th) (th_sign th)
@@ -483,32 +483,49 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
         (map (\<lambda>(v, ct). (v, ct_t (cd_rep ct))) cts) p)))
       (bindM (th_zproof th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (th_sign th)))
         (map (\<lambda>(v, cT). (v, cty_T cT)) cTs) (map (\<lambda>(v, ct). (v, ct_t (cd_rep ct))) cts)))))"
-| assumption: "derivable st \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow> data_scons st \<Longrightarrow>
+| assumption: "derivable_gen uc st \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow> data_scons st \<Longrightarrow>
     okT (assumption i (rp st)) s0 \<Longrightarrow> aresult (unify_ops cfg vl) s0 r \<Longrightarrow>
-    binds_none (ar_env r) (data_clash st) \<Longrightarrow>
-    derivable (ares_data st (aseq_ctx s0) r)"
-| flexflex_rule: "derivable th \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign th) \<Longrightarrow> data_scons th \<Longrightarrow>
+    uc \<or> binds_none (ar_env r) (data_clash st) \<Longrightarrow>
+    derivable_gen uc (ares_data st (aseq_ctx s0) r)"
+| flexflex_rule: "derivable_gen uc th \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign th) \<Longrightarrow> data_scons th \<Longrightarrow>
     okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0 \<Longrightarrow>
     fresult (unify_ops cfg vl) smashT (rp th) s0 (env, r) \<Longrightarrow>
     binds_none env (data_clash th) \<Longrightarrow>
-    derivable (fres_data (solve_data th) env r)"
-| bicompose: "derivable st \<Longrightarrow> derivable rule \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow>
+    derivable_gen uc (fres_data (solve_data th) env r)"
+| bicompose: "derivable_gen uc st \<Longrightarrow> derivable_gen uc rule \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow>
     \<forall>xs. length (vl xs) = length xs \<Longrightarrow> th_sign rule = th_sign st \<Longrightarrow>
     data_scons2 st rule \<Longrightarrow>
     okT (dest_state (rp st) i) (stpairs, Bs, Bi, C) \<Longrightarrow>
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
       (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq \<Longrightarrow>
     pure_sig_gen.bresult (unify_ops cfg vl) xq x \<Longrightarrow>
-    data_names_bc incremented st rule x \<Longrightarrow>
-    derivable (bc_data (th_sign st) i st flatten e rule x)"
-| biresolution: "derivable st \<Longrightarrow> \<forall>r\<in>set brules. derivable (snd r) \<Longrightarrow>
+    uc \<or> data_names_bc incremented st rule x \<Longrightarrow>
+    derivable_gen uc (bc_data (th_sign st) i st flatten e rule x)"
+| biresolution: "derivable_gen uc st \<Longrightarrow> \<forall>r\<in>set brules. derivable_gen uc (snd r) \<Longrightarrow>
     cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow> \<forall>xs. length (vl xs) = length xs \<Longrightarrow>
     \<forall>r\<in>set brules. th_sign (snd r) = th_sign st \<Longrightarrow>
     data_scons st \<Longrightarrow> \<forall>r\<in>set brules. data_scons (snd r) \<Longrightarrow>
     okT (biresolution trace match_flg rp brules i (rp st)) s0 \<Longrightarrow>
     pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule)) \<Longrightarrow>
-    data_names_bres st brules i rule x \<Longrightarrow>
-    derivable (bres_data (th_sign st) i st e rule x)"
+    uc \<or> data_names_bres st brules i rule x \<Longrightarrow>
+    derivable_gen uc (bres_data (th_sign st) i st e rule x)"
+
+text \<open>
+  The derivable theorems: the rules \<open>assumption\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> have no
+  condition on the names of the schematic variables. \<open>derivable1\<close> restricts them to the results
+  whose environment binds no name that occurs with two types (or whose arguments have one type
+  for each name); the theorems on the proofs of theorems (session \<open>Thm_Proofs\<close>) are about these
+  derivations.
+\<close>
+
+abbreviation derivable :: "thm_data \<Rightarrow> bool" where
+  "derivable \<equiv> derivable_gen True"
+
+abbreviation derivable1 :: "thm_data \<Rightarrow> bool" where
+  "derivable1 \<equiv> derivable_gen False"
+
+lemma derivable1_derivable: "derivable1 d \<Longrightarrow> derivable d"
+  by (induction rule: derivable_gen.induct) (rule derivable_gen.intros; (assumption | blast)?)+
 
 
 subsection \<open>Each rule keeps the invariant\<close>
@@ -1153,7 +1170,7 @@ text \<open>
 \<close>
 
 lemma bres_names_vclash:
-  assumes g: "okT (cprem_of state i) goal" and nf: "nfree (br_env x)"
+  assumes g: "okT (cprem_of state i) goal"
     and L: "loose = vclash (vars_thm (th_tpairs state) (th_prop state) \<union>
       vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
         (th_prop (lift_rule goal (th_maxidx state) (rep rule))) \<union>
@@ -1173,7 +1190,7 @@ proof -
   have n4: "loose \<subseteq> fst ` (?Y \<union> ?V)" unfolding L by (force simp: vclash_def)
   show "bres_names rep brules i state rule x"
     unfolding bres_names_def
-    by ((intro conjI impI disjI2 all nf n3 n4 n1 | assumption)+)
+    by ((intro conjI impI disjI2 all n3 n4 n1 | assumption)+)
   show "lvtcons (vars_thm (th_tpairs state) (th_prop state))"
     by (rule lvtcons_mono[OF n3]) blast
 qed
@@ -1188,7 +1205,7 @@ text \<open>
 lemma sound_assumption_gen:
   assumes D: "dsem TYPE('u) st"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_scons st" "okT (assumption i (rp st)) s0"
-      "aresult (unify_ops cfg vl) s0 r" "binds_none (ar_env r) (data_clash st)"
+      "aresult (unify_ops cfg vl) s0 r"
   shows "dsem TYPE('u) (ares_data st (aseq_ctx s0) r)"
 proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
   case False
@@ -1201,10 +1218,9 @@ next
   have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)"
     and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?st)) (th_prop (rep_of ?st)))"
     and a: "okT (assumption i (rep_of ?st)) s0"
-    and nb: "binds_none (ar_env r) (ares_clash ?st)"
-    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
+    using H by (simp_all add: R data_scons_def)
   show ?thesis
-    using thm_sem_thm_of_ares_gen[OF ps cfg sc a H(4) nb] cons_ok_thm_of_ares_gen[OF ps cfg sc a H(4) nb]
+    using thm_sem_thm_of_ares_gen[OF ps cfg sc a H(4)] cons_ok_thm_of_ares_gen[OF ps cfg sc a H(4)]
     by (simp add: dsem_def thm_of_ares_raw R ares_data_def)
 qed
 
@@ -1244,7 +1260,6 @@ lemma sound_bicompose_gen:
       "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
         (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
       "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-      "binds_none (br_env x) (data_clash_bc st rule x)"
   shows "dsem TYPE('u) (bc_data (th_sign st) i st flatten e rule x)"
 proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
   case False
@@ -1259,30 +1274,10 @@ next
     and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
-    and nb: "binds_none (br_env x) (bc_clash ?st ?rule x)"
-    using H by (simp_all add: R bc_scons_raw data_clash_bc_def data_vars_def bc_clash_def)
+    using H by (simp_all add: R bc_scons_raw)
   show ?thesis
-    using thm_sem_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb] cons_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb]
+    using thm_sem_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)] cons_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)]
     by (simp add: dsem_def thm_of_bc_raw R bc_data_def)
-qed
-
-lemma sound_bicompose':
-  assumes D: "dsem TYPE('u) st" "dsem TYPE('u) rule"
-    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
-      "data_scons2 st rule"
-      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
-      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
-        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
-      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nm: "data_names_bc incremented st rule x"
-  shows "dsem TYPE('u) (bc_data (th_sign st) i st flatten e rule x)"
-  using nm unfolding data_names_bc_def
-proof
-  assume "incremented \<longrightarrow> data_vcons2 st rule"
-  then show ?thesis by (rule sound_bicompose[OF D H(1-4) _ H(5-7)])
-next
-  assume "binds_none (br_env x) (data_clash_bc st rule x)"
-  then show ?thesis by (rule sound_bicompose_gen[OF D H])
 qed
 
 lemma sound_biresolution_gen:
@@ -1292,7 +1287,6 @@ lemma sound_biresolution_gen:
     and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
     and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
     and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
-    and nb: "binds_none (br_env x) (data_clash_bres st i rule x)"
   shows "dsem TYPE('u) (bres_data (th_sign st) i st e rule x)"
 proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
   case False
@@ -1319,8 +1313,7 @@ next
         (th_prop (lift_rule goal (th_maxidx (rp st)) (rp rule))) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
     unfolding data_clash_bres_def G by (simp add: data_vars_def thm_rep.truncate_def)
-  have nf: "nfree (br_env x)" using nb by (rule nfree_binds_none)
-  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g nf L]
+  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g L]
   have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 nm(2)]])
   from r have sr: "th_sign rule = ?c" and Dr: "dsem TYPE('u) rule" using sg D(2) by fastforce+
@@ -1355,26 +1348,6 @@ next
   show ?thesis using ti val co
     by (simp add: dsem_def thm_sem_def bres_data_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)
 qed
-
-lemma sound_biresolution':
-  assumes D: "dsem TYPE('u) st" "\<forall>r\<in>set brules. dsem TYPE('u) (snd r)"
-    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
-    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
-    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
-    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
-    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
-    and nm: "data_names_bres st brules i rule x"
-  shows "dsem TYPE('u) (bres_data (th_sign st) i st e rule x)"
-  using nm unfolding data_names_bres_def
-proof
-  assume "data_vcons st \<and> (\<forall>r\<in>set brules. data_vcons (snd r))"
-  with cs have "data_cons st" "\<forall>r\<in>set brules. data_cons (snd r)" by (simp_all add: data_cons_iff)
-  then show ?thesis by (rule sound_biresolution[OF D cfg vl sg _ _ br res])
-next
-  assume "binds_none (br_env x) (data_clash_bres st i rule x)"
-  then show ?thesis by (rule sound_biresolution_gen[OF D cfg vl sg cs br res])
-qed
-
 
 subsection \<open>The rules that unify keep the variables consistent\<close>
 
@@ -1590,7 +1563,7 @@ qed
 lemma sorts_assumption_gen:
   assumes D: "dsem TYPE('u) st" and S: "shyps_ok st"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_scons st" "okT (assumption i (rp st)) s0"
-      "aresult (unify_ops cfg vl) s0 r" "binds_none (ar_env r) (data_clash st)"
+      "aresult (unify_ops cfg vl) s0 r"
   shows "shyps_ok (ares_data st (aseq_ctx s0) r)"
   unfolding shyps_ok_def
 proof
@@ -1602,9 +1575,8 @@ proof
   have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)"
     and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?st)) (th_prop (rep_of ?st)))"
     and a: "okT (assumption i (rep_of ?st)) s0"
-    and nb: "binds_none (ar_env r) (ares_clash ?st)"
-    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
-  from sorts_ok_thm_of_ares_gen[OF ps cfg sc a H(4) nb]
+    using H by (simp_all add: R data_scons_def)
+  from sorts_ok_thm_of_ares_gen[OF ps cfg sc a H(4)]
   have "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
   with S True show "csorts_ok (th_sign (ares_data st (aseq_ctx s0) r)) (th_shyps (ares_data st (aseq_ctx s0) r))"
     by (auto simp: ares_data_def shyps_ok_def csorts_ok_def)
@@ -1646,7 +1618,6 @@ lemma sorts_bicompose_gen:
       "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
         (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
       "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-      "binds_none (br_env x) (data_clash_bc st rule x)"
   shows "shyps_ok (bc_data (th_sign st) i st flatten e rule x)"
   unfolding shyps_ok_def
 proof
@@ -1661,32 +1632,12 @@ proof
     and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
-    and nb: "binds_none (br_env x) (bc_clash ?st ?rule x)"
-    using H by (simp_all add: R bc_scons_raw data_clash_bc_def data_vars_def bc_clash_def)
-  from sorts_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb]
+    using H by (simp_all add: R bc_scons_raw)
+  from sorts_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)]
   have "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
   with S True H(3) show "csorts_ok (th_sign (bc_data (th_sign st) i st flatten e rule x))
       (th_shyps (bc_data (th_sign st) i st flatten e rule x))"
     by (auto simp: bc_data_def shyps_ok_def csorts_ok_def)
-qed
-
-lemma sorts_bicompose':
-  assumes D: "dsem TYPE('u) st" "dsem TYPE('u) rule" and S: "shyps_ok st" "shyps_ok rule"
-    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
-      "data_scons2 st rule"
-      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
-      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
-        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
-      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nm: "data_names_bc incremented st rule x"
-  shows "shyps_ok (bc_data (th_sign st) i st flatten e rule x)"
-  using nm unfolding data_names_bc_def
-proof
-  assume "incremented \<longrightarrow> data_vcons2 st rule"
-  then show ?thesis by (rule sorts_bicompose[OF D S H(1-4) _ H(5-7)])
-next
-  assume "binds_none (br_env x) (data_clash_bc st rule x)"
-  then show ?thesis by (rule sorts_bicompose_gen[OF D S H])
 qed
 
 lemma sorts_biresolution_gen:
@@ -1697,7 +1648,6 @@ lemma sorts_biresolution_gen:
     and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
     and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
     and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
-    and nb: "binds_none (br_env x) (data_clash_bres st i rule x)"
   shows "shyps_ok (bres_data (th_sign st) i st e rule x)"
   unfolding shyps_ok_def
 proof
@@ -1724,8 +1674,7 @@ proof
         (th_prop (lift_rule goal (th_maxidx (rp st)) (rp rule))) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
     unfolding data_clash_bres_def G by (simp add: data_vars_def thm_rep.truncate_def)
-  have nf: "nfree (br_env x)" using nb by (rule nfree_binds_none)
-  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g nf L]
+  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g L]
   have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 nm(2)]])
   from r have sr: "th_sign rule = ?c" and Sr: "shyps_ok rule" using sg S(2) by fastforce+
@@ -1736,26 +1685,6 @@ proof
   with S(1) Sr ps sr show "csorts_ok (th_sign (bres_data (th_sign st) i st e rule x))
       (th_shyps (bres_data (th_sign st) i st e rule x))"
     by (auto simp: bres_data_def shyps_ok_def csorts_ok_def)
-qed
-
-lemma sorts_biresolution':
-  assumes D: "dsem TYPE('u) st" "\<forall>r\<in>set brules. dsem TYPE('u) (snd r)"
-    and S: "shyps_ok st" "\<forall>r\<in>set brules. shyps_ok (snd r)"
-    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
-    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
-    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
-    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
-    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
-    and nm: "data_names_bres st brules i rule x"
-  shows "shyps_ok (bres_data (th_sign st) i st e rule x)"
-  using nm unfolding data_names_bres_def
-proof
-  assume "data_vcons st \<and> (\<forall>r\<in>set brules. data_vcons (snd r))"
-  with cs have "data_cons st" "\<forall>r\<in>set brules. data_cons (snd r)" by (simp_all add: data_cons_iff)
-  then show ?thesis by (rule sorts_biresolution[OF D S cfg vl sg _ _ br res])
-next
-  assume "binds_none (br_env x) (data_clash_bres st i rule x)"
-  then show ?thesis by (rule sorts_biresolution_gen[OF D S cfg vl sg cs br res])
 qed
 
 lemma sorts_axiom:
@@ -1848,13 +1777,13 @@ subsection \<open>Soundness\<close>
 
 text \<open>Soundness and the invariant of the sort hypotheses, by one induction over the rules:\<close>
 
-lemma derivable_inv: "derivable d \<Longrightarrow> dsem TYPE('u) d \<and> shyps_ok d"
-proof (induction rule: derivable.induct)
+lemma derivable_inv: "derivable_gen g d \<Longrightarrow> dsem TYPE('u) d \<and> shyps_ok d"
+proof (induction rule: derivable_gen.induct)
   case (biresolution st brules cfg vl trace match_flg i s0 x e rule)
-  then show ?case by (intro conjI sound_biresolution' sorts_biresolution') auto
+  then show ?case by (intro conjI sound_biresolution_gen sorts_biresolution_gen) auto
 next
   case (bicompose st rule cfg vl i stpairs Bs Bi C flatten match_flg incremented e nsubgoal xq x)
-  then show ?case by (intro conjI sound_bicompose' sorts_bicompose') auto
+  then show ?case by (intro conjI sound_bicompose_gen sorts_bicompose_gen) auto
 next
   case (assumption st cfg i s0 vl r)
   then show ?case by (intro conjI sound_assumption_gen sorts_assumption_gen) auto
@@ -1885,13 +1814,16 @@ qed ((elim conjE)?, rule conjI, (rule sound_rules; assumption),
 theorem derivable_sem: "derivable d \<Longrightarrow> dsem TYPE('u) d"
   using derivable_inv by blast
 
+lemma derivable_gen_sem: "derivable_gen g d \<Longrightarrow> dsem TYPE('u) d"
+  using derivable_inv by blast
+
 text \<open>
   The sort hypotheses of derivable data over a well-formed signature are finitely many sorts
   over its classes.
 \<close>
 
 theorem derivable_shyps:
-  assumes "derivable d" "pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d))"
+  assumes "derivable_gen g d" "pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d))"
   shows "finite (th_shyps d)" "\<forall>S\<in>th_shyps d. sort_ok (sg_alg (th_sign d)) S"
   using derivable_inv[OF assms(1), where 'u = unit] assms(2) by (auto dest: shyps_okD)
 

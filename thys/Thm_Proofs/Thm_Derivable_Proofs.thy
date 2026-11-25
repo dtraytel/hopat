@@ -535,7 +535,7 @@ lemma prfs_assumption_gen:
   assumes D: "dsem TYPE('u) st"
     and P: "dprf st"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_scons st" "okT (assumption i (rp st)) s0"
-      "aresult (unify_ops cfg vl) s0 r" "binds_none (ar_env r) (data_clash st)"
+      "aresult (unify_ops cfg vl) s0 r"
   shows "dprf (ares_data st (aseq_ctx s0) r)"
 proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
   case False
@@ -548,10 +548,9 @@ next
   have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)"
     and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?st)) (th_prop (rep_of ?st)))"
     and a: "okT (assumption i (rep_of ?st)) s0"
-    and nb: "binds_none (ar_env r) (ares_clash ?st)"
-    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
+    using H by (simp_all add: R data_scons_def)
   show ?thesis
-    using proofs_ok_thm_of_ares_gen[OF ps cfg sc a H(4) nb] P
+    using proofs_ok_thm_of_ares_gen[OF ps cfg sc a H(4)] P
     by (simp add: dprf_def thm_of_ares_raw R ares_data_def)
 qed
 
@@ -623,7 +622,6 @@ lemma prfs_bicompose_gen:
       "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
         (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
       "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-      "binds_none (br_env x) (data_clash_bc st rule x)"
   shows "dprf (bc_data (th_sign st) i st flatten e rule x)"
 proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
   case False
@@ -638,31 +636,10 @@ next
     and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
-    and nb: "binds_none (br_env x) (bc_clash ?st ?rule x)"
-    using H by (simp_all add: R bc_scons_raw data_clash_bc_def data_vars_def bc_clash_def)
+    using H by (simp_all add: R bc_scons_raw)
   show ?thesis
-    using proofs_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb] P
+    using proofs_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)] P
     by (simp add: dprf_def thm_of_bc_raw R bc_data_def)
-qed
-
-lemma prfs_bicompose':
-  assumes D: "dsem TYPE('u) st" "dsem TYPE('u) rule"
-    and P: "dprf st" "dprf rule"
-    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
-      "data_scons2 st rule"
-      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
-      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
-        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
-      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-    and nm: "data_names_bc incremented st rule x"
-  shows "dprf (bc_data (th_sign st) i st flatten e rule x)"
-  using nm unfolding data_names_bc_def
-proof
-  assume "incremented \<longrightarrow> data_vcons2 st rule"
-  then show ?thesis by (rule prfs_bicompose[OF D P H(1-4) _ H(5-7)])
-next
-  assume "binds_none (br_env x) (data_clash_bc st rule x)"
-  then show ?thesis by (rule prfs_bicompose_gen[OF D P H])
 qed
 
 lemma prfs_biresolution:
@@ -752,7 +729,6 @@ lemma prfs_biresolution_gen:
     and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
     and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
     and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
-    and nb: "binds_none (br_env x) (data_clash_bres st i rule x)"
   shows "dprf (bres_data (th_sign st) i st e rule x)"
 proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
   case False
@@ -779,8 +755,7 @@ next
         (th_prop (lift_rule goal (th_maxidx (rp st)) (rp rule))) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
     unfolding data_clash_bres_def G by (simp add: data_vars_def thm_rep.truncate_def)
-  have nf: "nfree (br_env x)" using nb by (rule nfree_binds_none)
-  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g nf L]
+  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g L]
   have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 nm(2)]])
   from r have sr: "th_sign rule = ?c" and Dr: "dsem TYPE('u) rule" using sg D(2) by fastforce+
@@ -836,27 +811,6 @@ next
   show ?thesis using po by (simp add: dprf_def bres_data_def)
 qed
 
-lemma prfs_biresolution':
-  assumes D: "dsem TYPE('u) st" "\<forall>r\<in>set brules. dsem TYPE('u) (snd r)"
-    and P: "dprf st" "\<forall>r\<in>set brules. dprf (snd r)"
-    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
-    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
-    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
-    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
-    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
-    and nm: "data_names_bres st brules i rule x"
-  shows "dprf (bres_data (th_sign st) i st e rule x)"
-  using nm unfolding data_names_bres_def
-proof
-  assume "data_vcons st \<and> (\<forall>r\<in>set brules. data_vcons (snd r))"
-  with cs have "data_cons st" "\<forall>r\<in>set brules. data_cons (snd r)" by (simp_all add: data_cons_iff)
-  then show ?thesis by (rule prfs_biresolution[OF D P cfg vl sg _ _ br res])
-next
-  assume "binds_none (br_env x) (data_clash_bres st i rule x)"
-  then show ?thesis by (rule prfs_biresolution_gen[OF D P cfg vl sg cs br res])
-qed
-
-
 subsection \<open>Soundness\<close>
 
 lemmas prfs_rules =
@@ -869,38 +823,38 @@ lemmas prfs_rules =
 
 text \<open>The proofs of derivable data are valid, by induction over the rules:\<close>
 
-lemma derivable_prf: "derivable d \<Longrightarrow> dprf d"
-proof (induction rule: derivable.induct)
+lemma derivable_prf: "derivable_gen uc d \<Longrightarrow> dprf d"
+proof (induction rule: derivable_gen.induct)
   case (biresolution st brules cfg vl trace match_flg i s0 x e rule)
-  then show ?case by (intro prfs_biresolution'[where 'u = unit]) (auto intro: derivable_sem)
+  then show ?case by (intro prfs_biresolution_gen[where 'u = unit]) (auto intro: derivable_gen_sem)
 next
   case (bicompose st rule cfg vl i stpairs Bs Bi C flatten match_flg incremented e nsubgoal xq x)
-  then show ?case by (intro prfs_bicompose'[where 'u = unit]) (auto intro: derivable_sem)
+  then show ?case by (intro prfs_bicompose_gen[where 'u = unit]) (auto intro: derivable_gen_sem)
 next
   case (assumption st cfg i s0 vl r)
-  then show ?case by (intro prfs_assumption_gen[where 'u = unit]) (auto intro: derivable_sem)
+  then show ?case by (intro prfs_assumption_gen[where 'u = unit]) (auto intro: derivable_gen_sem)
 next
   case (flexflex_rule th cfg vl s0 env r)
-  then show ?case by (intro prfs_flexflex_rule_gen[where 'u = unit]) (auto intro: derivable_sem)
+  then show ?case by (intro prfs_flexflex_rule_gen[where 'u = unit]) (auto intro: derivable_gen_sem)
 next
   case (strip_shyps th d gts)
-  note D = derivable_sem[OF strip_shyps.hyps(1), where 'u = unit]
+  note D = derivable_gen_sem[OF strip_shyps.hyps(1), where 'u = unit]
   show ?case
     by (rule prfs_strip_shyps[OF D strip_shyps.IH])
       (use strip_shyps.hyps derivable_shyps[OF strip_shyps.hyps(1)] in auto)
 next
   case (unconstrainT th invent r box zn)
-  note D = derivable_sem[OF unconstrainT.hyps(1), where 'u = unit]
+  note D = derivable_gen_sem[OF unconstrainT.hyps(1), where 'u = unit]
   show ?case
     by (rule prfs_unconstrainT[OF D unconstrainT.IH])
       (use unconstrainT.hyps derivable_shyps[OF unconstrainT.hyps(1)] in auto)
 next
   case (transfer th c')
-  then show ?case by (intro prfs_transfer[where 'u = unit]) (auto intro: derivable_sem)
-qed (rule prfs_rules; (assumption | rule derivable_sem[where 'u = unit])+)+
+  then show ?case by (intro prfs_transfer[where 'u = unit]) (auto intro: derivable_gen_sem)
+qed (rule prfs_rules; (assumption | rule derivable_gen_sem[where 'u = unit])+)+
 
 theorem derivable_proofs:
-  assumes "derivable d" "is_prf_sig (th_sign d)"
+  assumes "derivable_gen uc d" "is_prf_sig (th_sign d)"
   shows "proofs_ok d"
   using derivable_prf[OF assms(1)] assms(2) by (simp add: dprf_def)
 
@@ -909,7 +863,7 @@ text \<open>
   of their signature, and their proofs are valid.
 \<close>
 
-theorem derivable_sound: "derivable d \<Longrightarrow> dok TYPE('u) d"
-  by (simp add: dok_iff derivable_sem derivable_prf)
+theorem derivable_sound: "derivable_gen uc d \<Longrightarrow> dok TYPE('u) d"
+  by (simp add: dok_iff derivable_gen_sem derivable_prf)
 
 end

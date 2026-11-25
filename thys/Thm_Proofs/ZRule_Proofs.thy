@@ -953,7 +953,6 @@ theorem zflexflex_proof_valid:
     and ei: "einv A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok pf"
-    and nf: "nfree env"
   shows "zvalid ax H (th_tpairs th) q (th_prop th)"
 proof -
   from z obtain P where P: "ok (full_prop_of (th_tpairs th0) (th_prop th0)) P"
@@ -991,7 +990,7 @@ proof -
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     let ?E = "ieqs \<rho> \<sigma> (th_tpairs th)"
-    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma> nf]) blast
+    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     let ?\<rho>1 = "\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S"
     have mix: "ap ?\<rho>1 \<sigma>' Y = ap \<rho>' \<sigma>' Y" if "ttvars Y \<subseteq> ttvars P" for Y
@@ -1086,7 +1085,7 @@ context prf_sig_gen
 begin
 
 lemma iext_empty_env: "cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> iext (empty_env m) \<rho> \<sigma> \<rho> \<sigma>"
-  by (simp add: iext_def solution_def wt_env_def cinst_def gsubst_def tsol_def)
+  by (simp add: iext_def gsolution_def ghosts_def solution_def wt_env_def cinst_def gsubst_def tsol_def)
 
 lemma empty_env_props: "tacyc (tyenv (empty_env m))" "tcons_env (tyenv (empty_env m))" "eneg (empty_env m)"
   by (simp_all add: tacyc_def tcons_env_def eneg_def tdep_def tyenv_ok_def acyclic_def)
@@ -1255,11 +1254,10 @@ theorem zares_proof_valid:
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    and solves: "\<And>\<rho>' \<sigma>' F t u e. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
+    and solves: "\<And>\<rho>' \<sigma>' F t u e. gsolution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
       (\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
       (t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) \<Longrightarrow>
       eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
-    and nf: "nfree env"
   shows "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
 proof -
   let ?n = "integer_of_nat l + 1"
@@ -1357,7 +1355,7 @@ proof -
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     let ?E = "ieqs \<rho> \<sigma> ntps"
-    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma> nf]) blast
+    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     let ?\<rho>1 = "\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S"
     have ie1: "iext env ?\<rho>1 \<sigma>' \<rho>' \<sigma>'" by (rule iext_mix[OF ie])
@@ -1404,7 +1402,7 @@ proof -
     qed
     have sv: "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       if "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)" for t u e'
-      by (rule solves[OF i(3) ci' stps that])
+      by (rule solves[OF i(8) ci' stps that])
     have "prf_ok ax H (ieqs ?\<rho>1 \<sigma>' (th_tpairs state)) e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop state))"
       by (rule prf_validD[OF w0(2) cinst_mix[OF \<rho> i(1)] i(2)])
     then have "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop state))"

@@ -124,7 +124,7 @@ theorem assumption_proof_ok:
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and pr: "ares_proof (aseq_ctx s0) r pf = returnW q"
     and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-    and nf: "nfree (ar_env r)" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
 proof -
   obtain tpairs Bs Bi C params asms concl l env tps A K X where
@@ -136,23 +136,20 @@ proof -
     and re: "ar_env r = env" and ei: "einv A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    by (rule assumption_data[OF a res cfg st nf])
-  have nf': "nfree env" using nf re by simp
+    by (rule assumption_data[OF a res cfg st])
   let ?ctx = "ACtx (th_maxidx state) tpairs Bs Bi C params concl"
   have pr': "ares_proof ?ctx r pf = returnW q" using pr s0 by simp
   have w: "wtp (th_prop state)" using st by (simp add: thm_inv_def wt_thm_def)
   have "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
   proof (rule ares_proof_valid[OF d ap l nt pr' p(1) w ei wi tw])
-    show "nfree env" by (rule nf')
-  next
-    fix \<rho>' \<sigma>' F t u e assume sol: "solution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
+    fix \<rho>' \<sigma>' F t u e assume sol: "gsolution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
       and ts: "\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and tu: "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
-    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu nf'])
+    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu])
   qed
   moreover have "prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
   proof -
-    have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st nf l0] re by simp
+    have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st l0] re by simp
     from pr' re obtain Ns where Ns: "liftMP (mapM (norm_term env) Bs) = returnW Ns"
       and q: "(if env_is_empty env then returnW (assumption_proof Ns Bi (integer_of_nat l + 1) pf)
         else norm_proof_remove_types env (assumption_proof Ns Bi (integer_of_nat l + 1) pf)) = returnW q"
@@ -179,7 +176,7 @@ theorem assumption_zproof_ok:
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and z: "ares_zproof ztargs state (aseq_ctx s0) r pf = return q"
     and p: "zvalid ax H (th_tpairs state) pf (th_prop state)" "zinv pf" "znolb 0 pf"
-    and H: "\<forall>h\<in>H. closed h" and nf: "nfree (ar_env r)" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and H: "\<forall>h\<in>H. closed h" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
 proof -
   obtain tpairs Bs Bi C params asms concl l env tps A K X where
@@ -191,11 +188,10 @@ proof -
     and re: "ar_env r = env" and ei: "einv A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    by (rule assumption_data[OF a res cfg st nf])
-  have nf': "nfree env" using nf re by simp
+    by (rule assumption_data[OF a res cfg st])
   let ?ctx = "ACtx (th_maxidx state) tpairs Bs Bi C params concl"
   have z': "ares_zproof ztargs state ?ctx r pf = return q" using z s0 by simp
-  have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st nf l0] re by simp
+  have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st l0] re by simp
   note e = env_inv_props[OF ev]
   note ds = okT_dest_state[OF d]
   have wS: "wtp (th_prop state)" using st by (simp add: thm_inv_def wt_thm_def)
@@ -206,14 +202,12 @@ proof -
     by (auto simp: pnn_list_implies closed_def loose_bvar_list_implies)
   have "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
   proof (rule zares_proof_valid[OF d ap l nt z' p(1) st _ H _ ei wi e(3,4) e(2) tw])
-    show "nfree env" by (rule nf')
-  next
     show "\<forall>A\<in>set (Bs @ [Bi]). noneg A" using pA pnn_noneg by blast
     show "zconsts_ok pf" using p(2) by (simp add: zinv_def)
-    fix \<rho>' \<sigma>' F t u e assume sol: "solution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
+    fix \<rho>' \<sigma>' F t u e assume sol: "gsolution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
       and ts: "\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and tu: "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
-    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu nf'])
+    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu])
   qed
   moreover have "zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
   proof -
@@ -238,7 +232,7 @@ theorem assumption_proof_ok:
     and pr: "ares_proof (aseq_ctx s0) r pf = returnW q"
     and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
   shows "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
-  by (rule assumption_proof_ok[OF a res cfg st pr p nfree0]) simp
+  by (rule assumption_proof_ok[OF a res cfg st pr p]) simp
 
 theorem assumption_zproof_ok:
   assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
@@ -247,7 +241,7 @@ theorem assumption_zproof_ok:
     and p: "zvalid ax H (th_tpairs state) pf (th_prop state)" "zinv pf" "znolb 0 pf"
     and H: "\<forall>h\<in>H. closed h"
   shows "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
-  by (rule assumption_zproof_ok[OF a res cfg st z p H nfree0]) simp
+  by (rule assumption_zproof_ok[OF a res cfg st z p H]) simp
 
 end
 
@@ -272,7 +266,6 @@ proof -
     show "wtp (th_prop th)" using ws by (simp add: wt_thm_def)
     show "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)" if "(t, u) \<in> set (th_tpairs th)" for t u
       using ws that by (auto simp: wt_thm_def)
-    show "nfree env" by (rule nf)
   qed
   with norm_proof_remove_types_closed[OF nq ev p(2,3)] show ?thesis by blast
 qed
@@ -292,7 +285,7 @@ proof -
   note e = env_inv_props[OF ev]
   have zc: "zconsts_ok pf" using p(2) by (simp add: zinv_def)
   have "zvalid ax H (th_tpairs th') q (th_prop th')"
-    by (rule zflexflex_proof_valid[OF n ne z p(1) st ei wi e(3,4) e(2) H zc nf])
+    by (rule zflexflex_proof_valid[OF n ne z p(1) st ei wi e(3,4) e(2) H zc])
   moreover have "zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
   proof -
     from z obtain fp where fp: "ok (full_prop_of (th_tpairs th) (th_prop th)) fp"
@@ -436,7 +429,6 @@ lemma proofs_ok_thm_of_ares_gen:
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
     and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
     and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
-    and nb: "binds_none (ar_env r) (ares_clash state)"
     and psig: "is_prf_sig (sign_of state)"
     and po_state: "is_prf_sig (sign_of state) \<Longrightarrow> proofs_ok (rep_thm state)"
   shows "proofs_ok (thm_of_ares (state :: 'u pure_thm) (aseq_ctx s0) r)"
@@ -446,13 +438,12 @@ proof -
   interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
   have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
     using pure_thm_inv0[OF ps] sc by simp
-  have nfL: "nfree (ar_env r)" using nb by (rule nfree_binds_none)
   have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
   have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
     by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  note ti = assumption_thm_inv[OF a res cfg st nfL l0]
+  note ti = assumption_thm_inv[OF a res cfg st l0]
   obtain tpairs Bs Bi C params asms concl l env tps where
     "okT (dest_state (rep_of state) i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
     "s0 = AQ_Try (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) asms 1" "l < length asms"
@@ -477,7 +468,7 @@ proof -
     have vq: "prf_valid (sg_ax ?c) (set (hyps_of state)) (th_tpairs (rep_of state)) pf (th_prop (rep_of state))"
       "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
       using po pf by (simp_all add: proofs_ok_def Let_def)
-    from assumption_proof_ok[OF a res cfg st pr vq nfL l0]
+    from assumption_proof_ok[OF a res cfg st pr vq l0]
     show "prf_valid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) p (th_prop ?th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
       by (simp add: thm_of_ares_def)
   next
@@ -489,7 +480,7 @@ proof -
       "zinv pf" "znolb 0 pf" "zhyps_ok pf"
       using po pf by (simp_all add: proofs_ok_def Let_def)
     have H: "\<forall>h\<in>set (hyps_of state). closed h" using ws by (auto simp: wt_thm_def dest: wtpD(1))
-    note zr = assumption_zproof_ok[OF a res cfg st z vq(1-3) H nfL l0]
+    note zr = assumption_zproof_ok[OF a res cfg st z vq(1-3) H l0]
     have "zhyps_ok z" using zhyps_ok_mono[OF vq(4)] zr by blast
     with zr show "zvalid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) z (th_prop ?th) \<and> zinv z \<and> znolb 0 z \<and>
         zhyps_ok z"

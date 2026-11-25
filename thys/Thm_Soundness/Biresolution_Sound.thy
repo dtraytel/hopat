@@ -454,9 +454,9 @@ qed
 text \<open>
   The condition on the names of the variables of a result \<open>x\<close> of biresolution with the rule
   \<open>rule\<close>. Without loose names: each name of a variable of a rule has one type. With loose
-  names: the environment of the result binds no loose name, every name with two types in the
-  proof state, the lifted rule or the new premises is loose, and loose names have nonnegative
-  indices.
+  names: every name with two types in the proof state, the lifted rule or the new premises is
+  loose, and loose names have nonnegative indices. The environment of the result may bind
+  loose names.
 \<close>
 
 definition bres_names :: "('r \<Rightarrow> thm_rep) \<Rightarrow> (bool \<times> 'r) list \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> 'r \<Rightarrow> bres \<Rightarrow> bool" where
@@ -466,7 +466,6 @@ definition bres_names :: "('r \<Rightarrow> thm_rep) \<Rightarrow> (bool \<times
         vtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
           vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
             (th_prop (lift_rule goal (th_maxidx state) (rep rule)))))) \<and>
-    nfree (br_env x) \<and>
     (\<forall>goal. okT (cprem_of state i) goal \<longrightarrow> loose \<noteq> {} \<longrightarrow>
       lvtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
         vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
@@ -485,7 +484,6 @@ lemma bres_namesD:
         vtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
           vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
             (th_prop (lift_rule goal (th_maxidx state) (rep rule)))))"
-    and "nfree (br_env x)"
     and "okT (cprem_of state i) goal \<Longrightarrow> loose \<noteq> {} \<Longrightarrow>
       lvtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
         vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
@@ -529,7 +527,7 @@ proof (cases "loose = {}")
   qed
 next
   case False
-  show ?thesis unfolding Y by (rule lvtcons_mono[OF bres_namesD(3)[OF nm g False]]) blast
+  show ?thesis unfolding Y by (rule lvtcons_mono[OF bres_namesD(2)[OF nm g False]]) blast
 qed
 
 text \<open>The results of \<^const>\<open>biresolution\<close> of theorems are theorems (and their indices are not negative):\<close>
@@ -573,12 +571,12 @@ proof -
     using c(2,3) by (auto simp: pthm_of_def)
   have lV': "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
-    using nmD(3)[OF g] c(2,3) by simp
+    using nmD(2)[OF g] c(2,3) by simp
   have lL': "loose \<subseteq> fst ` (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
-    using nmD(4)[OF g] c(2,3) by simp
+    using nmD(3)[OF g] c(2,3) by simp
   show ?thesis
-    by (rule bicompose_aux_thm_inv[OF ok rx cfg sS lr _ c(8) lU vl nmD(2) lV' lL']) (use c(7) in simp)
+    by (rule bicompose_aux_thm_inv[OF ok rx cfg sS lr _ c(8) lU vl lV' lL']) (use c(7) in simp)
 qed
 
 end
@@ -632,7 +630,7 @@ proof -
     cfg vl True match_flg True "th_maxidx state" stpairs Bs Bi C True eres_flg "th_maxidx ?lr" "th_tpairs ?lr"
     "th_prop ?lr" "nprems_of (rep rule)" hs "hyps rule"
     by unfold_locales (use cfg c(4,6-8) lU vl in simp_all)
-  show ?thesis by (rule bc.bicompose_aux_valid[OF ok rx vS vl' nmD(2)])
+  show ?thesis by (rule bc.bicompose_aux_valid[OF ok rx vS vl'])
 qed
 
 end

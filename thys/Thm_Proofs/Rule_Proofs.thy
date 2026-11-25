@@ -2643,11 +2643,10 @@ theorem ares_proof_valid:
     and ei: "einv A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    and solves: "\<And>\<rho>' \<sigma>' F t u e. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
+    and solves: "\<And>\<rho>' \<sigma>' F t u e. gsolution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
       (\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
       (t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) \<Longrightarrow>
       eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
-    and nf: "nfree env"
   shows "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
 proof -
   let ?n = "integer_of_nat l + 1"
@@ -2689,7 +2688,7 @@ proof -
   proof (rule prf_validI, unfold thm_rep.simps)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     let ?E = "ieqs \<rho> \<sigma> ntps"
-    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma> nf]) blast
+    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T
@@ -2732,7 +2731,7 @@ proof -
     qed
     have sv: "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       if "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)" for t u e'
-      by (rule solves[OF i(3) ci' stps that])
+      by (rule solves[OF i(8) ci' stps that])
     have "prf_ok ax H (ieqs \<rho>' \<sigma>' (th_tpairs state)) e [] (prf_ap \<rho>' \<sigma>' pf) (ap \<rho>' \<sigma>' (th_prop state))"
       by (rule prf_validD[OF p i(1,2)])
     then have "prf_ok ax H ?E e [] (prf_ap \<rho>' \<sigma>' pf) (ap \<rho>' \<sigma>' (th_prop state))"
@@ -3118,7 +3117,6 @@ theorem flexflex_proof_valid:
     and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)" and wP: "wtp (th_prop th0)"
     and tw: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
     and ei: "einv A K env" and wi: "winv env X"
-    and nf: "nfree env"
   shows "prf_valid ax H (th_tpairs th) q (th_prop th)"
 proof -
   obtain ntps P where nt: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
@@ -3130,7 +3128,7 @@ proof -
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     let ?E = "ieqs \<rho> \<sigma> (th_tpairs th)"
-    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma> nf]) blast
+    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T

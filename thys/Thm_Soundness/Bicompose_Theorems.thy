@@ -101,52 +101,79 @@ proof -
   then show ?thesis by simp
 qed
 
-text \<open>A normalized term:\<close>
+text \<open>The most general solution of the type environment of a well-formed environment:\<close>
+
+lemma canonical_tsol0:
+  assumes ei: "einv A K env" and wi: "winv env X"
+  shows "wt_env (tsol0 (tyenv env)) env" "vinv (tsol0 (tyenv env)) env X" "cert_inst (tsol0 (tyenv env))"
+    "tsol (tyenv env) (tsol0 (tyenv env))"
+proof -
+  note e = einvD[OF ei]
+  let ?\<rho> = "tsol0 (tyenv env)"
+  have \<rho>: "tsol (tyenv env) ?\<rho>" "wsinst alg ?\<rho>" "cert_inst ?\<rho>" by (rule tsol0[OF e(2,12,9)])+
+  show "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi \<rho>(1,3)] by blast+
+  show "cert_inst ?\<rho>" "tsol (tyenv env) ?\<rho>" by (fact \<rho>(3) \<rho>(1))+
+qed
+
+text \<open>
+  A normalized term. The environment may bind names that occur with several types: a successful
+  normalization has followed only bindings whose types agree with those of the occurrences, so
+  its result is well-typed, and the variables that are left are unbound.
+\<close>
 
 lemma norm_term_props:
   assumes ei: "einv A K env" and wi: "winv env Y" and vX: "vars X \<subseteq> Y \<union> evars env"
     and tX: "ttvars X \<subseteq> tvars_env (tyenv env) \<union> A" and ty: "e \<turnstile> inst (tsol0 (tyenv env)) X : T"
-    and lb: "\<not> loose_bvar X k" "0 \<le> k" and nt: "ok (norm_term env X) X'" and nf: "nfree env"
+    and lb: "\<not> loose_bvar X k" "0 \<le> k" and nt: "ok (norm_term env X) X'"
   shows "e \<turnstile> X' : T" "\<not> loose_bvar X' k"
     "vars X' \<subseteq> vimg (tyenv env) (vars X \<union> evars env)" "ttvars X' \<subseteq> tvars_env (tyenv env) \<union> A"
 proof -
   let ?\<theta> = "tyenv env"
-  let ?\<rho> = "tsol0 ?\<theta>" and ?\<sigma> = "esol (tsol0 ?\<theta>) env"
-  note e = einvD[OF ei] and c = canonical_solution[OF ei wi nf]
-  have nac: "acyc env" "closed_env env" "tacyc ?\<theta>" using e(3,6) wt_env_closed_env[OF c(2)] by blast+
-  have red: "env_apply env X \<rightarrow>\<^sub>\<beta>\<^sup>* X'" by (rule norm_term_env_apply(1)[OF nt nac])
-  have app: "env_apply env X = ap ?\<rho> ?\<sigma> X"
-  proof (rule env_apply_tsol0[OF e(1) e(3) tX _ nf])
-    have "vcons ?\<rho> (Y \<union> evars env)" using c(3) by (simp add: vinv_def)
-    then show "vcons ?\<rho> (vars X \<union> evars env)" by (rule vcons_mono) (use vX in blast)
-  qed
-  have ws: "wt_subst ?\<sigma>" by (rule solutionD(3)[OF c(1)])
-  show "e \<turnstile> X' : T"
-    by (rule typing_beta_reds[OF red]) (simp add: app ap_def typing_vsubst[OF ty ws])
-  have "\<not> loose_bvar (ap ?\<rho> ?\<sigma> X) k" using lb ws by (simp add: gsubst_def)
-  then show "\<not> loose_bvar X' k" using loose_bvar_beta_reds[OF red lb(2)] app by simp
-  have "vars (env_apply env X) \<subseteq> vimg ?\<theta> (vars X \<union> evars env)"
-    using vars_unf_sub[OF nac(1), of X] by (auto simp: env_apply_def vars_inst vimg_def)
-  then show "vars X' \<subseteq> vimg ?\<theta> (vars X \<union> evars env)" using beta_reds_vars[OF red] by blast
-  have "ttvars (env_apply env X) \<subseteq> tvars_env ?\<theta> \<union> A"
-  proof
-    fix p assume "p \<in> ttvars (env_apply env X)"
-    then obtain U where U: "U \<in> typs (unf env X)" "p \<in> tvars (tnorm ?\<theta> U)"
-      by (auto simp: env_apply_def ttvars_def typs_inst)
-    have "tvars U \<subseteq> tvars_env ?\<theta> \<union> A"
-    proof (cases "U \<in> typs X")
-      case True
-      with tX show ?thesis by (auto simp: ttvars_def)
+  let ?\<rho> = "tsol0 ?\<theta>"
+  note e = einvD[OF ei] and c = canonical_tsol0[OF ei wi]
+  note ns = nsoundD[OF norm_term_sound[OF nt c(4) c(1)]]
+  have u: "unb env X'" by (rule norm_term_unb[OF nt])
+  show "e \<turnstile> X' : T" using ns(3)[OF ty] inst_tsol0_unb[OF u] by simp
+  show "\<not> loose_bvar X' k" by (rule ns(2)[OF lb(2,1)])
+  have tc: "tcons ?\<theta> U" if "tvars U \<subseteq> tvars_env ?\<theta> \<union> A" for U by (rule tinv_tcons[OF e(2) that])
+  have tcV: "tcons ?\<theta> U" if xU: "(x, U) \<in> vars X \<union> evars env" for x U
+  proof (rule tc)
+    from xU show "tvars U \<subseteq> tvars_env ?\<theta> \<union> A"
+    proof
+      assume "(x, U) \<in> vars X"
+      with vtvars_ttvars[of x U X] tX show ?thesis by blast
     next
-      case False
-      with U(1) typs_unf[OF nac(1), of X] obtain x V u where "vt_lookup (tenv env) x = Some (V, u)" "U \<in> typs u"
-        by blast
-      with tvinvD(2)[OF e(1) this(1)] show ?thesis by (auto simp: ttvars_def)
+      assume "(x, U) \<in> evars env"
+      with vtvars_evars[OF e(1)] show ?thesis by (auto simp: vtvars_def)
     qed
-    with U(2) tvars_tnorm[OF nac(3), of U] show "p \<in> tvars_env ?\<theta> \<union> A" by blast
   qed
-  then show "ttvars X' \<subseteq> tvars_env ?\<theta> \<union> A"
-    using beta_reds_typs[OF red] by (auto simp: ttvars_def)
+  show "vars X' \<subseteq> vimg ?\<theta> (vars X \<union> evars env)"
+  proof
+    fix v assume v: "v \<in> vars X'"
+    obtain x T' where vx: "v = (x, T')" by (cases v)
+    from ns(1) v vx obtain U where U: "(x, U) \<in> vars X \<union> evars env" "tsubst ?\<rho> T' = tsubst ?\<rho> U"
+      unfolding vsim_def by blast
+    have "\<forall>p\<in>tvars T'. vt_lookup ?\<theta> (fst p) = None"
+      using u vtvars_ttvars[of x T' X'] v vx by (auto simp: unb_def)
+    then have "tsubst ?\<rho> T' = T'" by (rule tsol0_unb)
+    moreover have "tsubst ?\<rho> U = tnorm ?\<theta> U" by (rule tsubst_tsol0[OF e(6) tcV[OF U(1)]])
+    ultimately have "v = (x, tnorm ?\<theta> U)" using U(2) vx by simp
+    with U(1) show "v \<in> vimg ?\<theta> (vars X \<union> evars env)" by (force simp: vimg_def)
+  qed
+  have wiX: "winv env (vars X)" by (rule ur_winv_sub[OF wi vX])
+  have tk: "tok env (vars X \<union> evars env)"
+    by (rule tok_einv[OF ei wiX]) (use vtvars_vars[of X] tX in blast)
+  note r0 = einv_rho0[OF ei]
+  have wte0: "wt_env (rho0 env) env" using winvD[OF wi r0] by blast
+  have "inst (rho0 env) X = inst ?\<rho> X"
+  proof (rule inst_cong)
+    fix U assume "U \<in> typs X"
+    then have "tvars U \<subseteq> tvars_env ?\<theta> \<union> A" using tX by (auto simp: ttvars_def)
+    from tsubst_tsol0[OF e(6) tc[OF this]] show "tsubst (rho0 env) U = tsubst ?\<rho> U" by simp
+  qed
+  with ty have ty0: "e \<turnstile> inst (rho0 env) X : T" by simp
+  from dfdp_ok[OF norm_term_dfd[OF ei tk tX wte0 ty0]] nt
+  show "ttvars X' \<subseteq> tvars_env ?\<theta> \<union> A" by (simp add: npostc_def return_def)
 qed
 
 
@@ -168,22 +195,22 @@ text \<open>A term normalized but for the assumptions that \<^const>\<open>norm_
 lemma norm_term_skip_props:
   "okT (norm_term_skip env n X) X' \<Longrightarrow> einv A K env \<Longrightarrow> winv env Y \<Longrightarrow> vars X \<subseteq> Y \<union> evars env \<Longrightarrow>
     ttvars X \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> e \<turnstile> X : propT \<Longrightarrow> \<not> loose_bvar X k \<Longrightarrow> 0 \<le> k \<Longrightarrow>
-    skip_unb env n X \<Longrightarrow> nfree env \<Longrightarrow>
+    skip_unb env n X \<Longrightarrow>
     ienv (tsol0 (tyenv env)) e \<turnstile> X' : propT \<and> \<not> loose_bvar X' k \<and>
     vars X' \<subseteq> vimg (tyenv env) (vars X \<union> evars env) \<and> ttvars X' \<subseteq> tvars_env (tyenv env) \<union> A"
 proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
   case (1 env n t)
-  note ei = "1.prems"(2) and wi = "1.prems"(3) and nf = "1.prems"(10)
+  note ei = "1.prems"(2) and wi = "1.prems"(3)
   let ?\<theta> = "tyenv env" let ?\<rho> = "tsol0 ?\<theta>"
-  note e = einvD[OF ei] and c = canonical_solution[OF ei wi nf]
+  note e = einvD[OF ei] and c = canonical_tsol0[OF ei wi]
   have ac: "tacyc ?\<theta>" by (rule e(6))
   show ?case
   proof (cases "n = 0")
     case True
     with "1.prems"(1) have "ok (norm_term env t) X'" by (simp add: norm_term_skip.simps)
     have "ienv ?\<rho> e \<turnstile> inst ?\<rho> t : propT"
-      using typing_inst[OF "1.prems"(6) cert_inst_inst_ok[OF c(4)]] by simp
-    from norm_term_props[OF ei wi "1.prems"(4,5) this "1.prems"(7,8) \<open>ok (norm_term env t) X'\<close> nf]
+      using typing_inst[OF "1.prems"(6) cert_inst_inst_ok[OF c(3)]] by simp
+    from norm_term_props[OF ei wi "1.prems"(4,5) this "1.prems"(7,8) \<open>ok (norm_term env t) X'\<close>]
     show ?thesis by simp
   next
     case n: False
@@ -200,15 +227,15 @@ proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
         using ty(1) by (auto simp: all_const_def)
       have lb: "\<not> loose_bvar b (k + 1)" using "1.prems"(7) ty(1) by (simp add: all_const_def)
       from T' have T'': "okT (liftMT (norm_type ?\<theta> T)) T'" by simp
-      from "1.IH"(2)[OF n aTb refl refl T'' b' ei wi _ _ ty(5) lb _ sk nf] "1.prems"(4,5,8) vb tb
+      from "1.IH"(2)[OF n aTb refl refl T'' b' ei wi _ _ ty(5) lb _ sk] "1.prems"(4,5,8) vb tb
       have ib: "(ienv ?\<rho> e)\<langle>0:tsubst ?\<rho> T\<rangle> \<turnstile> b' : propT" "\<not> loose_bvar b' (k + 1)"
         "vars b' \<subseteq> vimg ?\<theta> (vars b \<union> evars env)" "ttvars b' \<subseteq> tvars_env ?\<theta> \<union> A"
         by (auto simp: tsubst_shift)
       have "tsubst ?\<rho> T' = T'" by (rule tsol0_unb) (use norm_type_unb[OF T'] in blast)
-      moreover have "tsubst ?\<rho> T' = tsubst ?\<rho> T" by (rule norm_type_sound[OF T' c(5)])
+      moreover have "tsubst ?\<rho> T' = tsubst ?\<rho> T" by (rule norm_type_sound[OF T' c(4)])
       ultimately have TT: "T' = tsubst ?\<rho> T" by simp
       have cT: "cert_typ alg ar (all_type T')" "cert_typ alg ar T'"
-        using cert_typ_tsubst[OF ty(3) c(4)] cert_typ_tsubst[OF ty(4) c(4)] TT by (simp_all add: all_type_def propT_def)
+        using cert_typ_tsubst[OF ty(3) c(3)] cert_typ_tsubst[OF ty(4) c(3)] TT by (simp_all add: all_type_def propT_def)
       have "tvars T' \<subseteq> tvars_env ?\<theta> \<union> A"
         using TT tvars_tsol0[OF ac, of T] tT "1.prems"(5) by blast
       moreover have "tvars (all_type T') = tvars T'" by (simp add: all_type_def propT_def)
@@ -231,11 +258,11 @@ proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
       have vHB: "vars H \<subseteq> vars t" "vars B \<subseteq> vars t" and tHB: "ttvars H \<subseteq> ttvars t" "ttvars B \<subseteq> ttvars t"
         and lHB: "\<not> loose_bvar H k" "\<not> loose_bvar B k"
         using ty(1) "1.prems"(7) by (auto simp: implies_def)
-      from "1.IH"(1)[OF n None HB refl B' ei wi _ _ ty(5) lHB(2) "1.prems"(8) sk nf] "1.prems"(4,5) vHB tHB
+      from "1.IH"(1)[OF n None HB refl B' ei wi _ _ ty(5) lHB(2) "1.prems"(8) sk] "1.prems"(4,5) vHB tHB
       have iB: "ienv ?\<rho> e \<turnstile> B' : propT" "\<not> loose_bvar B' k"
         "vars B' \<subseteq> vimg ?\<theta> (vars B \<union> evars env)" "ttvars B' \<subseteq> tvars_env ?\<theta> \<union> A" by auto
       have tH: "ienv ?\<rho> e \<turnstile> H : propT"
-        using typing_inst[OF ty(4) cert_inst_inst_ok[OF c(4)]] inst_tsol0_unb[OF uH] by simp
+        using typing_inst[OF ty(4) cert_inst_inst_ok[OF c(3)]] inst_tsol0_unb[OF uH] by simp
       have "vars H \<subseteq> vimg ?\<theta> (vars t \<union> evars env)" by (rule vimg_unb[OF ac uH]) (use vHB in blast)
       moreover have "ttvars implies = {}" by (simp add: implies_def imp_type_def propT_def)
       moreover have "vimg ?\<theta> (vars B \<union> evars env) \<subseteq> vimg ?\<theta> (vars t \<union> evars env)"
@@ -450,7 +477,7 @@ text \<open>
 lemma uresult_fresh:
   assumes r: "uresult A env tus (El_R env' tps)" and si: "sinv A K X env (tdps tus)"
     and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
-    and nl: "v \<notin> loose" and nf': "nfree env'"
+    and nl: "v \<notin> loose"
   shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
 proof
   assume vin: "v \<in> fst ` (evars env' \<union> dvars (tdps tps))"
@@ -465,7 +492,7 @@ proof
   have vT: "vinv ?\<rho> env' ({(v, T)} \<union> dvars (tdps tps))" for T
   proof -
     have "vinv ?\<rho> env ({(v, T)} \<union> dvars (tdps tus))" by (rule ur_vinv_fresh[OF w(3)]) (use v in auto)
-    from dstepD(2)[OF ds r0(1) extends_refl w(1,2) this nf'] show ?thesis by blast
+    from dstepDg(1)[OF ds r0(1) extends_refl w(1,2) this] show ?thesis by blast
   qed
   from vin obtain U where U: "(v, U) \<in> evars env' \<union> dvars (tdps tps)" by force
   have "vcons ?\<rho> ({(v, U \<rightarrow>\<^sub>T U)} \<union> dvars (tdps tps) \<union> evars env')"
@@ -515,7 +542,6 @@ theorem bicompose_aux_thm_inv_gen:
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "incremented \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
-    and nf: "nfree (br_env r)"
     and lV: "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
       (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
     and lL: "loose \<subseteq> fst ` (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
@@ -565,8 +591,7 @@ next
     by (auto simp: rchar_def sel)
   have si: "sinv ?A ?A ?X env (tdps tus)" using itsok_sinv[OF its sa] by (simp add: sel)
   have rr0: "br_env r = env' \<and> br_newas r = na" using ad by (cases rule: addth_cases) auto
-  have nf': "nfree env'" using nf rr0 by simp
-  have urs: "uresult ?A env tus (El_R env' tps)" by (rule uresD[OF ur nf' fX fA si])
+  have urs: "uresult ?A env tus (El_R env' tps)" by (rule uresD[OF ur fX fA si])
   from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'" and tn: "tnew ?A env A' env'"
     and ff: "ffres A' K' X' env' tps" by blast
   have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
@@ -659,12 +684,12 @@ next
       with lvtcons_vcons[OF lz, of \<rho>] show "vinv \<rho> env ?Z" by (simp add: vinv_def ev)
     qed
   qed
-  have wY': "winv env' (?BC \<union> ?V)" by (rule uresult_winv[OF urs si wZ nf'])
+  have wY': "winv env' (?BC \<union> ?V)" by (rule uresult_winv[OF urs si wZ])
   have t0: "tsol (tyenv env) ?\<rho>" by (rule extends_tsol[OF r0(1) ext])
   from winvD[OF wZ t0 r0(2)] have w0: "wt_env ?\<rho> env" and v0: "vinv ?\<rho> env ((?BC \<union> ?V) \<union> dvars (tdps tus))"
     by blast+
   have "vinv ?\<rho> env' ((?BC \<union> ?V) \<union> dvars (tdps tps))"
-    using dstepD(2)[OF ds r0(1) extends_refl w0 sinv_dtyped[OF si t0 r0(2)] v0 nf'] by blast
+    using dstepDg(1)[OF ds r0(1) extends_refl w0 sinv_dtyped[OF si t0 r0(2)] v0] by blast
   define S0 where "S0 = ?BC \<union> ?V \<union> dvars (tdps tps) \<union> evars env'"
   have vS: "vcons ?\<rho> S0" "below (maxidx env') S0"
     using \<open>vinv ?\<rho> env' ((?BC \<union> ?V) \<union> dvars (tdps tps))\<close> by (simp_all add: vinv_def S0_def Un_assoc)
@@ -713,7 +738,7 @@ next
           have "x \<in> fst ` (evars env \<union> dvars (tdps tus))"
           proof (rule ccontr)
             assume "x \<notin> fst ` (evars env \<union> dvars (tdps tus))"
-            from uresult_fresh[OF urs si this True nl nf'] 3 show False by force
+            from uresult_fresh[OF urs si this True nl] 3 show False by force
           qed
           then obtain U where "(x, U) \<in> dvars (tdps tus)" using ev by auto
           with dX have "(x, U) \<in> ?X" by blast
@@ -755,17 +780,17 @@ next
     qed
     show "\<forall>p\<in>ttvars Z. snd (fst p) \<le> maxidx env'" using that bA by blast
   qed
-  have c': "solution (tsol0 ?\<theta>) (esol (tsol0 ?\<theta>) env') env'" "cert_inst (tsol0 ?\<theta>)" "tsol ?\<theta> (tsol0 ?\<theta>)"
-    using canonical_solution[OF ei' wi' nf'] by blast+
+  have c': "cert_inst (tsol0 ?\<theta>)" "tsol ?\<theta> (tsol0 ?\<theta>)"
+    by (rule canonical_tsol0[OF ei' wi'])+
   have SV: "?BC \<union> ?V \<subseteq> S0" "evars env' \<subseteq> S0" "dvars (tdps tps) \<subseteq> S0" by (auto simp: S0_def)
   text \<open>Normalized propositions:\<close>
   have gN: "wtp Z' \<and> ?good Z'"
     if "wtp Z" "vars Z \<subseteq> ?BC \<union> ?V" "ttvars Z \<subseteq> ?A" "ok (norm_term env' Z) Z'" for Z Z'
   proof -
     have ty: "(\<lambda>_. propT) \<turnstile> inst (tsol0 ?\<theta>) Z : propT"
-      using typing_inst[OF wtpD(2)[OF that(1), of "\<lambda>_. propT"] cert_inst_inst_ok[OF c'(2)]] by simp
+      using typing_inst[OF wtpD(2)[OF that(1), of "\<lambda>_. propT"] cert_inst_inst_ok[OF c'(1)]] by simp
     have "ttvars Z \<subseteq> tvars_env ?\<theta> \<union> A'" using that(3) AA by blast
-    note n = norm_term_props[OF ei' wY' _ this ty _ _ that(4) nf']
+    note n = norm_term_props[OF ei' wY' _ this ty _ _ that(4)]
     have "vars Z \<subseteq> (?BC \<union> ?V) \<union> evars env'" using that(2) by blast
     note n = n[OF this, of 0]
     have cl: "\<not> loose_bvar Z 0" using wtpD(1)[OF that(1)] by (simp add: closed_def)
@@ -792,7 +817,7 @@ next
       by (rule skip_unb_take) (use q5 lf Z above_unb[OF ab] in auto)
     have cl: "\<not> loose_bvar Z 0" using wtpD(1)[OF wZ] by (simp add: closed_def)
     have "ttvars Z \<subseteq> tvars_env ?\<theta> \<union> A'" using tZ AA by blast
-    from norm_term_skip_props[OF nt ei' wY' _ this wtpD(2)[OF wZ, of "\<lambda>_. propT"] cl _ sk nf'] Z
+    from norm_term_skip_props[OF nt ei' wY' _ this wtpD(2)[OF wZ, of "\<lambda>_. propT"] cl _ sk] Z
     have n: "(\<lambda>i. tsubst (tsol0 ?\<theta>) propT) \<turnstile> Z' : propT" "\<not> loose_bvar Z' 0"
       "vars Z' \<subseteq> vimg ?\<theta> (vars Z \<union> evars env')" "ttvars Z' \<subseteq> tvars_env ?\<theta> \<union> A'"
       by auto
@@ -806,10 +831,10 @@ next
     if tu: "(t, u) \<in> set tps" and nt: "ok (norm_term env' t) t'" and nu: "ok (norm_term env' u) u'" for t u t' u'
   proof -
     from tpok tu have p: "upok A' env' [] X' t u" by blast
-    from upokD(9)[OF p c'(3,2)] obtain e T where tyt: "e \<turnstile> inst (tsol0 ?\<theta>) t : T" and tyu: "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
+    from upokD(9)[OF p c'(2,1)] obtain e T where tyt: "e \<turnstile> inst (tsol0 ?\<theta>) t : T" and tyu: "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
       by auto
-    note nt' = norm_term_props[OF ei' wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt nf']
-    note nu' = norm_term_props[OF ei' wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu nf']
+    note nt' = norm_term_props[OF ei' wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt]
+    note nu' = norm_term_props[OF ei' wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu]
     have l: "\<not> loose_bvar t 0" "\<not> loose_bvar u 0" using upokD(7,8)[OF p] by simp_all
     have cl: "closed t'" "closed u'" using nt'(2)[OF l(1)] nu'(2)[OF l(2)] by (simp_all add: closed_def)
     have "\<forall>e'. e' \<turnstile> t' : T \<and> e' \<turnstile> u' : T"
@@ -936,7 +961,7 @@ next
     proof (intro ballI, clarify)
       fix t u assume tu: "(t, u) \<in> set tps"
       from tpok tu have p: "upok A' env' [] X' t u" by blast
-      from upokD(9)[OF p c'(3,2)] obtain e T where "e \<turnstile> inst (tsol0 ?\<theta>) t : T" "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
+      from upokD(9)[OF p c'(2,1)] obtain e T where "e \<turnstile> inst (tsol0 ?\<theta>) t : T" "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
         by auto
       then have ty: "e \<turnstile> t : T" "e \<turnstile> u : T" using inst_tsol0_unb[OF unb] by simp_all
       have cl: "closed t" "closed u" using upokD(7,8)[OF p] by (simp_all add: closed_def)
@@ -1010,13 +1035,12 @@ theorem bicompose_aux_thm_inv:
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
-    and nf: "nfree (br_env r)"
     and lV: "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
       (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
     and lL: "loose \<subseteq> fst ` (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
       (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
   shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
-  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg thm_inv_inv0[OF state] thm_inv_inv0[OF rule(1)] _ tv _ vl nf lV lL])
+  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg thm_inv_inv0[OF state] thm_inv_inv0[OF rule(1)] _ tv _ vl lV lL])
     (use rule(2) inc in auto)
 
 end
@@ -1034,19 +1058,11 @@ lemma thm_inv_def:
 lemma thm_inv_iff: "thm_inv m hs tps P \<longleftrightarrow> thm_inv0 m hs tps P \<and> vtcons (vars_thm tps P)"
   by (simp add: thm_inv_iff)
 
-lemma norm_term_props:
-  assumes "einv A K env" "winv env Y" "vars X \<subseteq> Y \<union> evars env"
-    and "ttvars X \<subseteq> tvars_env (tyenv env) \<union> A" "e \<turnstile> inst (tsol0 (tyenv env)) X : T"
-    and "\<not> loose_bvar X k" "0 \<le> k" "ok (norm_term env X) X'"
-  shows "e \<turnstile> X' : T" "\<not> loose_bvar X' k"
-    "vars X' \<subseteq> vimg (tyenv env) (vars X \<union> evars env)" "ttvars X' \<subseteq> tvars_env (tyenv env) \<union> A"
-  by (rule norm_term_props[OF assms nfree0])+
-
 lemma uresult_fresh:
   assumes "uresult A env tus (El_R env' tps)" "sinv A K X env (tdps tus)"
     and "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
   shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
-  by (rule uresult_fresh[OF assms _ nfree0]) simp
+  by (rule uresult_fresh[OF assms]) simp
 
 theorem bicompose_aux_thm_inv_gen:
   assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
@@ -1059,7 +1075,7 @@ theorem bicompose_aux_thm_inv_gen:
     and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
   shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
-  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg state rule(1) _ tv _ vl nfree0])
+  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg state rule(1) _ tv _ vl])
     (use rule(2) inc in auto)
 
 theorem bicompose_aux_thm_inv:

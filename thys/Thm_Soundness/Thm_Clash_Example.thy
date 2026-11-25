@@ -109,7 +109,7 @@ lemma cterm_ok_ct1: "cterm_ok ct1"
   using typing_ct1 by (auto simp: cterm_ok_def ct1_def cterm_wf0 closed_def ibelow0 w_defs propT_def)
 
 lemma derivable_st1: "derivable st1"
-  using derivable.trivial[OF cterm_ok_ct1, of "mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))"]
+  using derivable_gen.trivial[OF cterm_ok_ct1, of "mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))"]
   by (simp add: st1_def ct1_def trivial_def)
 
 lemma assumption1': "assumption 1 (mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))) = returnW s1"
@@ -134,8 +134,8 @@ text \<open>
 \<close>
 
 theorem derivable_clash: "derivable (ares_data st1 (aseq_ctx s1) r1)"
-  by (rule derivable.assumption[OF derivable_st1 _ scons_st1 assumption1 aresult.First[OF a1] binds1])
-    (simp add: cfg1_def st1_def)
+  by (rule derivable_gen.assumption[OF derivable_st1 _ scons_st1 assumption1 aresult.First[OF a1]])
+    (simp_all add: cfg1_def st1_def)
 
 lemma not_cons_st1: "\<not> data_cons st1"
   by (auto simp: data_cons_def st1_def mk_rep_def vars_thm0 vtcons0 w_defs propT_def)

@@ -320,7 +320,6 @@ text \<open>
 theorem bicompose_aux_valid:
   assumes ok: "okT bcall s" and res: "bresult (unify_ops cfg vl) s r"
     and vS: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" and vR: "valid Shr hr rtpairs rprop"
-    and nf: "nfree (br_env r)"
   shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
 proof -
   have wS: "wtp (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)" and wR: "wtp rprop"
@@ -333,7 +332,7 @@ proof -
   have "\<forall>h\<in>set (hs @ hr). vars h = {} \<and> ttvars h = {}"
     using state rule(1) by (auto simp: wt_thm_def)
   then show ?thesis
-    using rchar_valid[OF refl rc pa vS wS vR[unfolded P] wR[unfolded P] lr _ vl nf] by blast
+    using rchar_valid[OF refl rc pa vS wS vR[unfolded P] wR[unfolded P] lr _ vl] by blast
 qed
 end
 
@@ -390,17 +389,6 @@ proof -
     then show thesis by (rule that)
   qed
 qed
-
-end
-
-context bicompose_call_model
-begin
-
-theorem bicompose_aux_valid:
-  assumes "okT bcall s" "bresult (unify_ops cfg vl) s r"
-    and "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" "valid Shr hr rtpairs rprop"
-  shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
-  by (rule bicompose_aux_valid[OF assms nfree0])
 
 end
 
