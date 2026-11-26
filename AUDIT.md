@@ -2267,4 +2267,8 @@ can be said about completeness, and about the exceptions, without it.
   above). A termination theorem with exceptions for the rules `assumption`,
   `flexflex_rule`, `bicompose` and `biresolution` on theorems with a name at two types;
   `derivable_sem` says that a result, if there is one, is valid.
+- **Size and check.** Apart from the new theory `Unify_Outcome.thy` (562 lines), the theories
+  lose 1062 lines and gain 153. The sessions `Pattern_Correctness`, `Unify_Correctness`,
+  `Thm_Soundness`, `Thm_Proofs` and `Thm_Model_ZFC` build from this state; no other session
+  depends on the changed theories.
 - **Not changed.** No model of the code, no patch and no test changed.
