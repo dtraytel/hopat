@@ -2161,3 +2161,110 @@ with `upost`, `hn_term`, …) were replaced by their general versions (`unif_ter
 - **Not changed.** No model of the code, no patch and no test changed. The completeness
   statements are as before: they are about problems and solutions with one type per name.
 
+
+### Additions after the twentieth execution (audit of the assumption on names; the outcomes of unification)
+
+The question was where "every name of a schematic variable has one type" is still assumed
+after the nineteenth execution, whether the proofs under this assumption can go, and what
+can be said about completeness, and about the exceptions, without it.
+
+- **Where the assumption still stands, and why.** A script over the theories lists the
+  statements whose hypotheses contain it (the locale `pure_sig`, where no name is loose; the
+  hypothesis `nfree`; the predicates `thm_cons`, `data_cons`). There are three kinds.
+  (A) *Completeness*: `unify_complete`, `unify_most_general`, `unifiers_complete`,
+  `unifiers_most_general`, `bicompose_aux_complete`, `biresolution_complete` and the theories
+  behind them (`Pattern_Complete`, `Unify_Simpl_Complete`, `Unify_Flexflex_Complete`,
+  `Unify_Match_Complete`, `Unify_Complete`, `Bicompose_Complete`). The assumption is needed:
+  `unify_incomplete_L` is a solvable problem with a name at two types on which the unifier
+  fails without an exception.
+  (B) *Termination without exceptions*: `unify_terminates`, `unifiers_fin`,
+  `hounifiers_fin`, `bicompose_aux_terminates`, `biresolution_terminates`,
+  `assumption_terminates`, `flexflex_terminates`. The assumption is needed: without it
+  exceptions are raised (below). At the level of the unifiers these theorems are instances
+  of general theorems that allow the exceptions (`unify_terminates_c`, `hounifiers_cfin`,
+  `unifiers_cfin`); at the level of the rules there is no general theorem.
+  (C) *Soundness and invariants in restricted form*, next to a general statement. These
+  were corollaries of the general statements, or duplicates of them from the time when the
+  general statements were being developed. They are the part that could go.
+- **Removed or merged (C).** In `Unify_Correctness`: `dstep_winv` and `dstep_pok` had a
+  version with the hypothesis that the result binds no loose name and one without
+  (`dstep_winvc`, `dstep_pokc`); the version without it is kept under the short name. The
+  predicate `lfin` (an enumeration all of whose elements bind no loose name) with its lemmas,
+  the versions of `hounifiers_fin` and `unifiers_lfin` for it, and the invariant of smashed
+  unifiers that bind no loose name (`smash_flexflex1_inv`, `foldrW_smash_flexflex1_inv`,
+  `smash_flexflex_inv`) are gone: `hounifiers_cfin`, `unifiers_cfin_uresult` and
+  `smash_flexflex_invw` say the same of every element and every smashed unifier. The
+  theorems `hounifiers_fin`, `hounifiers_fin_sound` and `unifiers_fin` of `pure_sig` are now
+  derived from the general ones (`cfin_fin`). In `Pattern_Correctness`: the operation `cut`
+  (a computation cut to the exception `Pattern` when its result binds a loose name) with its
+  lemmas, and the termination theorem stated with it; `unify_terminates_c` is stated about
+  `unify` itself, and `unify_terminates` of `pure_sig` is derived from it. In
+  `Thm_Soundness`: the versions for theorems with one type per name of the lemmas that the
+  new theorem of a result of `assumption`, `flexflex_rule` and `bicompose` satisfies the
+  invariant of the abstract type (`thm_sem_thm_of_ares`, `cons_ok_…`, `sorts_ok_…`, and the
+  same for `fres` and `bc`); the general lemmas have these names now, without `_gen`. The
+  operation `bicompose_thms` on the abstract type no longer asks for one type per name; the
+  predicates `bc_cons`, `bc_vcons` and `data_cons2` are gone. `ures_solves` is derived from the
+  new `uresult_solves` of `Unify_Typed_Results.thy`.
+- **Kept.** The theorems of (A) and (B). The lemmas `…_hm` and `SIMPL_add_ffpair_ok` of
+  `Unify_Flexflex_Simpl.thy`, with the hypothesis that the resulting environment binds no loose
+  name (`nfree`): the number of arguments of a head variable never decreases from older to
+  newer flex-flex pairs (`hmono`), so that `add_ffpair` does not raise `TERM`; (A) and (B)
+  use them.
+  The instances of the general theorems on the rules in `pure_sig` (`unif_thm_inv`,
+  `assumption_thm_inv`, `flexflex_thm_inv`, `bicompose_aux_thm_inv`, `biresolution_thm_inv`,
+  `biresolution_valid`): each is one line, and (A), (B), the descriptions of the results of
+  the operations on the abstract type and the lemmas `data_cons_…` (the unifying rules
+  preserve one type per name) use them. The operations `assumption_thms`,
+  `flexflex_rule_thms` and `biresolution_thms` are still defined for theorems with one type per
+  name; their soundness for all theorems is `derivable_sem`.
+- **"Complete, or an exception is raised" is false.** On `?x::prop =?= Pure.all
+  (?x::prop ⇒ prop)` pattern unification fails with `Unif`, as on a problem without solutions
+  (`unify_incomplete_L`). A second way to lose solutions without an exception is a flex-flex
+  pair whose heads are one name at two types with equally many arguments, as in
+  `λa b. ?F a b =?= λa b. ?F b a` with `?F` at `A ⇒ B ⇒ C` and `B ⇒ A ⇒ C`: the unifier treats
+  the two variables as one and binds `?F` to a constant function, while every `?F` at the
+  first type is part of a solution (the other `?F` is its argument swap). This second
+  example is not formalized.
+- **What holds: `Unify_Outcome.thy`.** The theorems are stated in `pure_sig` and have no
+  parameter for the loose names; the proofs interpret the general locale with all names
+  loose. `wfprob` is a well-typed problem (the invariants of the environment, closed terms
+  of one type under every certified solution of the type environment, indices below the
+  maximal index); it asks nothing of the names. `ncons env X` says that every name of `X` and
+  of the environment has one type under every certified solution of the type environment.
+  `sol1` is a solution of the problem that gives every name one type.
+  `unify_outcome`: on a well-formed problem, `unify` has one of five outcomes.
+  (1) An environment `env'`. It extends `env` and is acyclic; for every certified solution
+  `ρ` of its type environment some `σ` is a solution of `env'` that unifies the terms
+  (soundness, without a hypothesis on names); every `sol1` solution agrees up to the maximal
+  index with a solution of `env'` (most general among the one-type solutions).
+  (2) `Unif`: there is no `sol1` solution.
+  (3) `Pattern`.
+  (4) `TYPE "Variable has two distinct types"`: the names are not consistent.
+  (5) `Fail "mk_ff_list"`: the names are not consistent.
+  No other exception is raised, and the computation terminates.
+  `unifiers_outcome`: on a well-formed problem (`wfprobs`), `unifiers` returns a sequence or
+  raises (4) or (5), the latter two only if the names are not consistent. The enumeration
+  of the sequence ends (`pulls`: the list of its elements, and the exception that ends it,
+  if any); such an exception is `TYPE "Variable has two distinct types"` or one of the two
+  `TERM` exceptions of `add_ffpair` (`nexn`), and occurs only if the names are not
+  consistent. Every unifier of the enumeration is sound: a typed solution of its environment
+  (`rsolution`: a solution that also satisfies the bindings read at other types where these
+  are well-typed) that solves its flex-flex pairs solves the problem. If the names are
+  consistent, the enumeration is complete within the bounds of the configuration.
+- **The exceptions occur on solvable problems.** `unify_clash_solvable`: the problem
+  `f (?x::'a) (?x::'b) =?= f (c::'a) (c::'b)` is well-formed and has the `sol1` solution
+  `'a, 'b ↦ prop`, `?x ↦ c`, and `unify` raises `TYPE` (it binds `?x::'a`; the lookup of
+  `?x::'b` finds a binding at a type that the type environment does not identify with `'b`).
+  So for one-type solutions the theorem excludes `Unif` and no more, and that is right.
+  `unify_fail_solvable`: `λa b. ?x a =?= λa b. ?x a b` with `?x` at `prop ⇒ prop` and
+  `prop ⇒ prop ⇒ prop` is well-formed and solved by `?x ↦ λz. ?y`, `?x ↦ λz w. ?y`, and `unify`
+  raises `Fail "mk_ff_list"`. The runs of the model are computed in the theory.
+- **Not proved.** Completeness of `Unify.unifiers` for the one-type solutions of a problem
+  whose names are not consistent (the completeness proof of the search is in `pure_sig`,
+  where the names of the problem are consistent under every solution of the type
+  environment; for pattern unification the corresponding statement is outcome (1) and (2)
+  above). A termination theorem with exceptions for the rules `assumption`,
+  `flexflex_rule`, `bicompose` and `biresolution` on theorems with a name at two types;
+  `derivable_sem` says that a result, if there is one, is valid.
+- **Not changed.** No model of the code, no patch and no test changed.

@@ -13,7 +13,7 @@ text \<open>
   it raises an exception''.
 
   This theory states what does hold, in one theorem per unifier and without a parameter for the
-  loose names. On a well-typed problem pattern unification terminates with one of five outcomes
+  loose names. On a well-formed problem pattern unification terminates with one of five outcomes
   (\<open>unify_outcome\<close>). The two exceptions \<open>TYPE "Variable has two distinct types"\<close> and
   \<open>Fail "mk_ff_list"\<close> occur only if a name has two types that the type environment does not
   identify. A result is sound for every certified solution of its type environment; it is most
@@ -38,7 +38,7 @@ context pure_sig
 begin
 
 text \<open>
-  A well-typed problem: the invariants of the type environment, an acyclic term environment
+  A well-formed problem: the invariants of the type environment, an acyclic term environment
   that is well-typed under every certified solution of the type environment, two closed terms
   of one type under each such solution, and indices below the maximal index. Nothing is asked
   of the types of the names.
@@ -63,6 +63,15 @@ text \<open>A solution of the problem that gives every name one type:\<close>
 definition sol1 :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "sol1 \<rho> \<sigma> env s t \<longleftrightarrow> solution \<rho> \<sigma> env \<and> wt_env \<rho> env \<and> vcons \<rho> (vars s \<union> vars t \<union> evars env) \<and>
     (\<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T) \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+
+text \<open>
+  The outcomes of \<^const>\<open>unify\<close> on a well-formed problem. A result is an acyclic extension of
+  the environment; it is sound for every certified solution of its type environment, with no
+  hypothesis on the names; and every solution of the problem that gives every name one type
+  agrees, up to the maximal index, with a solution of the result. \<open>Unif\<close> is raised only if
+  there is no such solution, and the exceptions of the last two cases only if the names are not
+  consistent. No other exception is raised.
+\<close>
 
 theorem unify_outcome:
   assumes wf: "wfprob A env s t"
