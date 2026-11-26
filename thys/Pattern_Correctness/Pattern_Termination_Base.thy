@@ -7,103 +7,8 @@ begin
 context pure_sig_gen
 begin
 
-subsection \<open>Results that bind loose names\<close>
-
-text \<open>
-  With loose names, a computation is followed only as long as its environment binds none of
-  them: \<open>cut f m\<close> is \<open>m\<close> if there are no loose names; otherwise it keeps a result of \<open>m\<close>
-  whose environment (\<open>f\<close> of the result) binds no loose name, and is the exception \<open>Pattern\<close> in
-  all other cases, also if \<open>m\<close> has no result. So \<open>\<exists>r. cut f m = Some r \<and> P r\<close> is total
-  correctness without loose names; with loose names it says that \<open>P\<close> holds for a result that
-  binds none of them.
-\<close>
-
-definition cut :: "('a \<Rightarrow> env) \<Rightarrow> 'a M \<Rightarrow> 'a M" where
-  "cut f m = (if loose = {} then m else
-    (case m of Some (Ok a) \<Rightarrow> if nfree (f a) then m else raise Pattern | _ \<Rightarrow> raise Pattern))"
-
 lemma nfree_strict: "loose = {} \<Longrightarrow> nfree env"
   unfolding nfree_def by simp
-
-lemma cut_Ok: "cut f m = Some (Ok a) \<longleftrightarrow> m = Some (Ok a) \<and> nfree (f a)"
-  unfolding cut_def nfree_def by (auto simp: raise_def split: option.splits xres.splits)
-
-lemma cut_OkD:
-  assumes "cut f m = Some (Ok a)"
-  shows "m = Some (Ok a)" "nfree (f a)"
-  using assms by (simp_all add: cut_Ok)
-
-lemma cut_Some: "loose \<noteq> {} \<Longrightarrow> \<exists>r. cut f m = Some r"
-  unfolding cut_def by (auto simp: raise_def split: option.splits xres.splits)
-
-lemma cut_Err: "loose \<noteq> {} \<Longrightarrow> cut f m = Some (Err e) \<Longrightarrow> e = Pattern"
-  unfolding cut_def by (auto simp: raise_def split: option.splits xres.splits if_splits)
-
-lemma cut_eqI:
-  assumes "loose \<noteq> {}" "\<And>a. cut f m = Some (Ok a) \<longleftrightarrow> cut g m' = Some (Ok a)"
-  shows "cut f m = cut g m'"
-proof -
-  obtain r r' where r: "cut f m = Some r" "cut g m' = Some r'" using cut_Some[OF assms(1)] by blast
-  show ?thesis
-  proof (cases r)
-    case (Ok a)
-    then show ?thesis using r assms(2) by simp
-  next
-    case (Err e)
-    then have "e = Pattern" using cut_Err[OF assms(1)] r(1) by simp
-    moreover have "\<exists>e'. r' = Err e'" using r Err assms(2)[of "case r' of Ok a \<Rightarrow> a"] by (cases r') auto
-    then have "r' = Err Pattern" using cut_Err[OF assms(1)] r(2) by auto
-    ultimately show ?thesis using r Err by simp
-  qed
-qed
-
-lemma cut_idem [simp]: "cut f (cut f m) = cut f m"
-proof (cases "loose = {}")
-  case True
-  then show ?thesis unfolding cut_def by simp
-next
-  case False
-  then show ?thesis by (rule cut_eqI) (simp add: cut_Ok)
-qed
-
-text \<open>
-  A computation that is followed by another one may be cut, if the environments of the results
-  of the whole extend its environment:
-\<close>
-
-lemma cut_bind:
-  assumes "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
-  shows "cut g (m \<bind> k) = cut g (cut f m \<bind> k)"
-proof (cases "loose = {}")
-  case False
-  then show ?thesis by (rule cut_eqI) (use assms in \<open>auto simp: cut_Ok\<close>)
-next
-  case True
-  then show ?thesis unfolding cut_def by simp
-qed
-
-lemma cut_bind_Some:
-  assumes "cut f m = Some r" "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
-  shows "cut g (m \<bind> k) = cut g (case r of Ok a \<Rightarrow> k a | Err e \<Rightarrow> raise e)"
-  by (subst cut_bind[of m k g f, OF assms(2)]) (simp_all add: assms(1) bindM_def raise_def split: xres.splits)
-
-text \<open>Introduction rules for statements about cut computations:\<close>
-
-lemma cutI:
-  assumes "m = Some r" "\<And>a. r = Ok a \<Longrightarrow> nfree (f a) \<Longrightarrow> P (Ok a)" "\<And>e. r = Err e \<Longrightarrow> P (Err e)"
-    "P (Err Pattern)"
-  shows "\<exists>r'. cut f m = Some r' \<and> P r'"
-  using assms unfolding cut_def nfree_def by (cases r) (auto simp: raise_def)
-
-lemma cut_errI: "m = Some (Err e) \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
-  by (rule cutI[of m "Err e"]) simp_all
-
-lemma cut_raiseI: "m = raise e \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
-  by (rule cut_errI[of m e]) (simp_all add: raise_def)
-
-lemma cut_returnI:
-  "m = return a \<Longrightarrow> (nfree (f a) \<Longrightarrow> P (Ok a)) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
-  by (rule cutI[of m "Ok a"]) (simp_all add: return_def)
 
 subsection \<open>Strong normalization with subterms\<close>
 
@@ -775,9 +680,6 @@ subsection \<open>Without loose names\<close>
 
 context pure_sig
 begin
-
-lemma cut_strict [simp]: "cut f m = m"
-  unfolding cut_def by simp
 
 lemma vok_winv:
   assumes "einv A K env" "winv env X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"

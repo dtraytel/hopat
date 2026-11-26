@@ -658,54 +658,6 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
   qed (use up upd in auto)
 qed
 
-lemma vupdate_extends:
-  assumes "vupdate aU t env = Some r"
-  shows "r = Ok env' \<Longrightarrow> extends env env'"
-  using assms
-proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, consumes 1])
-  case (1 vu aU t env r)
-  obtain v T0 where aU: "aU = (v, T0)" by (cases aU)
-  have up: "ok (case t of
-      Var name' T \<Rightarrow>
-        if fst aU = name' then return env
-        else if indexname_less (fst aU) name' then lookup env name' T \<bind> (\<lambda>r.
-          case r of None \<Rightarrow> update (name', T) (Var (fst aU) T) env | Some u \<Rightarrow> vu aU u env)
-        else update aU t env
-    | _ \<Rightarrow> update aU t env) env'"
-    using "1.hyps" "1.prems" by simp
-  have upd: "ok (update aU s env) env' \<Longrightarrow> extends env env'" for s
-    using extends_update[of v T0 s env env'] aU by simp
-  show ?case
-  proof (cases t)
-    case (Var name' T)
-    consider "v = name'" | "v \<noteq> name'" "indexname_less v name'" | "v \<noteq> name'" "\<not> indexname_less v name'"
-      by blast
-    then show ?thesis
-    proof cases
-      case 1
-      with up Var aU show ?thesis by (simp add: extends_refl)
-    next
-      case 2
-      with up Var aU obtain lr where lk: "ok (lookup env name' T) lr"
-        and rest: "ok (case lr of None \<Rightarrow> update (name', T) (Var v T) env | Some u \<Rightarrow> vu aU u env) env'"
-        by auto
-      show ?thesis
-      proof (cases lr)
-        case None
-        with rest show ?thesis using extends_update[of name' T "Var v T" env env'] by simp
-      next
-        case (Some u)
-        with rest have "ok (vu aU u env) env'" by simp
-        from "1.IH"[OF this refl] show ?thesis .
-      qed
-    next
-      case 3
-      with up Var aU have "ok (update aU t env) env'" by simp
-      then show ?thesis by (rule upd)
-    qed
-  qed (use up upd in auto)
-qed
-
 lemma smash_flexflex1_tyenv:
   assumes "okW (smash_flexflex1 tu env) env'"
   shows "tyenv env' = tyenv env"
@@ -726,28 +678,6 @@ proof -
     from vupdate_tyenv[OF diff[OF False] refl] show ?thesis .
   qed (use same in simp)
   ultimately show ?thesis by simp
-qed
-
-lemma smash_flexflex1_extends:
-  assumes "okW (smash_flexflex1 tu env) env'"
-  shows "extends env env'"
-proof -
-  obtain t u where tu: "tu = (t, u)" by force
-  from okW_smash_flexflex1[OF assms[unfolded tu]] obtain v T w U B env1 var Us env2 Ts
-    where "okW (var_head_of env t) (v, T)" "okW (var_head_of env u) (w, U)"
-      "ok (body_type env T) B" and g: "genvar (fst v) env B = (env1, var)"
-      and "ok (binder_types env1 U) Us" and u1: "ok (vupdate (w, U) (types_abs Us var) env1) env2"
-      and "ok (binder_types env1 T) Ts"
-      and same: "v = w \<and> T = U \<Longrightarrow> env' = env2 \<and> Ts = Us"
-      and diff: "\<not> (v = w \<and> T = U) \<Longrightarrow> ok (vupdate (v, T) (types_abs Ts var) env2) env'"
-    by blast
-  have "extends env env2" by (rule extends_trans[OF extends_genvar[OF g] vupdate_extends[OF u1 refl]])
-  moreover have "extends env2 env'"
-  proof (cases "v = w \<and> T = U")
-    case False
-    from vupdate_extends[OF diff[OF False] refl] show ?thesis .
-  qed (use same in \<open>simp add: extends_refl\<close>)
-  ultimately show ?thesis by (rule extends_trans)
 qed
 
 lemma gtyped_mono: "gtyped env dps \<Longrightarrow> set dps' \<subseteq> set dps \<Longrightarrow> gtyped env dps'"

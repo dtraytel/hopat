@@ -950,7 +950,7 @@ proof -
     have ds: "dstep env [(rb, t0, u0)] env [(rb, t, u)]"
       by (rule norm_term_dstep[OF nt(1)[unfolded return_def] nu(1)[unfolded return_def]])
     define Y' where "Y' = Y \<union> vars t \<union> vars u"
-    from dstep_pok[OF ds wi p ei refl _ nf] ttu pd(5) have wi': "winv env Y'" by (auto simp: Y'_def)
+    from dstep_pok[OF ds wi p ei refl] ttu pd(5) have wi': "winv env Y'" by (auto simp: Y'_def)
     have "vcons ?\<rho> (Y' \<union> evars env)" using winvD[OF wi' r0] by (simp add: vinv_def)
     moreover have "(F, Tv) \<in> Y'" "(F, Uw) \<in> Y'"
       using FG ff_head_of_vars[OF hds(1)] ff_head_of_vars[OF hds(2)] by (auto simp: Y'_def)
@@ -1136,7 +1136,7 @@ proof -
     have pk1: "\<forall>(rb, t, u)\<in>set (ffs' @ tdps []). upok A env rb X t u"
       using si Cons.prems by (auto simp: sinv_def)
     define Y where "Y = X \<union> dvars (tdps tps1)"
-    have wi1: "winv env1 Y" unfolding Y_def by (rule dstep_winv(1)[OF ds1 wi pk1 th1 nf1])
+    have wi1: "winv env1 Y" unfolding Y_def by (rule dstep_winv(1)[OF ds1 wi pk1 th1])
     have vY: "vtvars Y \<subseteq> tvars_env (tyenv env1) \<union> A"
     proof -
       have "vtvars (dvars (tdps tps1)) \<subseteq> ?KN"

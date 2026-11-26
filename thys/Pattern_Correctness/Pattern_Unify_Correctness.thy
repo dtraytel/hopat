@@ -9,7 +9,7 @@ begin
 
 text \<open>
   The final results on \<open>Pattern.unify\<close> (\<^const>\<open>unify\<close>), for closed terms \<open>s\<close> and \<open>t\<close> in an
-  environment that satisfy the invariants of termination (theorem @{thm [source] unify_terminates}).
+  environment that satisfy the invariants of termination (theorem @{thm [source] pure_sig.unify_terminates}).
   A problem is unifiable if some solution of the environment, under which the terms are
   well-typed with the same type, unifies them.
 \<close>

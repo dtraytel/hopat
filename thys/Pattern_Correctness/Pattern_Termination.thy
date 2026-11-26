@@ -8,8 +8,7 @@ text \<open>
   Termination of pattern unification, with no hypothesis on the names: a name may occur at two
   types. The measure uses \<open>unfc\<close>, which unfolds only the occurrences that \<open>lookup\<close> follows,
   and unification may in addition raise the exception of \<^const>\<open>var_clash\<close>. The statements are
-  about the computations themselves; the statements about \<open>cut\<close> computations, and without loose
-  names, are derived at the end.
+  about the computations themselves; the statement without loose names is derived at the end.
 \<close>
 
 context pure_sig_gen
@@ -448,11 +447,11 @@ qed
 end
 
 
-subsection \<open>Computations without cut\<close>
+subsection \<open>Computations and the environments of their results\<close>
 
 text \<open>
-  The statements of the original termination proof are about \<open>cut f m\<close>; here the
-  counterpart \<open>dcut f m\<close> is \<open>m\<close> itself, with the same introduction rules.
+  The statements of the termination proof are about \<open>dcut f m\<close>, which is the computation \<open>m\<close>
+  itself; the function \<open>f\<close> names the environment of a result.
 \<close>
 
 definition dcut :: "('a \<Rightarrow> env) \<Rightarrow> 'a M \<Rightarrow> 'a M" where
@@ -2394,8 +2393,9 @@ text \<open>
   solution of the type environment, if the environment is acyclic, well-typed and consistent with
   the problem (\<^const>\<open>winv\<close>), its type environment satisfies the invariant of type unification
   (\<^const>\<open>tvinv\<close>) and has certified sorts, and the type variables of the problem are known.
-  It returns an environment that satisfies these invariants again, or fails with \<open>Unif\<close> or
-  \<open>Pattern\<close>; no other exception is raised.
+  It returns an environment that satisfies these invariants again, or raises \<open>Unif\<close> or
+  \<open>Pattern\<close> or, if there are loose names, the exception of \<^const>\<open>var_clash\<close> or
+  \<open>Fail "mk_ff_list"\<close>; no other exception is raised.
 \<close>
 
 theorem unify_terminates_c:
@@ -2404,8 +2404,7 @@ theorem unify_terminates_c:
     and tvs: "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
     and cl: "closed s" "closed t"
     and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
-   
-  obtains r where "dcut id (unify alg s t env) = Some r"
+  obtains r where "unify alg s t env = Some r"
     and "\<And>e. r = Err e \<Longrightarrow> perr e"
     and "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
       tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
@@ -2445,7 +2444,7 @@ proof -
     using unif_term_c[OF finX finK ei wi p] by blast
   show ?thesis
   proof (rule that)
-    show "dcut id (unify alg s t env) = Some r" using r(1) by (simp add: unify_def)
+    show "unify alg s t env = Some r" using r(1) by (simp add: unify_def dcut_def)
     show "perr e" if "r = Err e" for e using r(2) that by simp
     show "extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and> tcert alg (tvars_env (tyenv env') \<union> A) \<and>
         tsorted alg (tyenv env') \<and> acyc env' \<and> winv env' ?X" if "r = Ok env'" for env'
@@ -2454,74 +2453,11 @@ proof -
 qed
 
 
-subsection \<open>The statements of termination\<close>
+subsection \<open>The invariants of a result\<close>
 
 text \<open>
-  The statement of termination without the clash of the two types of a name, about
-  \<open>cut id (unify alg s t env)\<close>: without loose names it is the termination of \<^const>\<open>unify\<close>,
-  with the errors \<open>Unif\<close> and \<open>Pattern\<close>; with loose names, a result that binds none of them
-  satisfies the invariants.
-\<close>
-
-text \<open>
-  Without loose names, a \<open>cut\<close> computation is the computation itself, and its errors are those of
-  pattern unification without the clash of the two types of a name and the failure of
-  \<open>mk_ff_list\<close>; with loose names, its errors are \<open>Pattern\<close>.
-\<close>
-
-lemma cut_perrI:
-  assumes "m = Some r" "\<And>e. r = Err e \<Longrightarrow> perr e"
-  shows "\<exists>r'. cut id m = Some r' \<and> (\<forall>e. r' = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern) \<and>
-    (\<forall>a. r' = Ok a \<longrightarrow> r = Ok a)"
-proof (cases "loose = {}")
-  case True
-  have "cut id m = Some r" unfolding cut_def using assms(1) True by simp
-  moreover have "(\<exists>v. e = Unif v) \<or> e = Pattern" if "r = Err e" for e
-    using assms(2)[OF that] True clashx_loose by blast
-  ultimately show ?thesis by blast
-next
-  case False
-  show ?thesis
-  proof (cases "\<exists>a. r = Ok a \<and> nfree a")
-    case True
-    then obtain a where a: "r = Ok a" "nfree a" by blast
-    then have "cut id m = Some r" using assms(1) by (simp add: cut_Ok)
-    then show ?thesis using a by auto
-  next
-    case nf: False
-    have "cut id m = raise Pattern" using assms(1) nf False by (cases r) (auto simp: cut_def)
-    then show ?thesis by (simp add: raise_def)
-  qed
-qed
-
-theorem unify_terminates:
-  assumes fin: "finite A" and tv: "tvinv A env" "scert alg (tyenv env)" "tcert alg (tvars_env (tyenv env) \<union> A)"
-    and srt: "tsorted alg (tyenv env)" and ac: "acyc env" and wi: "winv env (vars s \<union> vars t)"
-    and tvs: "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
-    and cl: "closed s" "closed t"
-    and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
-  obtains r where "cut id (unify alg s t env) = Some r"
-    and "\<And>e. r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
-    and "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
-      tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
-      winv env' (vars s \<union> vars t)"
-proof -
-  obtain r where r0: "dcut id (unify alg s t env) = Some r" and err: "\<And>e. r = Err e \<Longrightarrow> perr e"
-    and post: "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
-      tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
-      winv env' (vars s \<union> vars t)"
-    by (rule unify_terminates_c[OF assms]) (assumption, assumption, rule that)
-  from cut_perrI[OF r0[unfolded dcut_def] err] obtain r' where
-    r': "cut id (unify alg s t env) = Some r'" "\<forall>e. r' = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
-    "\<forall>a. r' = Ok a \<longrightarrow> r = Ok a"
-    by blast
-  show ?thesis by (rule that[OF r'(1)]) (use r' post in auto)
-qed
-
-text \<open>
-  The invariants of a result that binds no loose name. This is the statement for problems in
-  which a name occurs with several types: the names that are not loose have one type in every
-  solution of the type environment (\<^const>\<open>winv\<close>), the loose ones are not bound.
+  This is the statement for problems in which a name occurs with several types: the names that
+  are not loose have one type in every solution of the type environment (\<^const>\<open>winv\<close>).
 \<close>
 
 corollary unify_inv:
@@ -2535,12 +2471,12 @@ corollary unify_inv:
       tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
       winv env' (vars s \<union> vars t)"
 proof -
-  obtain r where r: "dcut id (unify alg s t env) = Some r" and "\<And>e. r = Err e \<Longrightarrow> perr e"
+  obtain r where r: "unify alg s t env = Some r" and "\<And>e. r = Err e \<Longrightarrow> perr e"
     and post: "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
       tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
       winv env' (vars s \<union> vars t)"
     by (rule unify_terminates_c[OF fin tv srt ac wi tvs cl ty]) (assumption, assumption, rule that)
-  from r un have "r = Ok env'" by (simp add: dcut_def)
+  from r un have "r = Ok env'" by simp
   from post[OF this] show ?thesis .
 qed
 
@@ -2562,7 +2498,16 @@ theorem unify_terminates:
     and "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
       tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
       winv env' (vars s \<union> vars t)"
-  using unify_terminates[OF assms] by (auto simp: cut_strict)
+proof -
+  obtain r where r: "unify alg s t env = Some r" and err: "\<And>e. r = Err e \<Longrightarrow> perr e"
+    and post: "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
+      tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
+      winv env' (vars s \<union> vars t)"
+    by (rule unify_terminates_c[OF assms]) (assumption, assumption, rule that)
+  have "(\<exists>u. e = Unif u) \<or> e = Pattern" if "r = Err e" for e
+    using err[OF that] clashx_loose by blast
+  with r post show ?thesis by (intro that) blast+
+qed
 
 end
 

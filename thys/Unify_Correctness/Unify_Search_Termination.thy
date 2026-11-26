@@ -319,24 +319,9 @@ theorem hounifiers_cfin:
 end
 
 
-subsection \<open>The statements of theory \<open>Unify_Search_Inv\<close>\<close>
+subsection \<open>Without loose names\<close>
 
-context pure_sig_gen
-begin
-
-theorem hounifiers_fin_sound:
-  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
-  shows "lfin cfg (hounifiers rb env tus) (\<lambda>x. rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x)"
-  by (rule lfin_cfin[OF hounifiers_cfin[OF assms]])
-
-theorem hounifiers_fin:
-  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
-  shows "lfin cfg (hounifiers rb env tus) (rres A env)"
-  by (rule lfin_mono[OF hounifiers_fin_sound[OF assms]]) simp
-
-end
-
-text \<open>Without loose names:\<close>
+text \<open>Without loose names the enumeration is total: no exception ends it.\<close>
 
 context pure_sig
 begin
@@ -344,12 +329,12 @@ begin
 theorem hounifiers_fin_sound:
   assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
   shows "fin cfg (hounifiers rb env tus) (\<lambda>x. rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x)"
-  using hounifiers_fin_sound[OF assms] by (simp add: lfin_strict)
+  by (rule cfin_fin[OF refl hounifiers_cfin[OF assms]])
 
 theorem hounifiers_fin:
   assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
   shows "fin cfg (hounifiers rb env tus) (rres A env)"
-  using hounifiers_fin[OF assms] by (simp add: lfin_strict)
+  by (rule fin_mono[OF hounifiers_fin_sound[OF assms]]) simp
 
 end
 

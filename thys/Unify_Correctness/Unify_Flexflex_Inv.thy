@@ -718,7 +718,7 @@ text \<open>The invariants after a sound step on a list of pairs:\<close>
 
 lemma dstep_winv:
   assumes ds: "dstep env dps env' dps'" and wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
-    and th: "tyenv env' = tyenv env" and nf': "nfree env'"
+    and th: "tyenv env' = tyenv env"
   shows "winv env' (X \<union> dvars dps')" "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps'"
 proof -
   have main: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps')"
@@ -739,7 +739,7 @@ proof -
       unfolding dvars_def using pk upokD(1,2) by fast
     then have "X \<union> dvars dps \<union> evars env = X \<union> evars env" by blast
     with w(2) have v: "vinv \<rho> env (X \<union> dvars dps)" by (simp add: vinv_def)
-    from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v nf'] show ?thesis by blast
+    from dstepDg(1)[OF ds \<rho>(1) extends_refl w(1) d v] show ?thesis by blast
   qed
   show "winv env' (X \<union> dvars dps')" unfolding winv_def using main by blast
   show "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps'" using main by blast
@@ -866,7 +866,6 @@ lemma dstep_pok:
   assumes ds: "dstep env [(rb, t, u)] env' [(rb', t', u')]" and wi: "winv env Y" and p: "upok A env rb Y t u"
     and ei': "einv A K env'" and th: "tyenv env' = tyenv env"
     and tv: "ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv env) \<union> A"
-    and nf': "nfree env'"
   shows "winv env' (Y \<union> vars t' \<union> vars u') \<and> upok A env' rb' (Y \<union> vars t' \<union> vars u') t' u'"
 proof -
   note pd = upokD[OF p]
@@ -878,7 +877,7 @@ proof -
     have d: "dtyped \<rho> [(rb, t, u)]" using pd(7,8) pd(9)[OF tsol \<rho>(2)] by (auto simp: dtyped_def)
     have v: "vinv \<rho> env (Y \<union> dvars [(rb, t, u)])"
       using w(2) vinv_evars[of t u Y env \<rho>] pd(1,2) by (simp add: Un_assoc)
-    from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v nf'] show ?thesis by blast
+    from dstepDg(1)[OF ds \<rho>(1) extends_refl w(1) d v] show ?thesis by blast
   qed
   have "winv env' (Y \<union> vars t' \<union> vars u')"
     unfolding winv_def using main by (simp add: Un_assoc)

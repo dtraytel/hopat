@@ -84,19 +84,14 @@ lemma conv_data_raw: "conv_data ct r = conv_datar (rep_cterm ct) r"
 
 text \<open>
   The schematic variables of the data have one type for each name, and the schematic type
-  variables one sort (\<^const>\<open>thm_cons\<close>); for two theorems together (\<^const>\<open>bc_cons\<close>):
+  variables one sort (\<^const>\<open>thm_cons\<close>). The soundness theorems do not use the part on the
+  variables; it is preserved by the unifying rules (\<open>data_cons_biresolution\<close> to \<open>data_cons_bicompose\<close> below).
+  For two theorems together, the part on sorts and the part on the variables:
 \<close>
 
 definition data_cons :: "thm_data \<Rightarrow> bool" where
   "data_cons d \<longleftrightarrow> scons (pure_sig_gen.tvars_thm (th_tpairs d) (th_prop d)) \<and>
     pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs d) (th_prop d))"
-
-definition data_cons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" where
-  "data_cons2 d1 d2 \<longleftrightarrow>
-    scons (pure_sig_gen.tvars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig_gen.tvars_thm (th_tpairs d2) (th_prop d2)) \<and>
-    pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig_gen.vars_thm (th_tpairs d2) (th_prop d2))"
-
-text \<open>The two parts of \<open>data_cons2\<close>:\<close>
 
 definition data_scons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" where
   "data_scons2 d1 d2 \<longleftrightarrow>
@@ -106,12 +101,8 @@ definition data_vcons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" w
   "data_vcons2 d1 d2 \<longleftrightarrow>
     pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig_gen.vars_thm (th_tpairs d2) (th_prop d2))"
 
-lemma thm_cons_raw: "thm_cons th \<longleftrightarrow> data_cons (rep_thm th)"
-  and bc_cons_raw: "bc_cons th1 th2 \<longleftrightarrow> data_cons2 (rep_thm th1) (rep_thm th2)"
-  and bc_scons_raw: "bc_scons th1 th2 \<longleftrightarrow> data_scons2 (rep_thm th1) (rep_thm th2)"
-  and bc_vcons_raw: "bc_vcons th1 th2 \<longleftrightarrow> data_vcons2 (rep_thm th1) (rep_thm th2)"
-  by (simp_all add: thm_cons_def data_cons_def bc_cons_def data_cons2_def bc_scons_def data_scons2_def
-      bc_vcons_def data_vcons2_def)
+lemma bc_scons_raw: "bc_scons th1 th2 \<longleftrightarrow> data_scons2 (rep_thm th1) (rep_thm th2)"
+  by (simp add: bc_scons_def data_scons2_def)
 
 text \<open>
   The rules that unify do not need one type for each name of a schematic variable. The part of
@@ -1063,7 +1054,7 @@ next
     and a: "okT (assumption i (rep_of ?st)) s0"
     using H by (simp_all add: R data_scons_def)
   show ?thesis
-    using thm_sem_thm_of_ares_gen[OF ps cfg sc a H(4)] cons_ok_thm_of_ares_gen[OF ps cfg sc a H(4)]
+    using thm_sem_thm_of_ares[OF ps cfg sc a H(4)] cons_ok_thm_of_ares[OF ps cfg sc a H(4)]
     by (simp add: dsem_def thm_of_ares_raw R ares_data_def)
 qed
 
@@ -1089,7 +1080,7 @@ next
     and res: "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)"
     using H by (simp_all add: R data_scons_def)
   show ?thesis
-    using thm_sem_thm_of_fres_gen[OF ps cfg sc a res] cons_ok_thm_of_fres_gen[OF ps cfg sc a res]
+    using thm_sem_thm_of_fres[OF ps cfg sc a res] cons_ok_thm_of_fres[OF ps cfg sc a res]
     by (simp add: dsem_def thm_of_fres_raw R)
 qed
 
@@ -1117,7 +1108,7 @@ next
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
     using H by (simp_all add: R bc_scons_raw)
   show ?thesis
-    using thm_sem_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)] cons_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)]
+    using thm_sem_thm_of_bc[OF ps cfg vl sr sc d ok H(7)] cons_ok_thm_of_bc[OF ps cfg vl sr sc d ok H(7)]
     by (simp add: dsem_def thm_of_bc_raw R bc_data_def)
 qed
 
@@ -1350,7 +1341,7 @@ proof
     and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?st)) (th_prop (rep_of ?st)))"
     and a: "okT (assumption i (rep_of ?st)) s0"
     using H by (simp_all add: R data_scons_def)
-  from sorts_ok_thm_of_ares_gen[OF ps cfg sc a H(4)]
+  from sorts_ok_thm_of_ares[OF ps cfg sc a H(4)]
   have "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
   with S True show "csorts_ok (th_sign (ares_data st (aseq_ctx s0) r)) (th_shyps (ares_data st (aseq_ctx s0) r))"
     by (auto simp: ares_data_def shyps_ok_def csorts_ok_def)
@@ -1376,7 +1367,7 @@ proof
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)"
     using H by (simp_all add: R data_scons_def)
-  from sorts_ok_thm_of_fres_gen[OF ps cfg sc a res]
+  from sorts_ok_thm_of_fres[OF ps cfg sc a res]
   have "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (th_sign th)) S" by (simp add: R)
   with S True show "csorts_ok (th_sign (fres_data (solve_data th) env r)) (th_shyps (fres_data (solve_data th) env r))"
     by (auto simp: fres_data_def shyps_ok_def csorts_ok_def)
@@ -1405,7 +1396,7 @@ proof
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
     using H by (simp_all add: R bc_scons_raw)
-  from sorts_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7)]
+  from sorts_ok_thm_of_bc[OF ps cfg vl sr sc d ok H(7)]
   have "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
   with S True H(3) show "csorts_ok (th_sign (bc_data (th_sign st) i st flatten e rule x))
       (th_shyps (bc_data (th_sign st) i st flatten e rule x))"

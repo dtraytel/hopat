@@ -26,9 +26,8 @@ text \<open>
   satisfies \<open>P\<close>: total correctness, as \<^const>\<open>xokW\<close>. With loose names it says that \<open>P\<close>
   holds for every result of \<open>m\<close> whose environment (\<open>f\<close> of the result) binds no loose name.
   The rules below hold for both readings, so that one proof gives termination in \<open>pure_sig\<close> and
-  the invariants of the results in \<open>pure_sig_gen\<close>. (For the monad of \<open>pattern.ML\<close> the two
-  readings are combined by \<^const>\<open>cut\<close>; here handlers catch exceptions, and a computation that
-  has bound a loose name may raise any of them.)
+  the invariants of the results in \<open>pure_sig_gen\<close>. (Handlers catch exceptions, and a
+  computation that has bound a loose name may raise any of them.)
 \<close>
 
 definition lxokE :: "(uexn \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> env) \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where

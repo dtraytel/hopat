@@ -270,8 +270,8 @@ does not check:
   `assumption` hold there for every enumerated unifier, if every name with
   two types is loose (`bicompose_aux_thm_inv_gen`, `bc_names`, `bres_names`,
   `ures_solves_eq`). The lemmas behind the rules of `derivable` take as loose
-  names the names with two types (`thm_sem_thm_of_ares_gen`,
-  `thm_sem_thm_of_bc_gen`, `sound_biresolution_gen`, and
+  names the names with two types (`thm_sem_thm_of_ares`,
+  `thm_sem_thm_of_bc`, `sound_biresolution_gen`, and
   `proofs_ok_…_gen`, `prfs_biresolution_gen` for the proofs). The notions of
   a model, of validity and of a valid proof do not depend on the loose names.
   `flexflex_rule` needs one more step, because smashing can make the
@@ -346,14 +346,43 @@ does not check:
   so `Unify.unifiers` returns no unifier for the solvable
   `?x::prop =?= Pure.all (?x::prop ⇒ prop)` (Isabelle2026 and the model,
   `unify_incomplete_L`, `unifiers_incomplete_L` in
-  `Unify_Complete_Two_Types.thy`). Pattern completeness holds for the solutions
-  that give every name one type, also if the problem has a name at two types
-  (`unify_complete_one_type`). For `flexflex_rule`, a smashed unifier that
-  binds no loose name keeps the invariant with acyclicity
-  (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
-  pair are one loose name at two types, smashing binds that name, or both
-  types have no arguments and nothing is bound. Without that hypothesis it
-  keeps the invariant with the fixed point (`smash_flexflex_invw`, above).
+  `Unify_Complete_Two_Types.thy`), and no exception is raised. So "complete,
+  or an exception is raised" is not a theorem. What holds is stated in
+  `Unify_Outcome.thy`, without a parameter for the loose names. On a
+  well-typed problem `Pattern.unify` has one of five outcomes
+  (`unify_outcome`): an environment, which is sound for every certified
+  solution of its type environment and most general among the solutions of
+  the problem that give every name one type; `Unif`, and then no solution
+  gives every name one type; `Pattern`; `TYPE "Variable has two distinct
+  types"` or `Fail "mk_ff_list"`, and then some name has two types that the
+  type environment does not identify. Both exceptions occur on solvable
+  problems: `TYPE` on `f (?x::'a) (?x::'b) =?= f (c::'a) (c::'b)`, which has a
+  solution with one type for `?x` (`unify_clash_solvable`), and `Fail` on
+  `λa b. ?x a =?= λa b. ?x a b` with `?x` at two types
+  (`unify_fail_solvable`). `Unify.unifiers` returns a sequence whose
+  enumeration ends, or raises one of these two exceptions
+  (`unifiers_outcome`); every unifier of the enumeration is sound for typed
+  solutions (`uresult_solves`); an exception, also one that ends the
+  enumeration (`TYPE`, or `TERM` from `add_ffpair`), occurs only if the names
+  are not consistent; and if they are consistent, the enumeration is complete
+  within the bounds of the configuration. Completeness of `Unify.unifiers`
+  for the one-type solutions of a problem whose names are not consistent is
+  not proved. For `flexflex_rule`, smashing keeps the invariant with the
+  fixed point (`smash_flexflex_invw`, above).
+  One type per name is still assumed where it is needed, and only there: in
+  the completeness theorems (`unify_complete`, `unifiers_complete`,
+  `bicompose_aux_complete`, `biresolution_complete`; the counterexample
+  above shows that it cannot be dropped), in the statements of termination
+  without exceptions (`unify_terminates`, `unifiers_fin`,
+  `bicompose_aux_terminates`, `biresolution_terminates`,
+  `assumption_terminates`, `flexflex_terminates`; at the level of the
+  unifiers these are instances of the general theorems with exceptions, at
+  the level of the rules there is no general theorem), and in the lemmas
+  that the unifying rules preserve it (`data_cons_assumption` and the
+  lemmas after it). The operations `assumption_thms`, `flexflex_rule_thms`
+  and `biresolution_thms` on the abstract type are defined for theorems with
+  one type per name (`thm_cons`), since their descriptions use these
+  theorems; `bicompose_thms` asks nothing of the names.
 - `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
@@ -1062,7 +1091,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     schematic type variables and sorts (session `Pattern_Correctness`).
   - `Unify_Correctness/`: soundness of the enumeration of `unify.ML`,
     completeness up to the search bound, and termination
-    (session `Unify_Correctness`).
+    (session `Unify_Correctness`); `Unify_Outcome.thy` states the outcomes of
+    `Pattern.unify` and `Unify.unifiers` on problems in which a name may have
+    two types.
   - `Pure_Thm/`: the formalization of the inference rules of
     `src/Pure/thm.ML` (session `Pure_Thm`), on top of the models of
     `pattern.ML` and `unify.ML`: the primitive rules (`assume`, `implies_intr`,

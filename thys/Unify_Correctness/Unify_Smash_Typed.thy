@@ -921,7 +921,7 @@ proof -
   from foldrW_smash_flexflex1_sound[OF f h(1,2,4,3)] show ds: "dstep env (tdps tps) env' []"
     and th: "tyenv env' = tyenv env" by simp_all
   have pk': "\<forall>(rb, t, u)\<in>set (tdps tps). upok A env rb X t u" using pk by auto
-  show wi': "winv env' X" using dstep_winvc(1)[OF ds wi pk' th] by (simp add: dvars_def)
+  show wi': "winv env' X" using dstep_winv(1)[OF ds wi pk' th] by (simp add: dvars_def)
   note e = einvD[OF ei]
   have "\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
     using pk upokD(3,4) by fast

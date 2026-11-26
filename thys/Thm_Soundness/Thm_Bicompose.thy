@@ -175,138 +175,17 @@ definition thm_of_bc :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<
       bc_zproof (pure_sig_gen.ztargs (sg_consts c)) (rep_of state) i e flatten (rep_of rule) x rp sp)),
     th_constraints = cons_of rule \<union> cons_of state \<union> env_constraints (br_env x)\<rparr>"
 
-definition bc_cons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
-  "bc_cons state rule \<longleftrightarrow>
-    scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))) \<and>
-    pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-
-text \<open>Its two parts: one sort for each name of a type variable, one type for each name of a
-  variable.\<close>
-
 definition bc_scons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
   "bc_scons state rule \<longleftrightarrow>
     scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
       pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
 
-definition bc_vcons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
-  "bc_vcons state rule \<longleftrightarrow>
-    pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-
-text \<open>The arguments of a composition satisfy the assumptions of the theorems above:\<close>
-
-lemma bc_args:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
-    and vc: "incremented \<Longrightarrow> bc_vcons state rule"
-  shows "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
-      (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    and "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
-      (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
-    and "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-    and "incremented \<Longrightarrow> pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-proof -
-  show tv: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-    using sc by (simp add: bc_scons_def)
-  then have s1: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_thm state)) (th_prop (rep_thm state)))"
-    and s2: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_thm rule)) (th_prop (rep_thm rule)))"
-    by (auto simp: scons_def)
-  show "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
-      (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv0[OF ps s1] by simp
-  show "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
-      (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
-    using pure_thm_inv0[of rule] ps s2 sr by simp
-  show "incremented \<Longrightarrow> pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-    using vc by (simp add: bc_vcons_def)
-qed
-
-text \<open>The sort constraints of the environment of a result hold (\<open>Thm.insert_constraints_env\<close>):\<close>
-
-lemma cons_ok_thm_of_bc:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
-    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
-    and vc: "incremented \<Longrightarrow> bc_vcons state rule"
-    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
-    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
-      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
-    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-  shows "cons_ok (sign_of state) (cons_of rule \<union> cons_of (state :: 'u pure_thm) \<union> env_constraints (br_env x))"
-proof -
-  let ?c = "sign_of state"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  note a = bc_args[OF ps sr sc vc]
-  have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl a]) blast
-  then have "tsorted (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
-  then show ?thesis using sr by (simp add: cons_ok_env)
-qed
-
-lemma thm_sem_thm_of_bc:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
-    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
-    and vc: "incremented \<Longrightarrow> bc_vcons state rule"
-    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
-    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
-      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
-    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-  shows "thm_sem TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
-proof -
-  let ?c = "sign_of state"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  note a = bc_args[OF ps sr sc vc]
-  note st = a(1) and ru = a(2) and tv = a(3) and vc' = a(4)
-  obtain rAs B env where tp: "stpairs = th_tpairs (rep_of state)"
-    and SP: "th_prop (rep_of state) = list_implies (Bs @ [Bi]) C"
-    and ti: "thm_inv (maxidx (br_env x)) (hyps_of state @ hyps_of rule) (br_tpairs x) (br_prop x)"
-    by (rule bicompose_setup[OF d ok rx cfg vl a]) blast
-  have "valid_in ?c M (shyps_of state \<union> shyps_of rule \<union> env_sorts (br_env x)) (hyps_of state @ hyps_of rule)
-      (br_tpairs x) (br_prop x)" if M: "is_model ?c M" for M :: "'u model"
-  proof -
-    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
-      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
-      by (rule is_modelD[OF M])
-    have vs: "valid (shyps_of state) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-      using pure_thm_valid[OF M] by (simp add: valid_in_def)
-    have vr: "valid (shyps_of rule) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
-      using pure_thm_valid[of rule M] M sr by (simp add: valid_in_def)
-    let ?S = "list_implies (Bs @ [Bi]) C"
-    have ws: "wt_thm (th_maxidx (rep_of state)) (hyps_of state) stpairs ?S" using st tp SP by (simp add: thm_inv0_def)
-    have wr: "wt_thm (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
-      using ru by (simp add: thm_inv0_def)
-    have ok1: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) flatten match_flg incremented
-        (th_maxidx (rep_of state), stpairs, ?S) (stpairs, Bs, Bi, C) False e
-        (th_maxidx (rep_of rule), th_tpairs (rep_of rule), th_prop (rep_of rule)) nsubgoal) xq"
-      using ok tp SP by (simp add: pthm_of_def)
-    have vS: "valid (shyps_of state) (hyps_of state) stpairs ?S" using vs tp SP by simp
-    interpret bc: bicompose_call_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
-      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
-      cfg vl flatten match_flg incremented "th_maxidx (rep_of state)" stpairs Bs Bi C False e "th_maxidx (rep_of rule)"
-      "th_tpairs (rep_of rule)" "th_prop (rep_of rule)" nsubgoal "hyps_of state" "hyps_of rule"
-      by unfold_locales (use cfg ws wr tv vc' tp SP vl in simp_all)
-    have "valid (shyps_of state \<union> shyps_of rule \<union> tyenv_sorts (tyenv (br_env x))) (hyps_of state @ hyps_of rule)
-        (br_tpairs x) (br_prop x)"
-      by (rule bc.bicompose_aux_valid[OF ok1 rx vS vr])
-    then show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
-  qed
-  then show ?thesis using ti by (simp add: thm_sem_def thm_of_bc_def thm_inv_wf)
-qed
-
 text \<open>
-  The same without the condition on the names of the variables. The environment of the result
-  may bind names that have two types:
-\<close>
-
-text \<open>
-  The names that occur with two types in the variables of the two theorems or of the new premises
-  of a result (before the environment is applied to them):
+  The new theorem of a result satisfies the invariant of the theorems, and the sort constraints of
+  its environment hold (\<open>Thm.insert_constraints_env\<close>), whatever the types of the names of the
+  variables: the environment of the result may bind names that have two types. These are the
+  loose names of the proofs: the names that occur with two types in the variables of the two
+  theorems or of the new premises of a result (before the environment is applied to them).
 \<close>
 
 definition bc_clash :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> indexname set" where
@@ -314,7 +193,7 @@ definition bc_clash :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bres
     pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)) \<union>
     (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
 
-lemma cons_ok_thm_of_bc_gen:
+lemma cons_ok_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
@@ -350,7 +229,7 @@ proof -
   then show ?thesis using sr by (simp add: cons_ok_env)
 qed
 
-lemma sorts_ok_thm_of_bc_gen:
+lemma sorts_ok_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
@@ -386,7 +265,7 @@ proof -
   then show ?thesis using scert_env_sorts by blast
 qed
 
-lemma thm_sem_thm_of_bc_gen:
+lemma thm_sem_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
@@ -456,8 +335,8 @@ qed
 text \<open>
   \<open>bicompose_thms cfg vl flatten match incremented eres_flg rule nsubgoal i state\<close>: the results of
   \<open>Thm.bicompose\<close> on theorems; \<open>None\<close> if an exception is raised, if the signatures do not agree,
-  if the configuration does not belong to the signature, or if the theorems are not consistent
-  (\<^const>\<open>bc_scons\<close>; with \<open>incremented\<close> also \<^const>\<open>bc_vcons\<close>).
+  if the configuration does not belong to the signature, or if a name of a type variable has two
+  sorts in the theorems (\<^const>\<open>bc_scons\<close>). Nothing is asked of the names of the variables.
 \<close>
 
 definition bicompose_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name list) \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow>
@@ -468,7 +347,7 @@ definition bicompose_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name li
         okT (bicompose_aux (unify_ops cfg vl) (sg_alg c) flatten match_flg incremented (pthm_of (rep_of state))
           dst False e (pthm_of (rep_of rule)) nsubgoal) xq \<and> pure_sig_gen.bevals (unify_ops cfg vl) xq xs)
      in if pure_sig (sg_alg c) (sg_ar c) \<and> cfg_alg cfg = sg_alg c \<and> (\<forall>xs. length (vl xs) = length xs) \<and>
-          sign_of rule = c \<and> bc_scons state rule \<and> (incremented \<longrightarrow> bc_vcons state rule) \<and> (\<exists>xs. R xs)
+          sign_of rule = c \<and> bc_scons state rule \<and> (\<exists>xs. R xs)
        then Some (map (\<lambda>x. Abs_thm (thm_of_bc c i state flatten e rule x)) (THE xs. R xs))
        else None)"
 
@@ -485,11 +364,11 @@ proof -
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) flatten match_flg incremented (pthm_of (rep_of state))
       dst False e (pthm_of (rep_of rule)) nsubgoal) xq \<and> pure_sig_gen.bevals (unify_ops cfg vl) xq xs"
   from bt have g: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
-    "sign_of rule = ?c" "bc_scons state rule" "incremented \<longrightarrow> bc_vcons state rule" "\<exists>xs. ?R xs"
+    "sign_of rule = ?c" "bc_scons state rule" "\<exists>xs. ?R xs"
     and ths: "ths = map (\<lambda>x. Abs_thm (thm_of_bc ?c i state flatten e rule x)) (THE xs. ?R xs)"
     unfolding bicompose_thms_def Let_def by (auto split: if_splits)
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule g(1))
-  from g(7) obtain ys dst xq where d: "okT (dest_state (rep_of state) i) dst"
+  from g(6) obtain ys dst xq where d: "okT (dest_state (rep_of state) i) dst"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) flatten match_flg incremented (pthm_of (rep_of state))
       dst False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and ev: "bevals (unify_ops cfg vl) xq ys" by blast
@@ -507,9 +386,9 @@ proof -
   have rx: "bresult (unify_ops cfg vl) xq x" by (rule bevals_results[OF ev x])
   obtain stpairs Bs Bi C where dst: "dst = (stpairs, Bs, Bi, C)" by (cases dst) auto
   have okx: "thm_sem TYPE('a) (thm_of_bc ?c i state flatten e rule x)"
-    by (rule thm_sem_thm_of_bc[OF g(1,2) _ g(4,5) _ d[unfolded dst] ok[unfolded dst] rx]) (use g(3,6) in blast)+
+    by (rule thm_sem_thm_of_bc[OF g(1,2) _ g(4,5) d[unfolded dst] ok[unfolded dst] rx]) (use g(3) in blast)
   have cox: "cons_ok ?c (cons_of rule \<union> cons_of state \<union> env_constraints (br_env x))"
-    by (rule cons_ok_thm_of_bc[OF g(1,2) _ g(4,5) _ d[unfolded dst] ok[unfolded dst] rx]) (use g(3,6) in blast)+
+    by (rule cons_ok_thm_of_bc[OF g(1,2) _ g(4,5) d[unfolded dst] ok[unfolded dst] rx]) (use g(3) in blast)
   have "rep_thm th = thm_of_bc ?c i state flatten e rule x"
     unfolding thx by (rule rep_Abs_thm[OF okx]) (use cox in \<open>simp add: thm_of_bc_def\<close>)
   with d ok rx dst show ?thesis by blast

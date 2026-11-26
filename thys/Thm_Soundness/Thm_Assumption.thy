@@ -1217,16 +1217,32 @@ definition assumption_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name l
        then Some (case THE sx. R sx of (s0, xs) \<Rightarrow> map (\<lambda>r. Abs_thm (thm_of_ares state (aseq_ctx s0) r)) xs)
        else None)"
 
+text \<open>
+  The new theorem of a result satisfies the invariant of the theorems, also if names of variables
+  occur at two types in the theorem; the environment of the result may bind such names. These
+  are the loose names of the proofs:
+\<close>
+
+definition ares_clash :: "'u pure_thm \<Rightarrow> indexname set" where
+  "ares_clash state = vclash (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+
 lemma cons_ok_thm_of_ares:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and cs: "thm_cons state"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
     and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
   shows "cons_ok (sign_of (state :: 'u pure_thm)) (cons_of state \<union> env_constraints (ar_env r))"
 proof -
   let ?c = "sign_of state"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  let ?L = "ares_clash state"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv[OF ps cs] by simp
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
   have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st]) blast
   then have "tsorted (sg_alg ?c) (tyenv (ar_env r))" using einvD(12) by blast
   then show ?thesis by (simp add: cons_ok_env)
@@ -1234,111 +1250,27 @@ qed
 
 lemma sorts_ok_thm_of_ares:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and cs: "thm_cons state"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
     and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
   shows "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
 proof -
   let ?c = "sign_of state"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  let ?L = "ares_clash state"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv[OF ps cs] by simp
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
   have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st]) blast
   then have "scert (sg_alg ?c) (tyenv (ar_env r))" using einvD(9) by blast
   then show ?thesis using scert_env_sorts by blast
 qed
 
 lemma thm_sem_thm_of_ares:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and cs: "thm_cons state"
-    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
-  shows "thm_sem TYPE('u) (thm_of_ares (state :: 'u pure_thm) (aseq_ctx s0) r)"
-proof -
-  let ?c = "sign_of state" and ?th = "thm_of_ares state (aseq_ctx s0) r"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv[OF ps cs] by simp
-  note ti = assumption_thm_inv[OF a res cfg st]
-  obtain tpairs Bs Bi C params asms concl l env tps where
-    "okT (dest_state (rep_of state) i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
-    "s0 = AQ_Try (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) asms 1" "l < length asms"
-    "ures (empty_env (th_maxidx (rep_of state))) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) (El_R env tps)"
-    and nt: "okT (newth (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
-    "sinv (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state))) (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))
-      (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state))) (empty_env (th_maxidx (rep_of state)))
-      (tdps ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs))"
-    by (rule assumption_result[OF a res cfg st])
-  have mx: "th_maxidx (ar_thm r) = maxidx (ar_env r)" using okT_newth[OF nt(1)] by simp
-  have ws: "wt_thm (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using st by (simp add: thm_inv_def)
-  have "valid_in ?c M (shyps_of state \<union> env_sorts (ar_env r)) (hyps_of state) (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
-    if M: "is_model ?c M" for M :: "'u model"
-  proof -
-    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
-      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
-      by (rule is_modelD[OF M])
-    have vs: "valid (shyps_of state) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-      using pure_thm_valid[OF M] by (simp add: valid_in_def)
-    from assumption_valid[OF a res cfg st vs]
-    show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
-  qed
-  then show ?thesis using ti mx by (simp add: thm_sem_def thm_of_ares_def thm_inv_wf)
-qed
-
-text \<open>
-  The same for a theorem with names of variables at two types. The environment of the result
-  may bind such names:
-\<close>
-
-text \<open>The names that occur with two types in the variables of a theorem:\<close>
-
-definition ares_clash :: "'u pure_thm \<Rightarrow> indexname set" where
-  "ares_clash state = vclash (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
-
-lemma cons_ok_thm_of_ares_gen:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
-    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
-    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
-  shows "cons_ok (sign_of (state :: 'u pure_thm)) (cons_of state \<union> env_constraints (ar_env r))"
-proof -
-  let ?c = "sign_of state"
-  let ?L = "ares_clash state"
-  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
-  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv0[OF ps] sc by simp
-  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
-  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
-    by (rule lvtcons_vclash) (simp add: ares_clash_def)
-  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st]) blast
-  then have "tsorted (sg_alg ?c) (tyenv (ar_env r))" using einvD(12) by blast
-  then show ?thesis by (simp add: cons_ok_env)
-qed
-
-lemma sorts_ok_thm_of_ares_gen:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
-    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
-    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
-  shows "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
-proof -
-  let ?c = "sign_of state"
-  let ?L = "ares_clash state"
-  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
-  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    using pure_thm_inv0[OF ps] sc by simp
-  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
-  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
-    by (rule lvtcons_vclash) (simp add: ares_clash_def)
-  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st]) blast
-  then have "scert (sg_alg ?c) (tyenv (ar_env r))" using einvD(9) by blast
-  then show ?thesis using scert_env_sorts by blast
-qed
-
-lemma thm_sem_thm_of_ares_gen:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
     and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
@@ -1408,8 +1340,11 @@ proof -
   from th obtain r where r: "r \<in> set ys" and thr: "th = Abs_thm (thm_of_ares state (aseq_ctx s0) r)"
     unfolding xs the by auto
   have res: "aresult (unify_ops cfg vl) s0 r" by (rule aevals_aresult[OF ev r])
-  have "thm_sem TYPE('a) (thm_of_ares state (aseq_ctx s0) r)" by (rule thm_sem_thm_of_ares[OF g(1-3) a res])
-  moreover have "cons_ok ?c (cons_of state \<union> env_constraints (ar_env r))" by (rule cons_ok_thm_of_ares[OF g(1-3) a res])
+  have sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    using g(3) by (simp add: thm_cons_def)
+  have "thm_sem TYPE('a) (thm_of_ares state (aseq_ctx s0) r)" by (rule thm_sem_thm_of_ares[OF g(1,2) sc a res])
+  moreover have "cons_ok ?c (cons_of state \<union> env_constraints (ar_env r))"
+    by (rule cons_ok_thm_of_ares[OF g(1,2) sc a res])
   ultimately have "rep_thm th = thm_of_ares state (aseq_ctx s0) r"
     unfolding thr by (intro rep_Abs_thm) (simp_all add: thm_of_ares_def)
   with a res show ?thesis by blast
@@ -1487,17 +1422,28 @@ definition flexflex_rule_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> nam
        then Some (map (\<lambda>(env, r). Abs_thm (thm_of_fres (solve_constraints_thm th) env r)) (THE xs. R xs))
        else None)"
 
+lemma thm_of_fres_sign [simp]: "th_sign (thm_of_fres th env r) = sign_of th"
+  by (simp add: thm_of_fres_def)
+
+text \<open>The same without the condition on the names of the variables:\<close>
+
 lemma cons_ok_thm_of_fres:
   assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and cs: "thm_cons th"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
   shows "cons_ok (sign_of (th :: 'u pure_thm)) (th_constraints (thm_of_fres th env r))"
 proof -
   let ?c = "sign_of th"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  let ?L = "ares_clash th"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using pure_thm_inv[OF ps cs] by simp
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
   have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
   then have "tsorted (sg_alg ?c) (tyenv env)" using einvwD(12) by blast
   then show ?thesis by (simp add: thm_of_fres_def cons_ok_env)
@@ -1505,106 +1451,27 @@ qed
 
 lemma sorts_ok_thm_of_fres:
   assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and cs: "thm_cons th"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
   shows "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (sign_of (th :: 'u pure_thm))) S"
 proof -
   let ?c = "sign_of th"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  let ?L = "ares_clash th"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using pure_thm_inv[OF ps cs] by simp
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
   have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
   then have "scert (sg_alg ?c) (tyenv env)" using einvwD(9) by blast
   then show ?thesis using scert_env_sorts by blast
 qed
-
-lemma thm_of_fres_sign [simp]: "th_sign (thm_of_fres th env r) = sign_of th"
-  by (simp add: thm_of_fres_def)
 
 lemma thm_sem_thm_of_fres:
-  assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and cs: "thm_cons th"
-    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-  shows "thm_sem TYPE('u) (thm_of_fres (th :: 'u pure_thm) env r)"
-proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u)")
-  case True
-  then show ?thesis using thm_sem_rep[of th] by (simp add: thm_of_fres_def)
-next
-  case False
-  let ?c = "sign_of th" and ?th = "thm_of_fres th env r"
-  have eq: "?th = with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (norm_proof_remove_types env))
-      (bindM (zproof_of th) (flexflex_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
-    unfolding thm_of_fres_def if_not_P[OF False] ..
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using pure_thm_inv[OF ps cs] by simp
-  note ti = flexflex_thm_inv[OF a res cfg st]
-  have ws: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using st by (simp add: thm_inv_def)
-  have "valid_in ?c M (shyps_of th \<union> env_sorts env) (hyps_of th) (th_tpairs r) (th_prop r)"
-    if M: "is_model ?c M" for M :: "'u model"
-  proof -
-    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
-      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
-      by (rule is_modelD[OF M])
-    have vs: "valid (shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_valid[OF M] by (simp add: valid_in_def)
-    from flexflex_valid[OF a res cfg st vs]
-    show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
-  qed
-  then show ?thesis using ti by (simp add: thm_sem_def eq thm_inv_wf)
-qed
-
-text \<open>The same without the condition on the names of the variables:\<close>
-
-lemma cons_ok_thm_of_fres_gen:
-  assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
-    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-  shows "cons_ok (sign_of (th :: 'u pure_thm)) (th_constraints (thm_of_fres th env r))"
-proof -
-  let ?c = "sign_of th"
-  let ?L = "ares_clash th"
-  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
-  have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using pure_thm_inv0[OF ps] sc by simp
-  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
-  have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
-    by (rule lvtcons_vclash) (simp add: ares_clash_def)
-  have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
-  then have "tsorted (sg_alg ?c) (tyenv env)" using einvwD(12) by blast
-  then show ?thesis by (simp add: thm_of_fres_def cons_ok_env)
-qed
-
-lemma sorts_ok_thm_of_fres_gen:
-  assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
-    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-  shows "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (sign_of (th :: 'u pure_thm))) S"
-proof -
-  let ?c = "sign_of th"
-  let ?L = "ares_clash th"
-  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
-  have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using pure_thm_inv0[OF ps] sc by simp
-  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
-  have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
-    by (rule lvtcons_vclash) (simp add: ares_clash_def)
-  have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
-  then have "scert (sg_alg ?c) (tyenv env)" using einvwD(9) by blast
-  then show ?thesis using scert_env_sorts by blast
-qed
-
-lemma thm_sem_thm_of_fres_gen:
   assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
@@ -1676,7 +1543,8 @@ proof -
   have res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)" by (rule fevals_fresult[OF ev x])
   \<comment> \<open>the rule applies to the theorem with its constraints solved (\<open>Thm.solve_constraints\<close>)\<close>
   let ?th = "solve_constraints_thm th"
-  have g': "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" "cfg_alg cfg = sg_alg (sign_of ?th)" "thm_cons ?th"
+  have g': "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" "cfg_alg cfg = sg_alg (sign_of ?th)"
+    "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?th)) (th_prop (rep_of ?th)))"
     using g(1-3) by (simp_all add: thm_cons_def)
   have a': "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0" using a by simp
   have res': "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)" using res by simp

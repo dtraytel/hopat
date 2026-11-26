@@ -1,136 +1,21 @@
-section \<open>Unifiers that Bind Names with Several Types\<close>
+section \<open>Typed Solutions of Unifiers\<close>
 
 theory Unify_Typed_Results
   imports Unify_Results "Pattern_Correctness.Pattern_Typed_Unifier"
 begin
 
 text \<open>
-  The results of theory \<open>Unify_Results\<close> describe the unifiers whose environment binds no name
-  that occurs with several types (\<^const>\<open>pure_sig_gen.lfin\<close>). This theory removes the restriction:
-  every element of the enumeration of \<^const>\<open>unifiers\<close> on a well-formed problem satisfies the
-  invariant of the results (\<open>unifiers_cfin_uresult\<close>), and a solution of its environment that also
-  satisfies the bindings read at other types (\<open>gsolution\<close>) solves the problem if it solves the
-  remaining flex-flex pairs (\<open>deqv_ebinds_dsolved\<close>). Such solutions exist: the typed solution
+  Every element of the enumeration of \<^const>\<open>unifiers\<close> on a well-formed problem satisfies the
+  invariant of the results, whatever names its environment binds (\<open>unifiers_cfin_uresult\<close> in
+  theory \<open>Unify_Results\<close>). A solution of its environment that also satisfies the bindings read
+  at other types (\<open>gsolution\<close>) solves the problem if it solves the remaining flex-flex pairs
+  (\<open>deqv_ebinds_dsolved\<close>). Such solutions exist: the typed solution
   \<^const>\<open>pure_sig_gen.gsol\<close> of an acyclic environment, composed with a substitution, is one
   (\<open>gfix_gsol\<close>, \<open>gfix_gsolution\<close> in theory \<open>Unify_Smash_Typed\<close>).
 \<close>
 
 context pure_sig_gen
 begin
-
-subsection \<open>The invariant of the results\<close>
-
-lemma rres_ffres_g:
-  assumes "rres A0 env0 x"
-  shows "\<exists>env' tps. x = El_R env' tps \<and>
-    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> ffres A K X env' tps \<and>
-      fflex A K e0 env' tps)"
-proof -
-  from assms obtain env' tps A K X env ffs where x: "x = El_R env' tps" and fin: "finite X" "finite K"
-    and A0: "A0 \<subseteq> A" and tn: "tnew A0 env0 A env"
-    and si: "sinv A K X env ffs" and f: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps)"
-    and fv: "finv A K env env'"
-    and tk: "\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
-    and fl: "\<forall>(t, u)\<in>set tps. flexb env t \<and> flexb env u"
-    unfolding rres_def by blast
-  have wi: "winv env X" using si by (simp add: sinv_def)
-  have ei': "einv A K env'" and th: "tyenv env' = tyenv env" using fv by (simp_all add: finv_def)
-  let ?KN = "tvars_env (tyenv env) \<union> A"
-  have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps []). upok A env rb X t u" using si by (simp add: sinv_def)
-  have ds: "dstep env (ffs @ tdps []) env' (tdps tps)" by (rule foldrW_add_ffpair_sound[OF f])
-  note dw = dstep_winvc[OF ds wi pk th]
-  let ?X' = "X \<union> dvars (tdps tps)"
-  have "upok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps" for t u
-  proof -
-    have vX: "vtvars X \<subseteq> ?KN"
-    proof (cases ffs)
-      case Nil
-      with f have "tps = []" by simp
-      with tu show ?thesis by simp
-    next
-      case (Cons dp ffs')
-      obtain rb t0 u0 where "dp = (rb, t0, u0)" by (cases dp)
-      with si Cons have "upok A env rb X t0 u0" by (auto simp: sinv_def)
-      then show ?thesis by (rule upokD(6))
-    qed
-    have vX': "vtvars ?X' \<subseteq> ?KN"
-      using vX tk vtvars_vars by (fastforce simp: dvars_def vtvars_def)
-    have dt: "dtyped \<rho> [([], t, u)]" if "tsol (tyenv env') \<rho>" "cert_inst \<rho>" for \<rho>
-      using dw(2)[OF that] tu by (auto simp: dtyped_def)
-    show ?thesis
-      unfolding upok_def
-    proof (intro conjI allI impI)
-      show "vars t \<union> vars u \<subseteq> ?X' \<union> evars env'" using tu by (force simp: dvars_def)
-      show "ttvars t \<union> ttvars u \<union> btvars [] \<union> vtvars ?X' \<subseteq> tvars_env (tyenv env') \<union> A"
-        using tk tu vX' th by (auto simp: btvars_def)
-      show "\<not> loose_bvar t (ilength [])" "\<not> loose_bvar u (ilength [])"
-        using dt[OF einv_rho0[OF ei']] by (simp_all add: dtyped_def)
-      fix \<rho> assume "tsol (tyenv env') \<rho>" "cert_inst \<rho>"
-      from dt[OF this] show "\<exists>e T. bs_env \<rho> e [] \<and> e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T"
-        by (simp add: dtyped_def)
-    qed
-  qed
-  then have "ffres A K ?X' env' tps" using ei' dw(1) by (auto simp: ffres_def)
-  moreover have "finite ?X'" using fin(1) finite_dvars by simp
-  moreover have "fflex A K env env' tps" using fv fl by (simp add: fflex_def)
-  moreover have "tnew A0 env0 A env'" using tn th by (simp add: tnew_def)
-  ultimately have "finite ?X' \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> ffres A K ?X' env' tps \<and>
-      fflex A K env env' tps"
-    using fin(2) A0 by blast
-  note h = this
-  show ?thesis unfolding x by (rule exI[of _ env'], rule exI[of _ tps], rule conjI[OF refl], rule exI[of _ A],
-      rule exI[of _ K], rule exI[of _ ?X'], rule exI[of _ env]) (rule h)
-qed
-
-text \<open>Every element of the enumeration of \<open>unifiers\<close> is a well-formed unifier, whatever names its
-  environment binds:\<close>
-
-theorem unifiers_cfin_uresult:
-  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
-    and u: "unifiers alg env tus = Some (Ok s)"
-  shows "cfin cfg s (uresult A env tus)"
-proof -
-  have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(t, u)\<in>set tus. upok A env [] X t u"
-    using si by (auto simp: sinv_def)
-  let ?m = "foldM (\<lambda>(t, u) env. unify alg t u env) tus env"
-  from foldM_unify_c[OF fin ei wi p] obtain r where r: "?m = Some r" "upostc A K env X r" by blast
-  show ?thesis
-  proof (cases r)
-    case (Ok env')
-    with r u have s: "s = S_Single (El_R env' [])"
-      by (simp add: unifiers_def handle_def bindM_def return_def)
-    have okm: "ok ?m env'" using r Ok by simp
-    have ds: "dstep env (tdps tus) env' []" by (rule foldM_unify_dstep[OF okm])
-    note i = upostc_OkD[OF r(2)[unfolded Ok]]
-    have "ffres A K X env' []" using i by (simp add: ffres_def)
-    moreover have "fflex A K env' env' []" using i by (simp add: fflex_def finv_def iflex_refl)
-    ultimately have "uresult A env tus (El_R env' [])"
-      using uresultI[OF _ fin order_refl, of env tus env' "[]"] ds i(7) by simp
-    then show ?thesis unfolding s by (rule cfin_Single)
-  next
-    case (Err e)
-    show ?thesis
-    proof (cases "e = Pattern")
-      case True
-      with r u Err have s: "s = hounifiers [] env tus"
-        by (simp add: unifiers_def handle_def bindM_def return_def)
-      show ?thesis unfolding s
-      proof (rule cfin_mono[OF hounifiers_cfin[OF cfg fin si]])
-        fix x assume x: "rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). ([], t, u)) tus)) x"
-        from rres_ffres_g[OF conjunct1[OF x]] obtain env' tps where x': "x = El_R env' tps"
-          and h: "\<exists>A' K' X' e0. finite X' \<and> finite K' \<and> A \<subseteq> A' \<and> tnew A env A' env' \<and> ffres A' K' X' env' tps \<and>
-            fflex A' K' e0 env' tps" by blast
-        from x x' have "dstep env (tdps tus) env' (tdps tps)" by simp
-        with h show "uresult A env tus x" unfolding x' uresult_El_R by blast
-      qed
-    next
-      case False
-      with r u Err have "s = S_Empty"
-        by (cases e) (simp_all add: unifiers_def handle_def bindM_def return_def raise_def)
-      then show ?thesis by simp
-    qed
-  qed
-qed
 
 subsection \<open>Typed solutions\<close>
 
@@ -212,6 +97,31 @@ proof -
     from eqv_vsubst[OF eqv_typed_pairs[OF this] solutionD(3)[OF sol] E] show ?thesis by (simp add: ap_def)
   qed
   then show ?thesis by (auto simp: dsolved_def)
+qed
+
+text \<open>
+  So an element of the enumeration of \<^const>\<open>unifiers\<close> is sound for typed solutions: a typed
+  solution of its environment that solves its flex-flex pairs solves the problem.
+\<close>
+
+theorem uresult_solves:
+  assumes ur: "uresult A env tus (El_R env' tps)" and si: "sinv A0 K X env (tdps tus)"
+    and gs: "gsolution \<rho> \<sigma> env'" and ci: "cert_inst \<rho>"
+    and ts: "\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  shows "\<forall>(t, u)\<in>set tus. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+proof -
+  note sol = gsolutionD(1)[OF gs]
+  have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF ur])
+  have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
+  have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' uresultD(2)[OF ur]])
+  from winvD[OF _ t ci] si have w: "wt_env \<rho> env" "vinv \<rho> env X" by (auto simp: sinv_def)
+  have v: "vinv \<rho> env ({} \<union> dvars (tdps tus))"
+    using ur_vinv_sub[OF w(2)] sinv_dvars[OF si] by simp
+  note dt = sinv_dtyped[OF si t ci]
+  have dt': "dtyped \<rho> (tdps tps)" using dstepDg(1)[OF ds t' extends_refl w(1) dt v] by blast
+  have "dsolved \<rho> \<sigma> (tdps tps)" using ts by (simp only: dsolved_tdps)
+  from deqv_ebinds_dsolved[OF dstepDg(2)[OF ds t' extends_refl w(1) dt v] gs dt dt' this]
+  show ?thesis by (simp only: dsolved_tdps)
 qed
 
 end

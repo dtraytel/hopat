@@ -748,20 +748,9 @@ lemma ures_solves:
     and ts: "\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   shows "\<forall>(t, u)\<in>set tus. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
 proof -
-  note sol = gsolutionD(1)[OF gs]
-  from ures_pwf[OF ur pw] obtain A where "uresult A env tus (El_R env' tps)" .
-  then have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1))
-  from pw obtain A0 K X where si: "sinv A0 K X env (tdps tus)" by (auto simp: pwf_def)
-  have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
-  have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
-  from winvD[OF _ t ci] si have w: "wt_env \<rho> env" "vinv \<rho> env X" by (auto simp: sinv_def)
-  have v: "vinv \<rho> env ({} \<union> dvars (tdps tus))"
-    using ur_vinv_sub[OF w(2)] sinv_dvars[OF si] by simp
-  note dt = sinv_dtyped[OF si t ci]
-  have dt': "dtyped \<rho> (tdps tps)" using dstepDg(1)[OF ds t' extends_refl w(1) dt v] by blast
-  have "dsolved \<rho> \<sigma> (tdps tps)" using ts by (simp only: dsolved_tdps)
-  from deqv_ebinds_dsolved[OF dstepDg(2)[OF ds t' extends_refl w(1) dt v] gs dt dt' this]
-  show ?thesis by (simp only: dsolved_tdps)
+  from pw obtain A K X where f: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    by (auto simp: pwf_def)
+  show ?thesis by (rule uresult_solves[OF uresD[OF ur f si] si gs ci ts])
 qed
 
 text \<open>The problems of a closure are well-formed:\<close>
