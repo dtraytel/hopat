@@ -15,31 +15,31 @@ begin
 lemma env_inv_props:
   assumes "env_inv E"
   shows "zenv_nn E" "eneg E" "tacyc (tyenv E)" "tcons_env (tyenv E)"
-    "acyc E" "closed_env E" "\<forall>w\<in>evars E. 0 \<le> snd (fst w)"
+    "closed_env E" "\<forall>w\<in>evars E. 0 \<le> snd (fst w)"
 proof -
-  have b: "acyc E" "closed_env E" "tacyc (tyenv E)" "tcons_env (tyenv E)" "\<forall>(x, T)\<in>evars E. 0 \<le> snd x"
+  have b: "closed_env E" "tacyc (tyenv E)" "tcons_env (tyenv E)" "\<forall>(x, T)\<in>evars E. 0 \<le> snd x"
     "\<forall>p\<in>tvars_env (tyenv E). 0 \<le> snd (fst p)"
     "\<forall>x U u. vt_lookup (tenv E) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))"
     using assms unfolding env_inv_def by blast+
-  show "acyc E" "closed_env E" "tacyc (tyenv E)" "tcons_env (tyenv E)" by (fact b(1), fact b(2), fact b(3), fact b(4))
-  show ev: "\<forall>w\<in>evars E. 0 \<le> snd (fst w)" using b(5) by (simp add: case_prod_beta)
+  show "closed_env E" "tacyc (tyenv E)" "tcons_env (tyenv E)" by (fact b(1), fact b(2), fact b(3))
+  show ev: "\<forall>w\<in>evars E. 0 \<le> snd (fst w)" using b(4) by (simp add: case_prod_beta)
   have bn: "(x, U, u) \<in> bnds E" if "vt_lookup (tenv E) x = Some (U, u)" for x U u
     using that by (simp add: bnds_def)
   have val: "pnn u" if "vt_lookup (tenv E) x = Some (U, u)" for x U u
   proof -
     have "vars u \<subseteq> evars E" using bn[OF that] unfolding evars_def by blast
     with ev have "\<forall>v\<in>vars u. 0 \<le> snd (fst v)" by blast
-    moreover have "\<forall>p\<in>ttvars u. 0 \<le> snd (fst p)" using b(7) that by blast
+    moreover have "\<forall>p\<in>ttvars u. 0 \<le> snd (fst p)" using b(6) that by blast
     ultimately show ?thesis by (simp add: pnn_iff')
   qed
-  show "zenv_nn E" unfolding zenv_nn_def using b(6) val by (auto simp: pnn_def)
+  show "zenv_nn E" unfolding zenv_nn_def using b(5) val by (auto simp: pnn_def)
   have x: "0 \<le> snd x" if "vt_lookup (tenv E) x = Some (U, u)" for x U u
   proof -
     have "(x, U) \<in> evars E" using bn[OF that] unfolding evars_def by blast
     with ev show ?thesis by force
   qed
   show "eneg E" unfolding eneg_def
-    using tyenv_ok_nn[OF b(6)] val x pnn_noneg integer_nonneg_ne_m1 by blast
+    using tyenv_ok_nn[OF b(5)] val x pnn_noneg integer_nonneg_ne_m1 by blast
 qed
 
 end
@@ -56,7 +56,7 @@ lemma norm_proof_remove_types_closed:
 proof -
   let ?E = "remove_types_env env"
   note e = env_inv_props[OF ei]
-  have ac': "acyc ?E" "closed_env ?E" "tacyc (tyenv ?E)" using e(5,6,3) by (simp_all add: remove_types_env_props)
+  have ce': "closed_env ?E" using e(5) by (simp add: remove_types_env_props)
   have n: "norm_proof ?E p = returnW q" using nq by (simp add: norm_proof_remove_types_def)
   have "prf_idx (\<lambda>i. 0 \<le> i) q"
   proof (rule prf_idx_norm_proof[OF n])
@@ -64,14 +64,14 @@ proof -
     show "\<forall>v\<in>vars t'. 0 \<le> snd (fst v)"
     proof
       fix v assume "v \<in> vars t'"
-      from vars_norm_term_idx[OF nt ac' this] obtain w where w: "w \<in> vars t \<union> evars env" "fst w = fst v"
+      from vars_norm_term_idx[OF nt this] obtain w where w: "w \<in> vars t \<union> evars env" "fst w = fst v"
         by (auto simp: remove_types_env_props)
-      from w(1) have "0 \<le> snd (fst w)" using p(1) t e(7) by (auto simp: prf_idx_def)
+      from w(1) have "0 \<le> snd (fst w)" using p(1) t e(6) by (auto simp: prf_idx_def)
       with w(2) show "0 \<le> snd (fst v)" by simp
     qed
   qed
   moreover have "prf_nolb 0 q"
-    by (rule prf_nolb_norm_proof[OF n _ _ p(2)]) (use loose_bvar_norm_term[OF _ ac'] in auto)
+    by (rule prf_nolb_norm_proof[OF n _ _ p(2)]) (use loose_bvar_norm_term[OF _ ce'] in auto)
   ultimately show ?thesis by blast
 qed
 
@@ -141,7 +141,7 @@ proof -
   have pr': "ares_proof ?ctx r pf = returnW q" using pr s0 by simp
   have w: "wtp (th_prop state)" using st by (simp add: thm_inv_def wt_thm_def)
   have "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
-  proof (rule ares_proof_valid[OF d ap l nt pr' p(1) w ei wi tw])
+  proof (rule ares_proof_valid[OF d ap l nt pr' p(1) w einv_einvw[OF ei wi] wi tw])
     fix \<rho>' \<sigma>' F t u e assume sol: "gsolution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
       and ts: "\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and tu: "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
@@ -201,7 +201,7 @@ proof -
     using thm_inv_pnn(1)[OF st] wtpD(1)[OF wS] P
     by (auto simp: pnn_list_implies closed_def loose_bvar_list_implies)
   have "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
-  proof (rule zares_proof_valid[OF d ap l nt z' p(1) st _ H _ ei wi e(3,4) e(2) tw])
+  proof (rule zares_proof_valid[OF d ap l nt z' p(1) st _ H _ einv_einvw[OF ei wi] wi e(3,4) e(2) tw])
     show "\<forall>A\<in>set (Bs @ [Bi]). noneg A" using pA pnn_noneg by blast
     show "zconsts_ok pf" using p(2) by (simp add: zinv_def)
     fix \<rho>' \<sigma>' F t u e assume sol: "gsolution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
@@ -216,7 +216,7 @@ proof -
       using okT_newth[OF nt] by (auto simp: ares_zproof_def bindZ_eq_returnZ liftMZ_eq_returnZ split: ares.splits)
     have "\<forall>t\<in>set [fp]. pnn t" using thm_inv_full_prop_of(1)[OF st fp] by simp
     note vp = visible_pnn[OF this]
-    show ?thesis by (rule zassumption_proof_props[OF za p(2,3) e(3) e(1) e(6) vp(1,2) pA])
+    show ?thesis by (rule zassumption_proof_props[OF za p(2,3) e(3) e(1) e(5) vp(1,2) pA])
   qed
   ultimately show ?thesis by blast
 qed
@@ -254,13 +254,13 @@ theorem flexflex_proof_ok:
     and ne: "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th). aconv_term t u))"
     and nq: "norm_proof_remove_types env pf = returnW q"
     and p: "prf_valid ax H (th_tpairs th) pf (th_prop th)" "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-    and nf: "nfree env" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "prf_valid ax H (th_tpairs th') q (th_prop th') \<and> prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
 proof -
-  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einv A' K' env" and wi: "winv env X'"
-    by (rule flexflex_data[OF a res cfg st nf])
+  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einvw A' K' env" and wi: "winv env X'"
+    by (rule flexflex_data[OF a res cfg st])
   have ws: "wt_thm (th_maxidx th) hs (th_tpairs th) (th_prop th)" using st by (simp add: thm_inv_def)
-  have ev: "env_inv env" using flexflex_thm_inv[OF a res cfg st nf l0] by simp
+  have ev: "env_inv env" using flexflex_thm_inv[OF a res cfg st l0] by simp
   have "prf_valid ax H (th_tpairs th') q (th_prop th')"
   proof (rule flexflex_proof_valid[OF n ne nq p(1) _ _ ei wi])
     show "wtp (th_prop th)" using ws by (simp add: wt_thm_def)
@@ -276,12 +276,12 @@ theorem flexflex_zproof_ok:
     and ne: "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th). aconv_term t u))"
     and z: "flexflex_zproof ztargs th env pf = return q"
     and p: "zvalid ax H (th_tpairs th) pf (th_prop th)" "zinv pf" "znolb 0 pf"
-    and H: "\<forall>h\<in>H. closed h" and nf: "nfree env" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and H: "\<forall>h\<in>H. closed h" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "zvalid ax H (th_tpairs th') q (th_prop th') \<and> zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
 proof -
-  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einv A' K' env" and wi: "winv env X'"
-    by (rule flexflex_data[OF a res cfg st nf])
-  have ev: "env_inv env" using flexflex_thm_inv[OF a res cfg st nf l0] by simp
+  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einvw A' K' env" and wi: "winv env X'"
+    by (rule flexflex_data[OF a res cfg st])
+  have ev: "env_inv env" using flexflex_thm_inv[OF a res cfg st l0] by simp
   note e = env_inv_props[OF ev]
   have zc: "zconsts_ok pf" using p(2) by (simp add: zinv_def)
   have "zvalid ax H (th_tpairs th') q (th_prop th')"
@@ -293,7 +293,7 @@ proof -
       by (auto simp: flexflex_zproof_def bindZ_eq_returnZ liftMZ_eq_returnZ)
     have "\<forall>t\<in>set [fp]. pnn t" using thm_inv_full_prop_of(1)[OF st fp] by simp
     note vp = visible_pnn[OF this]
-    note c = znorm_proof_closed[OF zq zc e(3) e(6)]
+    note c = znorm_proof_closed[OF zq zc e(3) e(5)]
     show ?thesis using zinv_znorm_proof[OF zq p(2) e(3) e(1) vp(1,2)] c(1)[OF p(3)] c(2) by blast
   qed
   ultimately show ?thesis by blast
@@ -311,7 +311,7 @@ theorem flexflex_proof_ok:
     and nq: "norm_proof_remove_types env pf = returnW q"
     and p: "prf_valid ax H (th_tpairs th) pf (th_prop th)" "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
   shows "prf_valid ax H (th_tpairs th') q (th_prop th') \<and> prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
-  by (rule flexflex_proof_ok[OF a res cfg st ne nq p nfree0]) simp
+  by (rule flexflex_proof_ok[OF a res cfg st ne nq p]) simp
 
 theorem flexflex_zproof_ok:
   assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
@@ -321,7 +321,7 @@ theorem flexflex_zproof_ok:
     and p: "zvalid ax H (th_tpairs th) pf (th_prop th)" "zinv pf" "znolb 0 pf"
     and H: "\<forall>h\<in>H. closed h"
   shows "zvalid ax H (th_tpairs th') q (th_prop th') \<and> zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
-  by (rule flexflex_zproof_ok[OF a res cfg st ne z p H nfree0]) simp
+  by (rule flexflex_zproof_ok[OF a res cfg st ne z p H]) simp
 
 end
 
@@ -493,7 +493,6 @@ lemma proofs_ok_thm_of_fres_gen:
     and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-    and nb: "binds_none env (ares_clash th)"
     and psig: "is_prf_sig (sign_of th)"
     and po_th: "is_prf_sig (sign_of th) \<Longrightarrow> proofs_ok (rep_thm th)"
   shows "proofs_ok (thm_of_fres (th :: 'u pure_thm) env r)"
@@ -511,13 +510,12 @@ next
   interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
   have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using pure_thm_inv0[OF ps] sc by simp
-  have nfL: "nfree env" using nb by (rule nfree_binds_none)
   have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
   have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  note ti = flexflex_thm_inv[OF a res cfg st nfL l0]
+  note ti = flexflex_thm_inv[OF a res cfg st l0]
   have ws: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using st by (simp add: thm_inv_def)
   interpret prf_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "sg_close ?c" "sg_tyargs ?c"
@@ -531,7 +529,7 @@ next
     have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) pf (th_prop (rep_of th))"
       "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
       using po pf by (simp_all add: proofs_ok_def Let_def)
-    from flexflex_proof_ok[OF a res cfg st False nq vq nfL l0]
+    from flexflex_proof_ok[OF a res cfg st False nq vq l0]
     show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) p (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p" .
   next
     fix z assume "bindM (zproof_of th) (flexflex_zproof ztargs (rep_of th) env) = return z"
@@ -541,7 +539,7 @@ next
       "zinv pf" "znolb 0 pf" "zhyps_ok pf"
       using po pf by (simp_all add: proofs_ok_def Let_def)
     have H: "\<forall>h\<in>set (hyps_of th). closed h" using ws by (auto simp: wt_thm_def dest: wtpD(1))
-    note zr = flexflex_zproof_ok[OF a res cfg st False z vq(1-3) H nfL l0]
+    note zr = flexflex_zproof_ok[OF a res cfg st False z vq(1-3) H l0]
     have "zhyps_ok z" using zhyps_ok_mono[OF vq(4)] zr by blast
     with zr show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
       by blast

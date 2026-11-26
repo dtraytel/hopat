@@ -293,7 +293,7 @@ proof -
   from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
     and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
   obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
-    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma>]) blast
+    by (rule iext_exists_sb[OF einv_einvw[OF ei' wi'] wi' \<rho> \<sigma>]) blast
   note i = iextD[OF ie]
   have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
   have tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T)"

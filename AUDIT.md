@@ -636,6 +636,7 @@ four of four seeded errors.
 Still open, in the order in which they limit the claim "no proof of `False` from `thm.ML`":
 
 1. B1: the rules that unify are covered only for arguments with consistent variable names.
+   (Closed later: "Additions after the nineteenth execution" at the end of this document.)
 2. The link between models and ML is testing and reading, not proof; D2 (the judgment of tight
    proofs ignores the type instances of the equality axioms) shows that a model and its proof
    can both be wrong in the same way.
@@ -2090,4 +2091,73 @@ with `upost`, `hn_term`, …) were replaced by their general versions (`unif_ter
 - **What this does not change.** The differential tests and the independent checker
   (`Pure_Kernel_Check`) are as before; no model of the code and no patch changed. The
   statement of `derivable_sound` reads as before, with the stronger `zvalid`.
+
+### Additions after the nineteenth execution (B1 closed: the rules without a premise on names)
+
+- **The statement.** The rules `assumption`, `flexflex_rule`, `bicompose` and `biresolution`
+  of `derivable` (`Thm_Derivable.thy`) have no premise on the names of the schematic variables
+  any more. The premises that remain for these rules are the equal signatures, the lengths
+  of the lists that the name supply returns, and one sort per name of a schematic type
+  variable (`data_scons`, `data_scons2`). `derivable_sem`, `derivable_shyps` and
+  `derivable_proofs` read as before, for this larger predicate. The premise of the ninth
+  execution (the environment of the result binds no name that occurs with two types) and its
+  definitions (`binds_none`, `data_names_bc`, `data_names_bres`) are gone.
+- **`assumption`, `bicompose`, `biresolution`.** Three things were restricted to the results
+  that bind no loose name, and are now general.
+  (1) The invariant of the results of `Unify.unifiers`: every element of the enumeration
+  satisfies it (`unifiers_cfin_uresult` in `Unify_Typed_Results.thy`; `ures` in
+  `Bicompose_Call.thy` has no guard).
+  (2) The instance of the arguments at which a result is an instance. It was the solution
+  `esol` that unfolds the bindings by name; it is now a solution that also satisfies the
+  bindings read at other types (`gsolution`), built from the typed solution `gsol`
+  (`gsolution_gsol`, then `gfix_gsolution`; `iext`, `iext_exists_sb` in `Bicompose_Norm.thy`).
+  (3) That the unifier solves the problem at this instance: the general step predicate gives
+  the problem from the bindings, their readings at other types and the remaining pairs
+  (`dstepDg`), and a `gsolution` satisfies the first two (`ures_solves_eq`, and `ures_solves_eqv`
+  for the proofs).
+  The well-formedness of a normalized result (`norm_term_props`) no longer goes through the
+  unfolding by name either: typing and the variables come from the soundness of
+  normalization (`norm_term_sound`), the type variables from an induction on the computation
+  (`norm_term_ttvars`).
+- **`flexflex_rule`.** Smashing can produce an environment that is cyclic in the names. If
+  the heads of a flex-flex pair are one name `?v` with the types `T` and `U`, and exactly one
+  of them has arguments, `smash_flexflex1` binds `?v` (at the type with arguments) to a
+  constant function over the new variable `?x :: B`, and `?x` to `?v :: B` (`Envir.vupdate`
+  turns the binding of a variable to a larger variable around). So the invariant of
+  environments (`einv`), which contains acyclicity of the names, does not hold of such a
+  result, and all results that unfold an environment by name do not apply. The typed reading
+  is not cyclic: `?v` cannot be read at the type `B` of the value of its binding
+  (`gbody_types_abs_None`). `Unify_Smash_Typed.thy` therefore works with fixed points of the
+  typed reading (`gfix`: the value of `(x, V)` is the binding of `x` read at `V` under the
+  fixed point, where that is well-typed, and the variable otherwise). An acyclic well-typed
+  environment has the fixed point `gsol`; a fixed point extends to a new binding whose
+  variables have no well-typed reading afterwards (`gfix_update`); the bindings that
+  `smash_flexflex1` adds are of this kind in every case of `Envir.vupdate` (`ok_vupdate_Var`,
+  `smash_flexflex1_gfix`; when `?x` is bound to `?w` first, the binding of `?v` is added
+  first in the proof). A fixed point composed with a substitution is a `gsolution`
+  (`gfix_gsolution`). The invariant of a smashed unifier has the fixed point in place of
+  acyclicity (`einvw`, `smash_flexflex_invw`: no hypothesis on names; the type variables of
+  the new bindings by `vupdate_tvinv`, the typing from the step predicate, which
+  `smash_flexflex1_sound` already had without hypothesis). The lemmas on the rules that the
+  results of `flexflex_rule` use take `einvw` (`iext_exists_sb`, `canonical_tsol0`,
+  `norm_term_props`, `dstep_fresh`, `unif_thm_inv`, `fnewth_valid`, and
+  `flexflex_proof_valid`, `zflexflex_proof_valid` for the proofs); the invariant of the
+  environments of results that the proofs need (`env_inv`) no longer contains acyclicity:
+  the two facts about normalized terms that used it are proved by induction on the
+  computation (`vars_norm_term_idx` from `norm_term_vars`, `loose_bvar_norm_term`).
+- **What is not decided.** Whether `flexflex_rule` ever returns a theorem from an environment
+  that is cyclic in the names. By the code of `Envir.lookup`, normalizing a term in which
+  `?v` or `?x` is looked up raises `TYPE` there (the binding of `?x` is `?v :: B`, and `?v` is
+  bound at another type). The theorems do not use this: they say that a result, if there is
+  one, is valid and has valid proofs.
+- **Removed.** The parametrized predicate of an intermediate state of this work, the
+  definitions of the premise, and the lemmas that only served them (`nfree_binds_none`,
+  `data_clash`, `data_clash_bc`, `data_cons_iff`, the versions of the lemmas on `bicompose` and
+  `biresolution` for arguments with one type per name where the general versions now have no
+  premise at all: `sound_bicompose`, `sound_biresolution`, `sorts_bicompose`,
+  `sorts_biresolution`, `prfs_bicompose`, `prfs_biresolution`). The theorems on the abstract
+  type of theorems for arguments with one type per name (`bicompose_thms`, `biresolution_thms`,
+  `assumption_thms`, `flexflex_rule_thms`) and the lemmas `data_cons_…` are unchanged.
+- **Not changed.** No model of the code, no patch and no test changed. The completeness
+  statements are as before: they are about problems and solutions with one type per name.
 

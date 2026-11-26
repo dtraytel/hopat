@@ -6,11 +6,10 @@ begin
 
 text \<open>
   The rules of \<^const>\<open>derivable\<close> for \<open>assumption\<close>, \<open>flexflex_rule\<close>, \<open>bicompose\<close> and
-  \<open>biresolution\<close> do not ask for one type for each name of a schematic variable; they ask that the
-  environment of the result binds no name that occurs with two types. This theory gives a
-  derivation in the signature \<^const>\<open>pure0\<close> that uses this: a proof by assumption on a state in
-  which \<open>?x\<close> occurs with two types, whose unifier binds another variable. The run of the model
-  of the unifier is computed by simplification.
+  \<open>biresolution\<close> do not ask for one type for each name of a schematic variable. This theory gives
+  a derivation in the signature \<^const>\<open>pure0\<close> that uses this: a proof by assumption on a state in
+  which \<open>?x\<close> occurs with two types. The run of the model of the unifier is computed by
+  simplification.
 \<close>
 
 text \<open>
@@ -109,7 +108,7 @@ lemma cterm_ok_ct1: "cterm_ok ct1"
   using typing_ct1 by (auto simp: cterm_ok_def ct1_def cterm_wf0 closed_def ibelow0 w_defs propT_def)
 
 lemma derivable_st1: "derivable st1"
-  using derivable_gen.trivial[OF cterm_ok_ct1, of "mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))"]
+  using derivable.trivial[OF cterm_ok_ct1, of "mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))"]
   by (simp add: st1_def ct1_def trivial_def)
 
 lemma assumption1': "assumption 1 (mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))) = returnW s1"
@@ -122,19 +121,10 @@ lemma assumption1: "okT (assumption 1 (rp st1)) s1"
 lemma scons_st1: "data_scons st1"
   by (simp add: data_scons_def st1_def mk_rep_def tvars_thm0 scons_def w_defs propT_def)
 
-lemma clash_st1: "data_clash st1 = {(STR ''x'', 0)}"
-  by (auto simp: data_clash_def data_vars_def st1_def mk_rep_def vars_thm0 vclash_def w_defs propT_def)
-
-lemma binds1: "binds_none (ar_env r1) (data_clash st1)"
-  by (simp add: clash_st1 binds_none_def r1_def env1_def)
-
-text \<open>
-  The environment binds \<open>?y\<close> and not \<open>?x\<close>, the only name with two types. So the result is
-  derivable, although the state does not have one type for each name:
-\<close>
+text \<open>The result is derivable, although the state does not have one type for each name:\<close>
 
 theorem derivable_clash: "derivable (ares_data st1 (aseq_ctx s1) r1)"
-  by (rule derivable_gen.assumption[OF derivable_st1 _ scons_st1 assumption1 aresult.First[OF a1]])
+  by (rule derivable.assumption[OF derivable_st1 _ scons_st1 assumption1 aresult.First[OF a1]])
     (simp_all add: cfg1_def st1_def)
 
 lemma not_cons_st1: "\<not> data_cons st1"

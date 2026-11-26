@@ -950,7 +950,7 @@ theorem zflexflex_proof_valid:
     and z: "flexflex_zproof ztargs th0 env pf = return q"
     and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)"
     and inv: "thm_inv m hs (th_tpairs th0) (th_prop th0)"
-    and ei: "einv A K env" and wi: "winv env X"
+    and ei: "einvw A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok pf"
   shows "zvalid ax H (th_tpairs th) q (th_prop th)"
@@ -1250,7 +1250,7 @@ theorem zares_proof_valid:
     and p: "zvalid ax H (th_tpairs state) pf (th_prop state)"
     and inv: "thm_inv m hs (th_tpairs state) (th_prop state)"
     and nB: "\<forall>A\<in>set (Bs @ [Bi]). noneg A" and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok pf"
-    and ei: "einv A K env" and wi: "winv env X"
+    and ei: "einvw A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"

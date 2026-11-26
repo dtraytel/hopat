@@ -940,16 +940,6 @@ proof -
   qed
 qed
 
-lemma smash_flexflex_extends:
-  assumes "okW (smash_flexflex (env, tps)) env'"
-  shows "extends env env'"
-proof -
-  have "okW (foldrW smash_flexflex1 tps env) env'" using assms by (simp add: smash_flexflex_def)
-  then show ?thesis
-    by (induction rule: okW_foldrW_induct)
-      (auto intro: extends_refl extends_trans smash_flexflex1_extends)
-qed
-
 text \<open>All pairs, if the result binds no loose name:\<close>
 
 lemma foldrW_smash_flexflex1_inv:

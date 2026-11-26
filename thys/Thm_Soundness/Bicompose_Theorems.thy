@@ -43,9 +43,6 @@ begin
 lemma loose_bvar_beta_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar s k \<Longrightarrow> \<not> loose_bvar t k"
   by (induction rule: rtranclp_induct) (auto dest: loose_bvar_beta)
 
-lemma typing_beta_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
-  by (induction rule: rtranclp_induct) (auto intro: subject_reduction_beta)
-
 text \<open>The variables of a theorem after the application of a type environment:\<close>
 
 definition vimg :: "tyenv \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> ptyp) set" where
@@ -104,11 +101,11 @@ qed
 text \<open>The most general solution of the type environment of a well-formed environment:\<close>
 
 lemma canonical_tsol0:
-  assumes ei: "einv A K env" and wi: "winv env X"
+  assumes ei: "einvw A K env" and wi: "winv env X"
   shows "wt_env (tsol0 (tyenv env)) env" "vinv (tsol0 (tyenv env)) env X" "cert_inst (tsol0 (tyenv env))"
     "tsol (tyenv env) (tsol0 (tyenv env))"
 proof -
-  note e = einvD[OF ei]
+  note e = einvwD[OF ei]
   let ?\<rho> = "tsol0 (tyenv env)"
   have \<rho>: "tsol (tyenv env) ?\<rho>" "wsinst alg ?\<rho>" "cert_inst ?\<rho>" by (rule tsol0[OF e(2,12,9)])+
   show "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi \<rho>(1,3)] by blast+
@@ -122,7 +119,7 @@ text \<open>
 \<close>
 
 lemma norm_term_props:
-  assumes ei: "einv A K env" and wi: "winv env Y" and vX: "vars X \<subseteq> Y \<union> evars env"
+  assumes ei: "einvw A K env" and wi: "winv env Y" and vX: "vars X \<subseteq> Y \<union> evars env"
     and tX: "ttvars X \<subseteq> tvars_env (tyenv env) \<union> A" and ty: "e \<turnstile> inst (tsol0 (tyenv env)) X : T"
     and lb: "\<not> loose_bvar X k" "0 \<le> k" and nt: "ok (norm_term env X) X'"
   shows "e \<turnstile> X' : T" "\<not> loose_bvar X' k"
@@ -130,7 +127,7 @@ lemma norm_term_props:
 proof -
   let ?\<theta> = "tyenv env"
   let ?\<rho> = "tsol0 ?\<theta>"
-  note e = einvD[OF ei] and c = canonical_tsol0[OF ei wi]
+  note e = einvwD[OF ei] and c = canonical_tsol0[OF ei wi]
   note ns = nsoundD[OF norm_term_sound[OF nt c(4) c(1)]]
   have u: "unb env X'" by (rule norm_term_unb[OF nt])
   show "e \<turnstile> X' : T" using ns(3)[OF ty] inst_tsol0_unb[OF u] by simp
@@ -160,20 +157,7 @@ proof -
     ultimately have "v = (x, tnorm ?\<theta> U)" using U(2) vx by simp
     with U(1) show "v \<in> vimg ?\<theta> (vars X \<union> evars env)" by (force simp: vimg_def)
   qed
-  have wiX: "winv env (vars X)" by (rule ur_winv_sub[OF wi vX])
-  have tk: "tok env (vars X \<union> evars env)"
-    by (rule tok_einv[OF ei wiX]) (use vtvars_vars[of X] tX in blast)
-  note r0 = einv_rho0[OF ei]
-  have wte0: "wt_env (rho0 env) env" using winvD[OF wi r0] by blast
-  have "inst (rho0 env) X = inst ?\<rho> X"
-  proof (rule inst_cong)
-    fix U assume "U \<in> typs X"
-    then have "tvars U \<subseteq> tvars_env ?\<theta> \<union> A" using tX by (auto simp: ttvars_def)
-    from tsubst_tsol0[OF e(6) tc[OF this]] show "tsubst (rho0 env) U = tsubst ?\<rho> U" by simp
-  qed
-  with ty have ty0: "e \<turnstile> inst (rho0 env) X : T" by simp
-  from dfdp_ok[OF norm_term_dfd[OF ei tk tX wte0 ty0]] nt
-  show "ttvars X' \<subseteq> tvars_env ?\<theta> \<union> A" by (simp add: npostc_def return_def)
+  show "ttvars X' \<subseteq> tvars_env ?\<theta> \<union> A" by (rule norm_term_ttvars_tvinv[OF nt e(1) tX])
 qed
 
 
@@ -202,7 +186,7 @@ proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
   case (1 env n t)
   note ei = "1.prems"(2) and wi = "1.prems"(3)
   let ?\<theta> = "tyenv env" let ?\<rho> = "tsol0 ?\<theta>"
-  note e = einvD[OF ei] and c = canonical_tsol0[OF ei wi]
+  note e = einvD[OF ei] and c = canonical_tsol0[OF einv_einvw[OF ei wi] wi]
   have ac: "tacyc ?\<theta>" by (rule e(6))
   show ?case
   proof (cases "n = 0")
@@ -210,7 +194,7 @@ proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
     with "1.prems"(1) have "ok (norm_term env t) X'" by (simp add: norm_term_skip.simps)
     have "ienv ?\<rho> e \<turnstile> inst ?\<rho> t : propT"
       using typing_inst[OF "1.prems"(6) cert_inst_inst_ok[OF c(3)]] by simp
-    from norm_term_props[OF ei wi "1.prems"(4,5) this "1.prems"(7,8) \<open>ok (norm_term env t) X'\<close>]
+    from norm_term_props[OF einv_einvw[OF ei wi] wi "1.prems"(4,5) this "1.prems"(7,8) \<open>ok (norm_term env t) X'\<close>]
     show ?thesis by simp
   next
     case n: False
@@ -781,7 +765,7 @@ next
     show "\<forall>p\<in>ttvars Z. snd (fst p) \<le> maxidx env'" using that bA by blast
   qed
   have c': "cert_inst (tsol0 ?\<theta>)" "tsol ?\<theta> (tsol0 ?\<theta>)"
-    by (rule canonical_tsol0[OF ei' wi'])+
+    by (rule canonical_tsol0[OF einv_einvw[OF ei' wi'] wi'])+
   have SV: "?BC \<union> ?V \<subseteq> S0" "evars env' \<subseteq> S0" "dvars (tdps tps) \<subseteq> S0" by (auto simp: S0_def)
   text \<open>Normalized propositions:\<close>
   have gN: "wtp Z' \<and> ?good Z'"
@@ -790,7 +774,7 @@ next
     have ty: "(\<lambda>_. propT) \<turnstile> inst (tsol0 ?\<theta>) Z : propT"
       using typing_inst[OF wtpD(2)[OF that(1), of "\<lambda>_. propT"] cert_inst_inst_ok[OF c'(1)]] by simp
     have "ttvars Z \<subseteq> tvars_env ?\<theta> \<union> A'" using that(3) AA by blast
-    note n = norm_term_props[OF ei' wY' _ this ty _ _ that(4)]
+    note n = norm_term_props[OF einv_einvw[OF ei' wi'] wY' _ this ty _ _ that(4)]
     have "vars Z \<subseteq> (?BC \<union> ?V) \<union> evars env'" using that(2) by blast
     note n = n[OF this, of 0]
     have cl: "\<not> loose_bvar Z 0" using wtpD(1)[OF that(1)] by (simp add: closed_def)
@@ -833,8 +817,8 @@ next
     from tpok tu have p: "upok A' env' [] X' t u" by blast
     from upokD(9)[OF p c'(2,1)] obtain e T where tyt: "e \<turnstile> inst (tsol0 ?\<theta>) t : T" and tyu: "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
       by auto
-    note nt' = norm_term_props[OF ei' wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt]
-    note nu' = norm_term_props[OF ei' wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu]
+    note nt' = norm_term_props[OF einv_einvw[OF ei' wi'] wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt]
+    note nu' = norm_term_props[OF einv_einvw[OF ei' wi'] wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu]
     have l: "\<not> loose_bvar t 0" "\<not> loose_bvar u 0" using upokD(7,8)[OF p] by simp_all
     have cl: "closed t'" "closed u'" using nt'(2)[OF l(1)] nu'(2)[OF l(2)] by (simp_all add: closed_def)
     have "\<forall>e'. e' \<turnstile> t' : T \<and> e' \<turnstile> u' : T"

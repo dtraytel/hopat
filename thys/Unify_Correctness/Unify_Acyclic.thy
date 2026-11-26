@@ -20,12 +20,12 @@ subsection \<open>Normalization\<close>
 
 text \<open>The variables of a normal form are unbound and have the names of the term or of the bindings:\<close>
 
-abbreviation vnames :: "(indexname \<times> ptyp) set \<Rightarrow> indexname set" where
-  "vnames X \<equiv> fst ` X"
+abbreviation vnms :: "(indexname \<times> ptyp) set \<Rightarrow> indexname set" where
+  "vnms X \<equiv> fst ` X"
 
 definition nvars_ok :: "env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "nvars_ok env t t' \<longleftrightarrow> (\<forall>(x, T)\<in>vars t'. vt_lookup (tenv env) x = None) \<and>
-    vnames (vars t') \<subseteq> vnames (vars t) \<union> vnames (evars env)"
+    vnms (vars t') \<subseteq> vnms (vars t) \<union> vnms (evars env)"
 
 lemma vars_subst_bound_mi: "vars (subst_bound u body) \<subseteq> vars body \<union> vars u"
   by (simp add: subst_bound_subst vars_subst)
@@ -59,7 +59,7 @@ proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consu
       with ok_lookup1[OF lr] te have b: "vt_lookup (tenv env) x = Some (T, u)" by simp
       from rest Some have "ok (nt te u) t'" by simp
       note I = IH[OF this]
-      have "vnames (vars u) \<subseteq> vnames (evars env)" by (rule image_mono[OF evars_binding[OF b]])
+      have "vnms (vars u) \<subseteq> vnms (evars env)" by (rule image_mono[OF evars_binding[OF b]])
       with I show ?thesis unfolding nvars_ok_def by blast
     qed
   next
@@ -69,15 +69,15 @@ proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consu
   next
     case (App f u)
     have sb: "nvars_ok env (f $ u) t'"
-      if "ok (nt te (subst_bound u body)) t'" "vnames (vars body) \<subseteq> vnames (vars f) \<union> vnames (evars env)"
+      if "ok (nt te (subst_bound u body)) t'" "vnms (vars body) \<subseteq> vnms (vars f) \<union> vnms (evars env)"
       for body
     proof -
       note I = IH[OF that(1)]
-      have b: "vnames (vars (subst_bound u body)) \<subseteq> vnames (vars body) \<union> vnames (vars u)"
+      have b: "vnms (vars (subst_bound u body)) \<subseteq> vnms (vars body) \<union> vnms (vars u)"
         by (metis image_Un image_mono vars_subst_bound_mi)
-      have a: "vnames (vars t') \<subseteq> vnames (vars (subst_bound u body)) \<union> vnames (evars env)"
+      have a: "vnms (vars t') \<subseteq> vnms (vars (subst_bound u body)) \<union> vnms (evars env)"
         using I by (simp add: nvars_ok_def)
-      have "vnames (vars t') \<subseteq> vnames (vars f) \<union> vnames (vars u) \<union> vnames (evars env)"
+      have "vnms (vars t') \<subseteq> vnms (vars f) \<union> vnms (vars u) \<union> vnms (evars env)"
         using a b that(2) by blast
       then show ?thesis using I by (simp add: nvars_ok_def image_Un)
     qed
@@ -99,7 +99,7 @@ proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consu
         case True
         then obtain b U0 body where nf: "nf = Abs b U0 body" by (cases nf) auto
         with rest have r: "ok (nt te (subst_bound u body)) t'" by simp
-        have "vnames (vars body) \<subseteq> vnames (vars f) \<union> vnames (evars env)" using If nf by (auto simp: nvars_ok_def)
+        have "vnms (vars body) \<subseteq> vnms (vars f) \<union> vnms (evars env)" using If nf by (auto simp: nvars_ok_def)
         from sb[OF r this] App show ?thesis by simp
       next
         case nA: False
@@ -138,7 +138,7 @@ proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, cons
       from ok_lookup_Some[OF lr[unfolded Some]] obtain U where b: "vt_lookup (tenv env) x = Some (U, u)" .
       from rest Some have "ok (nt env u) t'" by simp
       note I = IH[OF this]
-      have "vnames (vars u) \<subseteq> vnames (evars env)" by (rule image_mono[OF evars_binding[OF b]])
+      have "vnms (vars u) \<subseteq> vnms (evars env)" by (rule image_mono[OF evars_binding[OF b]])
       with I show ?thesis unfolding nvars_ok_def by blast
     qed
   next
@@ -148,15 +148,15 @@ proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, cons
   next
     case (App f u)
     have sb: "nvars_ok env (f $ u) t'"
-      if "ok (nt env (subst_bound u body)) t'" "vnames (vars body) \<subseteq> vnames (vars f) \<union> vnames (evars env)"
+      if "ok (nt env (subst_bound u body)) t'" "vnms (vars body) \<subseteq> vnms (vars f) \<union> vnms (evars env)"
       for body
     proof -
       note I = IH[OF that(1)]
-      have b: "vnames (vars (subst_bound u body)) \<subseteq> vnames (vars body) \<union> vnames (vars u)"
+      have b: "vnms (vars (subst_bound u body)) \<subseteq> vnms (vars body) \<union> vnms (vars u)"
         by (metis image_Un image_mono vars_subst_bound_mi)
-      have a: "vnames (vars t') \<subseteq> vnames (vars (subst_bound u body)) \<union> vnames (evars env)"
+      have a: "vnms (vars t') \<subseteq> vnms (vars (subst_bound u body)) \<union> vnms (evars env)"
         using I by (simp add: nvars_ok_def)
-      have "vnames (vars t') \<subseteq> vnames (vars f) \<union> vnames (vars u) \<union> vnames (evars env)"
+      have "vnms (vars t') \<subseteq> vnms (vars f) \<union> vnms (vars u) \<union> vnms (evars env)"
         using a b that(2) by blast
       then show ?thesis using I by (simp add: nvars_ok_def image_Un)
     qed
@@ -178,7 +178,7 @@ proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, cons
         case True
         then obtain b U0 body where nf: "nf = Abs b U0 body" by (cases nf) auto
         with rest have r: "ok (nt env (subst_bound u body)) t'" by simp
-        have "vnames (vars body) \<subseteq> vnames (vars f) \<union> vnames (evars env)" using If nf by (auto simp: nvars_ok_def)
+        have "vnms (vars body) \<subseteq> vnms (vars f) \<union> vnms (evars env)" using If nf by (auto simp: nvars_ok_def)
         from sb[OF r this] App show ?thesis by simp
       next
         case nA: False
@@ -216,22 +216,22 @@ qed
 subsection \<open>Bindings of the flex-flex treatment\<close>
 
 lemma evars_names_update:
-  "ok (update (F, T) t env) env' \<Longrightarrow> vnames (evars env') = insert F (vnames (vars t) \<union> vnames (evars env))"
+  "ok (update (F, T) t env) env' \<Longrightarrow> vnms (evars env') = insert F (vnms (vars t) \<union> vnms (evars env))"
   using evars_update[of F T t env env'] by auto
 
 lemma vupdate_acyc:
   assumes "vupdate aU t env = Some r"
   shows "r = Ok env' \<Longrightarrow> acyc env \<Longrightarrow> vt_lookup (tenv env) (fst aU) = None \<Longrightarrow>
-    (\<forall>y\<in>vnames (vars t). (fst aU, y) \<notin> (dep env)\<^sup>*) \<Longrightarrow>
+    (\<forall>y\<in>vnms (vars t). (fst aU, y) \<notin> (dep env)\<^sup>*) \<Longrightarrow>
     acyc env' \<and> tyenv env' = tyenv env \<and> maxidx env' = maxidx env \<and>
-    vnames (evars env') \<subseteq> insert (fst aU) (vnames (vars t) \<union> vnames (evars env))"
+    vnms (evars env') \<subseteq> insert (fst aU) (vnms (vars t) \<union> vnms (evars env))"
   using assms
 proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, consumes 1])
   case (1 vu aU t env r)
   note h = "1.hyps"[unfolded "1.prems"(1)] and ac = "1.prems"(2) and ub = "1.prems"(3) and nr = "1.prems"(4)
   obtain a U where aU: "aU = (a, U)" by (cases aU)
   have upd: "acyc env' \<and> tyenv env' = tyenv env \<and> maxidx env' = maxidx env \<and>
-      vnames (evars env') \<subseteq> insert (fst aU) (vnames (vars t) \<union> vnames (evars env))"
+      vnms (evars env') \<subseteq> insert (fst aU) (vnms (vars t) \<union> vnms (evars env))"
     if u: "ok (update aU t env) env'"
   proof -
     have u': "ok (update (a, U) t env) env'" using u aU by simp
@@ -272,17 +272,17 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
           case (Some u)
           from ok_lookup_Some[OF lk[unfolded Some]] obtain V where b: "vt_lookup (tenv env) n = Some (V, u)" .
           from rest Some have r: "ok (vu aU u env) env'" by simp
-          have nr': "\<forall>y\<in>vnames (vars u). (fst aU, y) \<notin> (dep env)\<^sup>*"
+          have nr': "\<forall>y\<in>vnms (vars u). (fst aU, y) \<notin> (dep env)\<^sup>*"
           proof
-            fix y assume "y \<in> vnames (vars u)"
+            fix y assume "y \<in> vnms (vars u)"
             then obtain Y where "(y, Y) \<in> vars u" by auto
             then have "(y, n) \<in> dep env" by (rule depI[OF b])
             moreover have "(fst aU, n) \<notin> (dep env)\<^sup>*" using nr Var by auto
             ultimately show "(fst aU, y) \<notin> (dep env)\<^sup>*" by (meson rtrancl.rtrancl_into_rtrancl)
           qed
           from "1.IH"[OF r refl ac ub nr'] have I: "acyc env' \<and> tyenv env' = tyenv env \<and> maxidx env' = maxidx env \<and>
-            vnames (evars env') \<subseteq> insert (fst aU) (vnames (vars u) \<union> vnames (evars env))" .
-          have "vnames (vars u) \<subseteq> vnames (evars env)" by (rule image_mono[OF evars_binding[OF b]])
+            vnms (evars env') \<subseteq> insert (fst aU) (vnms (vars u) \<union> vnms (evars env))" .
+          have "vnms (vars u) \<subseteq> vnms (evars env)" by (rule image_mono[OF evars_binding[OF b]])
           with I show ?thesis by blast
         qed
       next
@@ -299,7 +299,7 @@ theorem ff_assign_acyc:
   assumes a: "okW (ff_assign al env rb t u) env'" and ac: "acyc env"
     and hv: "\<And>v T. head_of t = Var v T \<Longrightarrow> vt_lookup (tenv env) v = None"
   shows "acyc env' \<and> maxidx env \<le> maxidx env' \<and>
-    vnames (evars env') \<subseteq> vnames (evars env) \<union> vnames (vars t) \<union> vnames (vars u)"
+    vnms (evars env') \<subseteq> vnms (evars env) \<union> vnms (vars t) \<union> vnms (vars u)"
 proof -
   from a obtain v T where gev: "okW (get_eta_var rb 0 t) (v, T)"
     and rest: "okW (do {b \<leftarrow> liftM (occurs_terms env v [u]);
@@ -328,15 +328,15 @@ proof -
   have mx: "maxidx env \<le> maxidx env1" using cunify_types_sound(2)[OF cu] by (simp add: extends_def)
   have ac1: "acyc env1" using ac acyc_tenv[OF te] by simp
   have ub: "vt_lookup (tenv env1) v = None" using hv[OF hd] te by simp
-  have nr: "\<forall>y\<in>vnames (vars (rlist_abs rb u)). (v, y) \<notin> (dep env1)\<^sup>*"
+  have nr: "\<forall>y\<in>vnms (vars (rlist_abs rb u)). (v, y) \<notin> (dep env1)\<^sup>*"
     using occurs_terms_sound[OF oc ac, of u] dep_tenv[OF te] by auto
   have ub': "vt_lookup (tenv env1) (fst (v, T)) = None" using ub by simp
-  have nr': "\<forall>y\<in>vnames (vars (rlist_abs rb u)). (fst (v, T), y) \<notin> (dep env1)\<^sup>*" using nr by simp
+  have nr': "\<forall>y\<in>vnms (vars (rlist_abs rb u)). (fst (v, T), y) \<notin> (dep env1)\<^sup>*" using nr by simp
   from vupdate_acyc[OF vu refl ac1 ub' nr']
   have r: "acyc env'" "maxidx env' = maxidx env1"
-    "vnames (evars env') \<subseteq> insert v (vnames (vars u) \<union> vnames (evars env1))"
+    "vnms (evars env') \<subseteq> insert v (vnms (vars u) \<union> vnms (evars env1))"
     by simp_all
-  have "v \<in> vnames (vars t)"
+  have "v \<in> vnms (vars t)"
   proof -
     have "(v, T) \<in> vars (head_of t)" using hd by simp
     moreover have "vars (head_of t) \<subseteq> vars t" by (induction t) auto
@@ -368,7 +368,7 @@ proof (induction rule: okW_foldrW_induct)
 qed simp
 
 
-lemma below_names: "below n X \<longleftrightarrow> (\<forall>x\<in>vnames X. snd x \<le> n)"
+lemma below_names: "below n X \<longleftrightarrow> (\<forall>x\<in>vnms X. snd x \<le> n)"
   by (auto simp: below_def)
 
 lemma vupdate_nonVar: "\<not> is_Var t \<Longrightarrow> vupdate aU t env = update aU t env"
@@ -404,7 +404,7 @@ proof -
   have lTs: "length Ts = ?n" using flexargs_ok[OF fa] by simp
   have va: "\<forall>a\<in>set cas. vars (fl_t a) \<subseteq> (\<Union>s\<in>set ts. vars s)"
     by (rule foldrW_change_arg_vars[OF ca]) (use flexargs_mem[OF fa] in auto)
-  have vts': "vnames (vars (list_comb x ts')) \<subseteq> vnames (vars x) \<union> vnames (vars t)" for x
+  have vts': "vnms (vars (list_comb x ts')) \<subseteq> vnms (vars x) \<union> vnms (vars t)" for x
   proof -
     have "vars (list_comb x ts') \<subseteq> vars x \<union> (\<Union>s\<in>set ts. vars s)"
       using va by (auto simp: ts'_def args_def set_sort_args list_comb_apps vars_apps)
@@ -425,7 +425,7 @@ proof -
     case True
     with rest have env': "env' = env" and t': "t' = Var v T \<degree>\<degree> ts'"
       by (simp_all add: Let_def args_def ts'_def list_comb_apps)
-    have "vnames (vars t') \<subseteq> insert v (vnames (vars t))" using vts'[of "Var v T"] by (simp add: t' list_comb_apps)
+    have "vnms (vars t') \<subseteq> insert v (vnms (vars t))" using vts'[of "Var v T"] by (simp add: t' list_comb_apps)
     then have "below (maxidx env) (vars t')" using v_le bt(1) unfolding below_names by blast
     then show ?thesis using ac bt(2) ub vT by (auto simp: env' t' head_of_apps below_def)
   next
@@ -472,11 +472,11 @@ proof -
     have new: "x = v" if "vt_lookup (tenv env2) x \<noteq> None" "vt_lookup (tenv env) x = None" for x
       using that ok_update(2)[OF up] gs(1) by (auto split: if_splits)
     have y2: "vt_lookup (tenv env2) ?y = None" using yub ok_update(2)[OF up] vy by auto
-    have ev2: "vnames (evars env2) = insert v (vnames (vars v') \<union> vnames (evars env))"
+    have ev2: "vnms (evars env2) = insert v (vnms (vars v') \<union> vnms (evars env))"
       using evars_names_update[OF up] vb evars_tenv[OF gs(1)] by simp
     have bev2: "below (maxidx env2) (evars env2)"
       unfolding below_names ev2 mx2 using v_le bt(2) gs(4) by (auto simp: below_names)
-    from norm_term_vars[OF nt] have nv: "vnames (vars t') \<subseteq> vnames (vars (list_comb v' ts')) \<union> vnames (evars env2)"
+    from norm_term_vars[OF nt] have nv: "vnms (vars t') \<subseteq> vnms (vars (list_comb v' ts')) \<union> vnms (evars env2)"
       by (simp add: nvars_ok_def)
     have "below (maxidx env2) (vars t')"
       unfolding below_names using nv vts'[of v'] bt(1) bev2 mx2 gs(4) by (fastforce simp: below_names)
@@ -566,13 +566,13 @@ proof -
         "below (maxidx env2) (vars s \<union> vars s' \<union> evars env2)" for s s' env3
     proof -
       have "acyc env3 \<and> maxidx env2 \<le> maxidx env3 \<and>
-          vnames (evars env3) \<subseteq> vnames (evars env2) \<union> vnames (vars s) \<union> vnames (vars s')"
+          vnms (evars env3) \<subseteq> vnms (evars env2) \<union> vnms (vars s) \<union> vnms (vars s')"
       proof (rule ff_assign_acyc[OF that(1) ac2])
         fix v T assume "head_of s = Var v T"
         then show "vt_lookup (tenv env2) v = None" by (rule that(2))
       qed
       then have r: "acyc env3" "maxidx env2 \<le> maxidx env3"
-        "vnames (evars env3) \<subseteq> vnames (evars env2) \<union> vnames (vars s) \<union> vnames (vars s')" by blast+
+        "vnms (evars env3) \<subseteq> vnms (evars env2) \<union> vnms (vars s) \<union> vnms (vars s')" by blast+
       have "below (maxidx env3) (evars env3)"
         using r(3) that(3) below_le[OF _ r(2)] unfolding below_names by blast
       with r mx1 mx2 show ?thesis by simp

@@ -268,11 +268,11 @@ proof (intro allI)
 qed
 
 lemma iext_exists_sb:
-  assumes ei: "einv A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  assumes ei: "einvw A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
   obtains \<rho>' \<sigma>' \<rho>0 where "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env))"
     "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
-  note e = einvD[OF ei]
+  note e = einvwD[OF ei]
   let ?\<theta> = "tyenv env"
   have t0: "tsol ?\<theta> (tsol0 ?\<theta>)" "wsinst alg (tsol0 ?\<theta>)" "cert_inst (tsol0 ?\<theta>)"
     using tsol0[OF e(2) e(12) e(9)] by blast+
@@ -280,15 +280,16 @@ proof -
   have c': "cinst \<rho>'" unfolding \<rho>'_def by (rule cinst_comp[OF \<rho>]) (use t0 in \<open>simp add: cinst_def\<close>)
   have ts': "tsol ?\<theta> \<rho>'" unfolding \<rho>'_def by (rule tsol_comp[OF t0(1)])
   from winvD[OF wi ts' cinstD(2)[OF c']] have wte: "wt_env \<rho>' env" by blast
-  define \<sigma>' where "\<sigma>' = (\<lambda>x T. vsubst \<sigma> (gsol \<rho>' env x T))"
+  from e(3)[OF ts' cinstD(2)[OF c']] obtain g where g: "gfix \<rho>' env g" by blast
+  define \<sigma>' where "\<sigma>' = (\<lambda>x T. vsubst \<sigma> (g x T))"
   have gs: "gsolution \<rho>' \<sigma>' env"
-    unfolding \<sigma>'_def by (rule gsolution_gsol[OF e(3) wte cinstD(1)[OF c'] ts' gsubstD(1)[OF \<sigma>]])
+    unfolding \<sigma>'_def by (rule gfix_gsolution[OF g wte cinstD(1)[OF c'] ts' gsubstD(1)[OF \<sigma>]])
   have ws: "wt_subst \<sigma>'" by (rule solutionD(3)[OF gsolutionD(1)[OF gs]])
   have gsb: "gsubst \<sigma>'" using ws \<sigma> by (simp add: gsubst_def \<sigma>'_def)
   have "\<rho>' v S = \<rho> v S" if "vt_lookup ?\<theta> v = None" for v S
     using that by (simp add: \<rho>'_def tsol0_def)
   moreover have "\<sigma>' x T = \<sigma> x T" if "vt_lookup (tenv env) x = None" for x T
-    using that by (simp add: \<sigma>'_def gsol_unbound[OF e(3)])
+    using that by (simp add: \<sigma>'_def gfix_unbound[OF g])
   ultimately have "iext env \<rho> \<sigma> \<rho>' \<sigma>'" using c' gsb gs wte by (simp add: iext_def)
   moreover have "cinst (tsol0 ?\<theta>)" using t0 by (simp add: cinst_def)
   ultimately show thesis using sbound_tsol0[OF e(6)] by (rule that) (simp add: \<rho>'_def)

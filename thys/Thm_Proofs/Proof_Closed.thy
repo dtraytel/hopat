@@ -111,14 +111,172 @@ qed (fastforce simp: bindP_eq_returnP map_optionP_eq_returnP dest!: norm_term_P_
 context prf_sig_gen
 begin
 
+text \<open>Normalization introduces no loose bound variables if the bindings are closed; the
+  environment need not be acyclic.\<close>
+
+lemma loose_subst_bound: "0 \<le> k \<Longrightarrow> \<not> loose_bvar body (k + 1) \<Longrightarrow> \<not> loose_bvar u k \<Longrightarrow>
+    \<not> loose_bvar (subst_bound u body) k"
+  unfolding subst_bound_subst by (rule loose_bvar_subst) simp_all
+
+lemma norm_term1_loose:
+  assumes "norm_term1 te t = Some r"
+  shows "r = Ok t' \<Longrightarrow> \<forall>x U u. vt_lookup te x = Some (U, u) \<longrightarrow> closed u \<Longrightarrow> 0 \<le> k \<Longrightarrow>
+    \<not> loose_bvar t k \<Longrightarrow> \<not> loose_bvar t' k"
+  using assms
+proof (induction te t r arbitrary: t' k rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t r)
+  note h = "1.hyps"[unfolded "1.prems"(1)] and bd = "1.prems"(2) and k = "1.prems"(3) and l = "1.prems"(4)
+  have IH: "\<not> loose_bvar u' j" if "ok (nt te u) u'" "0 \<le> j" "\<not> loose_bvar u j" for u u' j
+    using "1.IH"[OF that(1) HOL.refl bd that(2,3)] .
+  show ?case
+  proof (cases t)
+    case (Var x T)
+    with h obtain lr where lr: "ok (lookup1 te x T) lr"
+      and rest: "ok (case lr of Some u \<Rightarrow> nt te u | None \<Rightarrow> return t) t'"
+      by auto
+    show ?thesis
+    proof (cases lr)
+      case None
+      with rest have "t' = t" by simp
+      with l show ?thesis by simp
+    next
+      case (Some u)
+      with ok_lookup1[OF lr] have b: "vt_lookup te x = Some (T, u)" by simp
+      with bd have "closed u" by blast
+      from rest Some have "ok (nt te u) t'" by simp
+      then show ?thesis by (rule IH[OF _ k closed_loose_bvar[OF \<open>closed u\<close> k]])
+    qed
+  next
+    case (Abs a T body)
+    with h obtain body' where b: "ok (nt te body) body'" "t' = Abs a T body'" by auto
+    have "\<not> loose_bvar body (k + 1)" using l Abs by simp
+    from IH[OF b(1) _ this] k b(2) show ?thesis by simp
+  next
+    case (App f u)
+    have lf: "\<not> loose_bvar f k" and lu: "\<not> loose_bvar u k" using l App by simp_all
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain b U body where f: "f = Abs b U body" by (cases f) auto
+      with h App have "ok (nt te (subst_bound u body)) t'" by simp
+      moreover have "\<not> loose_bvar (subst_bound u body) k"
+        by (rule loose_subst_bound[OF k _ lu]) (use lf f in simp)
+      ultimately show ?thesis by (rule IH[OF _ k])
+    next
+      case False
+      with h App obtain nf where hf: "ok (nt te f) nf"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+          | _ \<Rightarrow> do {nu \<leftarrow> nt te u; return (nf $ nu)}) t'"
+        by (cases f) auto
+      note nf = IH[OF hf k lf]
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain b U0 body where nfA: "nf = Abs b U0 body" by (cases nf) auto
+        with rest have "ok (nt te (subst_bound u body)) t'" by simp
+        moreover have "\<not> loose_bvar (subst_bound u body) k"
+          by (rule loose_subst_bound[OF k _ lu]) (use nf nfA in simp)
+        ultimately show ?thesis by (rule IH[OF _ k])
+      next
+        case nA: False
+        with rest obtain nu where hu: "ok (nt te u) nu" and t': "t' = nf $ nu" by (cases nf) auto
+        with IH[OF hu k lu] nf show ?thesis by simp
+      qed
+    qed
+  qed (use h l in auto)
+qed
+
+lemma norm_term2_loose:
+  assumes "norm_term2 env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> closed_env env \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar t k \<Longrightarrow> \<not> loose_bvar t' k"
+  using assms
+proof (induction env t r arbitrary: t' k rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt env t r)
+  note h = "1.hyps"[unfolded "1.prems"(1)] and ce = "1.prems"(2) and k = "1.prems"(3) and l = "1.prems"(4)
+  have IH: "\<not> loose_bvar u' j" if "ok (nt env u) u'" "0 \<le> j" "\<not> loose_bvar u j" for u u' j
+    using "1.IH"[OF that(1) HOL.refl ce that(2,3)] .
+  show ?case
+  proof (cases t)
+    case (Var x T)
+    with h obtain lr where lr: "ok (lookup env x T) lr"
+      and rest: "ok (case lr of Some u \<Rightarrow> nt env u
+        | None \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Var x T')}) t'"
+      by auto
+    show ?thesis
+    proof (cases lr)
+      case None
+      with rest obtain T' where "t' = Var x T'" by auto
+      then show ?thesis by simp
+    next
+      case (Some u)
+      from ok_lookup_Some[OF lr[unfolded Some]] obtain U where b: "vt_lookup (tenv env) x = Some (U, u)" .
+      with ce have cu: "closed u" unfolding closed_env_def by blast
+      from rest Some have "ok (nt env u) t'" by simp
+      then show ?thesis by (rule IH[OF _ k closed_loose_bvar[OF cu k]])
+    qed
+  next
+    case (Abs a T body)
+    with h obtain T' body' where b: "ok (nt env body) body'" "t' = Abs a T' body'" by auto
+    have "\<not> loose_bvar body (k + 1)" using l Abs by simp
+    from IH[OF b(1) _ this] k b(2) show ?thesis by simp
+  next
+    case (App f u)
+    have lf: "\<not> loose_bvar f k" and lu: "\<not> loose_bvar u k" using l App by simp_all
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain b U body where f: "f = Abs b U body" by (cases f) auto
+      with h App have "ok (nt env (subst_bound u body)) t'" by simp
+      moreover have "\<not> loose_bvar (subst_bound u body) k"
+        by (rule loose_subst_bound[OF k _ lu]) (use lf f in simp)
+      ultimately show ?thesis by (rule IH[OF _ k])
+    next
+      case False
+      with h App obtain nf where hf: "ok (nt env f) nf"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+          | _ \<Rightarrow> do {nu \<leftarrow> nt env u; return (nf $ nu)}) t'"
+        by (cases f) auto
+      note nf = IH[OF hf k lf]
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain b U0 body where nfA: "nf = Abs b U0 body" by (cases nf) auto
+        with rest have "ok (nt env (subst_bound u body)) t'" by simp
+        moreover have "\<not> loose_bvar (subst_bound u body) k"
+          by (rule loose_subst_bound[OF k _ lu]) (use nf nfA in simp)
+        ultimately show ?thesis by (rule IH[OF _ k])
+      next
+        case nA: False
+        with rest obtain nu where hu: "ok (nt env u) nu" and t': "t' = nf $ nu" by (cases nf) auto
+        with IH[OF hu k lu] nf show ?thesis by simp
+      qed
+    qed
+  qed (use h l in auto)
+qed
+
 lemma loose_bvar_norm_term:
-  assumes nt: "ok (norm_term E t) t'" and ac: "acyc E" "closed_env E" "tacyc (tyenv E)"
+  assumes nt: "ok (norm_term E t) t'" and ce: "closed_env E"
     and k: "0 \<le> k" and l: "\<not> loose_bvar t k"
   shows "\<not> loose_bvar t' k"
 proof -
-  have "\<not> loose_bvar (env_apply E t) k"
-    using l k closed_usubst[OF ac(1,2)] by (simp add: env_apply_def unf_def)
-  from beta_reds_loose_bvar[OF norm_term_env_apply(1)[OF nt ac] k this] show ?thesis .
+  consider (id) "env_is_empty E \<and> \<not> could_beta_contract t"
+    | (n1) "\<not> (env_is_empty E \<and> \<not> could_beta_contract t)" "vt_is_empty (tyenv E)"
+    | (n2) "\<not> (env_is_empty E \<and> \<not> could_beta_contract t)" "\<not> vt_is_empty (tyenv E)"
+    by blast
+  then show ?thesis
+  proof cases
+    case id
+    then have "t' = t" using nt by (simp add: norm_term_def)
+    with l show ?thesis by simp
+  next
+    case n1
+    with nt have "norm_term1 (tenv E) t = Some (Ok t')" by (simp add: norm_term_def)
+    from norm_term1_loose[OF this HOL.refl _ k l] ce show ?thesis unfolding closed_env_def by blast
+  next
+    case n2
+    with nt have "norm_term2 E t = Some (Ok t')" by (simp add: norm_term_def)
+    from norm_term2_loose[OF this HOL.refl ce k l] show ?thesis .
+  qed
 qed
 
 theorem prf_nolb_bicompose_proof:
@@ -130,7 +288,7 @@ proof -
   let ?E = "remove_types_env env"
   have ac': "acyc ?E" "closed_env ?E" "tacyc (tyenv ?E)" using ac by (simp_all add: remove_types_env_props)
   have np: "prf_nolb 0 q'" if nq: "norm_proof ?E q = returnW q'" and q: "prf_nolb 0 q" for q q'
-    by (rule prf_nolb_norm_proof[OF nq _ _ q]) (use loose_bvar_norm_term[OF _ ac'] in auto)
+    by (rule prf_nolb_norm_proof[OF nq _ _ q]) (use loose_bvar_norm_term[OF _ ac'(2)] in auto)
   have core: "prf_nolb 0 x" if c: "bicompose_core env flatten Bs As A oldAs n m sprf q = returnW x"
     and q: "prf_nolb 0 q" for q x
     using bicompose_core_returnP[OF c] q s by (simp add: prf_nolb_core_prf)

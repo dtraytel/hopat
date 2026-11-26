@@ -9,9 +9,10 @@ text \<open>
   that occurs with several types (\<^const>\<open>pure_sig_gen.lfin\<close>). This theory removes the restriction:
   every element of the enumeration of \<^const>\<open>unifiers\<close> on a well-formed problem satisfies the
   invariant of the results (\<open>unifiers_cfin_uresult\<close>), and a solution of its environment that also
-  satisfies the bindings read at other types (\<open>gsolution\<close>, for instance the typed solution
-  \<^const>\<open>pure_sig_gen.gsol\<close> composed with a substitution) solves the problem if it solves the
-  remaining flex-flex pairs (\<open>deqv_ebinds_dsolved\<close>).
+  satisfies the bindings read at other types (\<open>gsolution\<close>) solves the problem if it solves the
+  remaining flex-flex pairs (\<open>deqv_ebinds_dsolved\<close>). Such solutions exist: the typed solution
+  \<^const>\<open>pure_sig_gen.gsol\<close> of an acyclic environment, composed with a substitution, is one
+  (\<open>gfix_gsol\<close>, \<open>gfix_gsolution\<close> in theory \<open>Unify_Smash_Typed\<close>).
 \<close>
 
 context pure_sig_gen
@@ -175,35 +176,6 @@ proof -
     using typing_vsubst[OF wt_subst_typing[OF assms(2) that] assms(1)] .
   ultimately show ?thesis by (auto simp: wt_subst_def closed_subst_def)
 qed
-
-text \<open>The composition of a substitution with the typed solution \<^const>\<open>gsol\<close> of an acyclic
-  environment is such a solution:\<close>
-
-lemma gsolution_gsol:
-  assumes ac: "acyc env" and wte: "wt_env \<rho> env" and \<rho>: "wsinst alg \<rho>" "tsol (tyenv env) \<rho>"
-    and \<sigma>: "wt_subst \<sigma>"
-  shows "gsolution \<rho> (\<lambda>x T. vsubst \<sigma> (gsol \<rho> env x T)) env"
-proof -
-  let ?g = "gsol \<rho> env" and ?\<sigma>' = "\<lambda>x T. vsubst \<sigma> (gsol \<rho> env x T)"
-  have sol0: "solution \<rho> ?g env" by (rule gsol_solution[OF ac wte \<rho>])
-  have ws: "wt_subst ?\<sigma>'" by (rule wt_subst_comp[OF \<sigma> solutionD(3)[OF sol0]])
-  have "solution \<rho> ?\<sigma>' env"
-    unfolding solution_def
-  proof (intro conjI allI impI)
-    show "wsinst alg \<rho>" "tsol (tyenv env) \<rho>" "wt_subst ?\<sigma>'" using \<rho> ws by simp_all
-    fix x U u assume b: "vt_lookup (tenv env) x = Some (U, u)"
-    have "?g x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> ?g u" by (rule solutionD(4)[OF sol0 b])
-    from conv_vsubst[OF this \<sigma>]
-    show "?\<sigma>' x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> ?\<sigma>' u" by (simp add: ap_def vsubst_vsubst)
-  qed
-  moreover have "vsubst ?\<sigma>' l \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> vsubst ?\<sigma>' r"
-    if "(l, r) \<in> ghosts \<rho> env" "e \<turnstile> l : T" "e \<turnstile> r : T" for l r e T
-    using conv_vsubst[OF gsol_ghosts[OF ac wte that] \<sigma>] by (simp add: vsubst_vsubst)
-  ultimately show ?thesis unfolding gsolution_def by blast
-qed
-
-lemma gsol_unbound: "acyc env \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> gsol \<rho> env x T = Var x T"
-  by (simp add: gsol_unfold gbody_def)
 
 text \<open>Pairs that follow from the bindings, their readings at other types and further pairs are
   solved by a typed solution that solves the further pairs:\<close>

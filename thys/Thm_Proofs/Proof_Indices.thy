@@ -147,12 +147,23 @@ proof (cases r)
 qed (simp add: ren_prf_def)
 
 lemma vars_norm_term_idx:
-  assumes nt: "ok (norm_term E t) t'" and ac: "acyc E" "closed_env E" "tacyc (tyenv E)" and v: "v \<in> vars t'"
+  assumes nt: "ok (norm_term E t) t'" and v: "v \<in> vars t'"
   shows "\<exists>w\<in>vars t \<union> evars E. fst w = fst v"
 proof -
-  have "vars t' \<subseteq> vars (env_apply E t)" by (rule beta_reds_vars[OF norm_term_env_apply(1)[OF nt ac]])
-  with v obtain w where "w \<in> vars (unf E t)" "fst w = fst v" by (auto simp: env_apply_def vars_inst)
-  with vars_unf_sub[OF ac(1)] show ?thesis by blast
+  from norm_term_vars[OF nt] have "fst ` vars t' \<subseteq> fst ` vars t \<union> fst ` evars E"
+    unfolding nvars_ok_def by (rule conjunct2)
+  moreover have "fst v \<in> fst ` vars t'" using v by (rule imageI)
+  ultimately have "fst v \<in> fst ` vars t \<union> fst ` evars E" by (rule subsetD)
+  then show ?thesis
+  proof
+    assume "fst v \<in> fst ` vars t"
+    then obtain w where "w \<in> vars t" "fst v = fst w" by (rule imageE)
+    then show ?thesis by (intro bexI[of _ w]) simp_all
+  next
+    assume "fst v \<in> fst ` evars E"
+    then obtain w where "w \<in> evars E" "fst v = fst w" by (rule imageE)
+    then show ?thesis by (intro bexI[of _ w]) simp_all
+  qed
 qed
 
 lemma prf_idx_norm_proof:
@@ -177,7 +188,7 @@ proof -
     show "\<forall>v\<in>vars t'. P (snd (fst v))"
     proof
       fix v assume "v \<in> vars t'"
-      from vars_norm_term_idx[OF nt ac' this] obtain w where w: "w \<in> vars t \<union> evars env" "fst w = fst v"
+      from vars_norm_term_idx[OF nt this] obtain w where w: "w \<in> vars t \<union> evars env" "fst w = fst v"
         by (auto simp: remove_types_env_props)
       from w(1) have "P (snd (fst w))" using q t e by (auto simp: prf_idx_def)
       with w(2) show "P (snd (fst v))" by simp

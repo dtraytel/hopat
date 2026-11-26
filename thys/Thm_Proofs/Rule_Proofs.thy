@@ -2640,7 +2640,7 @@ theorem ares_proof_valid:
     and nt: "okT (newth (ACtx (th_maxidx state) tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
     and pr: "ares_proof (ACtx (th_maxidx state) tpairs Bs Bi C params concl) r pf = returnW q"
     and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
-    and ei: "einv A K env" and wi: "winv env X"
+    and ei: "einvw A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
     and solves: "\<And>\<rho>' \<sigma>' F t u e. gsolution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
@@ -2754,7 +2754,7 @@ proof -
       assume emp: "\<not> env_is_empty env"
         and nq: "norm_proof_remove_types env (assumption_proof Ns Bi ?n pf) = returnW q"
       have "prf_aeq (prf_ap \<rho>' \<sigma>' (assumption_proof Ns Bi ?n pf)) (prf_ap \<rho> \<sigma> q)"
-        using norm_proof_ok[OF einvD(6,7)[OF ei] nq[unfolded norm_proof_remove_types_def]] ie
+        using norm_proof_ok[OF einvwD(6,7)[OF ei] nq[unfolded norm_proof_remove_types_def]] ie
         by (simp add: nrel_def)
       from prf_ok_aeq[OF core this]
       have pq: "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> q) (ap \<rho>' \<sigma>' (list_implies Bs C))" .
@@ -3116,7 +3116,7 @@ theorem flexflex_proof_valid:
     and nq: "norm_proof_remove_types env pf = returnW q"
     and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)" and wP: "wtp (th_prop th0)"
     and tw: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
-    and ei: "einv A K env" and wi: "winv env X"
+    and ei: "einvw A K env" and wi: "winv env X"
   shows "prf_valid ax H (th_tpairs th) q (th_prop th)"
 proof -
   obtain ntps P where nt: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
@@ -3163,7 +3163,7 @@ proof -
       then show "eqv (ceqs ?E) e' l r" by (simp add: lr)
     qed
     moreover have "prf_aeq (prf_ap \<rho>' \<sigma>' pf) (prf_ap \<rho> \<sigma> q)"
-      using norm_proof_ok[OF einvD(6,7)[OF ei] nq[unfolded norm_proof_remove_types_def]] ie
+      using norm_proof_ok[OF einvwD(6,7)[OF ei] nq[unfolded norm_proof_remove_types_def]] ie
       by (simp add: nrel_def)
     ultimately have pq: "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> q) (ap \<rho>' \<sigma>' (th_prop th0))" by (rule prf_ok_aeq)
     have tP: "(\<lambda>_. propT) \<turnstile> inst \<rho>' (th_prop th0) : propT"

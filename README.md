@@ -170,7 +170,8 @@ does not check:
   signature (`sign_le`: more classes, class relations, arities, constants,
   axioms and atoms of proofs; the propositions of the atoms of proofs mention
   only declared constants). The rule has no condition on the theorem.
-- The names of the schematic variables in the rules that unify. Isabelle does
+- The rules that unify have no side condition on the names of the schematic
+  variables (they had one in earlier versions of this development). Isabelle does
   not maintain one type per name for all theorems (`instantiate`, for one,
   does not keep it), and such theorems are arguments of these rules in
   practice: a patched kernel with a probe in the rules that unify, building
@@ -180,46 +181,27 @@ does not check:
   types), and at least 8 resolutions whose proof state has one (`?k0`); none
   in `assumption` and `flexflex_rule`. The rules of `derivable` ask for one
   sort per name of a schematic type variable in the arguments (`data_scons`,
-  `data_scons2`) and for the following of the names of the variables.
-  - `assumption` and `flexflex_rule`: the environment of the result binds no
-    name that occurs with two types in the theorem (`binds_none (ar_env r)
-    (data_clash st)`). A theorem with one type per name has no such name
-    (`data_vcons_clash`).
-  - `bicompose` (`data_names_bc`): with the flag `incremented`, state and rule
-    together have one type per name; without the flag nothing, because the
-    code then unifies the types of the variables of the same name
-    (`unify_var_types`). Or, in both cases: the environment of the result
-    binds no name that occurs with two types in the state, the rule and the
-    new premises of the result together (`data_clash_bc`). The new premises
-    are counted because the code renames their schematic variables after the
-    bound variables of the subgoal.
-  - `biresolution` (`data_names_bres`): the state and each rule have one type
-    per name; or the environment of the result binds no name that occurs with
-    two types in the state, the lifted rule and the new premises together
-    (`data_clash_bres`).
-
-  The condition on the environment is a premise: the code does not check it,
-  and no patch adds a check. An extension of the probe measured it as stated,
-  in the builds of Pure, HOL, HOL-Library, HOL-Metis_Examples and HOL-ex with
-  the patched kernel: 7,046 results of composition and resolution have a name
-  with two types in the arguments or the new premises, and in none of them
-  does the environment bind such a name; `assumption` and `flexflex_rule` had
-  no argument with such a name. So `derivable_sound` covers every inference
-  of these four rules in those builds; it does not cover a result that binds
-  a name with two types, and nothing in the code excludes one. The condition
-  is satisfiable on a theorem with such a name: `Thm_Clash_Example.thy`
-  derives `H ⟹ H` by `assumption` from the state `(H ⟹ ?y) ⟹ (H ⟹ ?y)` with
-  `H = (?x ⟹ (⋀a. ?x a))`, where `?x` has two types and the unifier binds
-  `?y` (`derivable_clash`; the run of the unifier model is computed by
-  simplification). I found no invalid theorem that
-  way: on constructed arguments of this kind (`Name_Clash_Check.thy` in
-  `Pure_Kernel_Check`, 19 asserted outcomes) the kernel raises `TYPE` when it
+  `data_scons2`). A name of a schematic variable may occur with several
+  types in the arguments, and the environment of a result may bind it. `derivable_sem` and `derivable_proofs`
+  cover every result of `assumption`, `flexflex_rule`, `bicompose` and
+  `biresolution` on such arguments.
+  Earlier versions of this development had a premise here (the environment
+  of the result binds no name that occurs with two types), which the code
+  does not check; an extension of the probe measured that it held for all
+  7,046 results of composition and resolution with such a name in the builds
+  of Pure, HOL, HOL-Library, HOL-Metis_Examples and HOL-ex. The premise is no
+  longer needed. `Thm_Clash_Example.thy` derives `H ⟹ H` by `assumption` from
+  the state `(H ⟹ ?y) ⟹ (H ⟹ ?y)` with `H = (?x ⟹ (⋀a. ?x a))`, where `?x`
+  has two types (`derivable_clash`; the run of the unifier model is computed
+  by simplification). On constructed arguments in which the unifier binds a
+  name with two types (`Name_Clash_Check.thy` in `Pure_Kernel_Check`, 19
+  asserted outcomes) the kernel raises `TYPE` when it
   looks up the bound name at the other type, raises `TERM` in
-  `flexflex_rule`, has no result, or returns an instance of its arguments.
-  That is an argument from the code and experiments, not a theorem
-  (`AUDIT.md`, "What the kernel does when the premise fails").
-  One part of it is a theorem about the models (`Clash_Norm.thy` in
-  `Thm_Soundness`): what the normalization of the new theorem does with a
+  `flexflex_rule`, has no result, or returns an instance of its arguments
+  (`AUDIT.md`, "What the kernel does when the premise fails"); the soundness
+  theorem says that a result, if there is one, is valid.
+  What normalization does in that situation is described by theorems about
+  the models (`Clash_Norm.thy` in `Thm_Soundness`): what the normalization of the new theorem does with a
   variable whose name the environment binds at a type that does not agree
   with its own (a clashing variable, `clash`). Its lookup raises the
   exception (`lookup_clash`, `lookup_clash_raises`). `Envir.norm_term` looks a
@@ -247,10 +229,9 @@ does not check:
   and pulling the result sequence of a rule raises it (`apull_var_clash`,
   `fpull_var_clash`, `bpull_var_clash`). The exception can also be raised for
   an occurrence that a later β-reduction would discard. All of this describes
-  the code on the side of normalization; it does not say that a result whose
-  environment binds such a name is valid (that depends on the unifier, see
-  `AUDIT.md`, "Can the discarded argument lead to a proof of `False`?"), and
-  it does not cover the normalization of the proofs. An earlier version of this text said that every occurrence at
+  the code on the side of normalization; the validity of a result whose
+  environment binds such a name does not follow from it but from the typed
+  solutions of the unifiers (below). An earlier version of this text said that every occurrence at
   another type in what the rule keeps raises the exception; that is wrong for
   an occurrence inside a discarded argument (two experiments in
   `Name_Clash_Check.thy`: with `?f` bound to `λx. 0` the result is
@@ -267,27 +248,49 @@ does not check:
   that it derives (below).
   How it is proved. The locale `pure_sig_gen` (`Pattern_Signature.thy`) has a
   set of loose names, which may occur with several types; the invariant of
-  the variables (`vcons`) asks for one type only for the other names, and a
-  step of a unifier (`step_ok`, `dstep`) is sound for the solutions of every
-  later environment that binds no loose name (`nfree`). `pure_sig` is that
-  locale without loose names. Termination is proved once, with no
-  hypothesis on the names (see below); the statements in the old form are
-  derived from that proof: in `pure_sig` they are termination with the old
-  exceptions, and with loose names they speak about the results that bind
-  none of them: `cut f m` for pattern unification (`Pattern_Termination_Base.thy`;
-  `unify_terminates`, `unify_inv` in `Pattern_Termination.thy`), `lfin` for the
-  result sequences of the higher-order unifier (`Unify_Seq_Termination.thy`,
-  `unifiers_lfin` in `Unify_Results.thy`). The theories on the rules have general locales next to the
-  old ones (`pure_model_gen`, `prf_sig_gen`, `bicompose_call_gen`, …), of
-  which the old ones are instances; the theorems on a result of
-  `bicompose_aux`, `biresolution` and `assumption` hold there for a result
-  that binds no loose name, if every name with two types is loose
-  (`bicompose_aux_thm_inv_gen`, `bc_names`, `bres_names`). The lemmas behind
-  the rules of `derivable` take as loose names the names with two types
-  (`thm_sem_thm_of_ares_gen`, `thm_sem_thm_of_bc_gen`,
-  `sound_biresolution_gen`, and `proofs_ok_…_gen`, `prfs_biresolution_gen` for
-  the proofs). The notions of a model, of validity and of a
-  valid proof do not depend on the loose names.
+  the variables (`vcons`) asks for one type only for the other names.
+  `pure_sig` is that locale without loose names. A step of a unifier
+  (`step_okg`, `dstep`) makes no hypothesis on the names: the problem follows
+  from the remaining pairs, the bindings of the resulting environment, and
+  the bindings of loose names read at other types (`ghosts`). Termination is
+  proved once, with no hypothesis on the names (see below), and every
+  element of the enumeration of `Unify.unifiers` satisfies the invariant of
+  the results (`unifiers_cfin_uresult` in `Unify_Typed_Results.thy`). A
+  solution that also satisfies the readings at other types (`gsolution`)
+  solves the problem if it solves the remaining flex-flex pairs
+  (`deqv_ebinds_dsolved`), and an acyclic, well-typed environment has one that
+  extends any substitution of the unbound names: the typed solution `gsol`
+  (`Pattern_Typed_Unifier.thy`), which gives to a variable `(x, V)` the
+  binding of `x` read at the type `V` where that is well-typed. The theories
+  on the rules have general locales next to the old ones (`pure_model_gen`,
+  `prf_sig_gen`, `bicompose_call_gen`, …), of which the old ones are
+  instances; an instance of a result is the instance of the arguments by
+  such a solution (`iext`, `iext_exists_sb` in `Bicompose_Norm.thy`), and
+  the theorems on a result of `bicompose_aux`, `biresolution` and
+  `assumption` hold there for every enumerated unifier, if every name with
+  two types is loose (`bicompose_aux_thm_inv_gen`, `bc_names`, `bres_names`,
+  `ures_solves_eq`). The lemmas behind the rules of `derivable` take as loose
+  names the names with two types (`thm_sem_thm_of_ares_gen`,
+  `thm_sem_thm_of_bc_gen`, `sound_biresolution_gen`, and
+  `proofs_ok_…_gen`, `prfs_biresolution_gen` for the proofs). The notions of
+  a model, of validity and of a valid proof do not depend on the loose names.
+  `flexflex_rule` needs one more step, because smashing can make the
+  environment cyclic in the names: if the heads of a flex-flex pair are one
+  name `?v` at two types, of which one has arguments, `smash_flexflex1` binds
+  `?v` to a constant function over a new variable `?x`, and `?x` to `?v` at
+  the type of the value. At that type the binding of `?v` cannot be read, so
+  the typed reading still has a fixed point (`gfix`, `smash_flexflex_gfix`
+  in `Unify_Smash_Typed.thy`; a fixed point extends to a new binding whose
+  variables have no well-typed reading, `gfix_update`), and the fixed point
+  gives the solution as before (`gfix_gsolution`). The invariant of a smashed
+  unifier is therefore stated with the fixed point in place of acyclicity
+  (`einvw`, `smash_flexflex_invw`), and the results on normalized terms that
+  the rule needs are proved by induction on the computation of
+  `Envir.norm_term` instead of by unfolding an acyclic environment
+  (`norm_term_ttvars`, `norm_term_vars`, `loose_bvar_norm_term`). Whether
+  `flexflex_rule` ever returns a theorem from such an environment is not
+  decided here; by the code of `Envir.lookup`, a normalization that looks up
+  `?v` or `?x` in it raises `TYPE`.
   Two soundness theorems are stated without the locale parameters
   (`unify_sound_bound_names`, `unifiers_pattern_bound_names`): if pattern
   unification returns an environment, every solution of it unifies the terms,
@@ -336,7 +339,7 @@ does not check:
   flex-flex pair are one loose name with different numbers of arguments (this
   occurs in Isabelle2026's `Pattern.unify` and `Unify.unifiers`), so
   `unifiers` terminates (`unifiers_cfin` in `Unify_Termination.thy`): it returns a finite sequence or
-  raises `TYPE` or `Fail "mk_ff_list"`. Open are the rules (`AUDIT.md`,
+  raises `TYPE` or `Fail "mk_ff_list"` (`AUDIT.md`,
   "Additions after the fourteenth execution" to "... eighteenth execution").
   Completeness does not hold for solutions that keep a name at two types:
   the occurs checks and the flex-flex case with one head compare names only,
@@ -345,11 +348,12 @@ does not check:
   `unify_incomplete_L`, `unifiers_incomplete_L` in
   `Unify_Complete_Two_Types.thy`). Pattern completeness holds for the solutions
   that give every name one type, also if the problem has a name at two types
-  (`unify_complete_one_type`). For `flexflex_rule`, the invariant of a smashed
-  unifier that binds no loose name is proved without termination
+  (`unify_complete_one_type`). For `flexflex_rule`, a smashed unifier that
+  binds no loose name keeps the invariant with acyclicity
   (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
   pair are one loose name at two types, smashing binds that name, or both
-  types have no arguments and nothing is bound.
+  types have no arguments and nothing is bound. Without that hypothesis it
+  keeps the invariant with the fixed point (`smash_flexflex_invw`, above).
 - `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
@@ -540,8 +544,7 @@ that defect was found; it does now (see `zvalid` below). The last
 tests of the session apply resolution and `assumption` to theorems with a
 schematic variable at two types: with the patches, the 225 results have tight
 proofs that check. (When these tests were added, `derivable` excluded such
-arguments; it now covers the results of resolution and `assumption` whose
-environment binds no name with two types.)
+arguments; it now covers every result of the rules that unify on them.)
 The same session checks what the models assume of certified terms and types
 (`Certify_Check.thy`), with a checker of its own that follows the
 definition of `cterm_ok` (declared type constructors with their number of
@@ -1443,8 +1446,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     (`derivable`, `derivable_sound`; see "The rules of `thm.ML`" above), and
     shows that the results of the rules that unify, and axioms, have
     consistent variable names if their arguments have (`data_cons_…`), and
-    that `assumption`, `bicompose` and `biresolution` keep the invariant for
-    results that bind no name with two types (`sound_…_gen`). `Thm_Example.thy` gives a
+    that `assumption`, `flexflex_rule`, `bicompose` and `biresolution` keep
+    the invariant whatever the names of the variables are (`sound_…_gen`).
+    `Thm_Example.thy` gives a
     signature that satisfies all assumptions (`pure0`) and derivations in it.
     `Thm_Certify.thy` shows that the results of the models of
     certification are the certified terms and types that the rules take.

@@ -248,25 +248,6 @@ proof -
   then show ?thesis using sr by (simp add: cons_ok_env)
 qed
 
-lemma sorts_ok_thm_of_bc:
-  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
-    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
-    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
-    and vc: "incremented \<Longrightarrow> bc_vcons state rule"
-    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
-    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
-      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
-    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-  shows "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
-proof -
-  let ?c = "sign_of state"
-  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
-  note a = bc_args[OF ps sr sc vc]
-  have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl a]) blast
-  then have "scert (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
-  then show ?thesis using scert_env_sorts by blast
-qed
-
 lemma thm_sem_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"

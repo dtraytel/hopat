@@ -135,6 +135,7 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Complete_Two_Types
     Unify_Results
     Unify_Typed_Results
+    Unify_Smash_Typed
     Unify_Results_Complete
 
 session Pure_Pattern in Pure_Pattern = HOL +
@@ -210,9 +211,9 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     theory on the correctness of classic or tight proofs; theory Proof_Sig has the
     definitions on proofs that the statements of the rules mention. The theories Clash_Norm
     and Clash_Exception describe what normalization by an environment does with a variable
-    whose name is bound at another type (the case that the rules that unify exclude by a
-    premise): its result does not depend on such a variable, and if one is kept, it is the
-    exception TYPE. Thm_Example gives a signature that satisfies all assumptions, with
+    whose name is bound at another type (the rules that unify have no premise on the names of
+    the schematic variables): its result does not depend on such a variable, and if one is
+    kept, it is the exception TYPE. Thm_Example gives a signature that satisfies all assumptions, with
     derivations in it; Thm_Certify shows that certification yields well-formed types and terms.
   \<close>
   sessions

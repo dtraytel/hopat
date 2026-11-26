@@ -5,10 +5,9 @@ theory Clash_Norm
 begin
 
 text \<open>
-  The rules that unify are proved sound for the results whose environment binds no name of a
-  schematic variable that occurs with two types (theory \<open>Thm_Derivable\<close>). This theory describes
-  what the models of the code do with an environment that does bind such a name, where the
-  new theorem is built: \<open>Envir.lookup\<close> of a variable whose name is bound at a type that does not
+  This theory describes what the models of the code do with an environment that binds a name
+  of a schematic variable that occurs with two types, where the new theorem of a rule that
+  unifies is built: \<open>Envir.lookup\<close> of a variable whose name is bound at a type that does not
   agree with its own raises \<open>TYPE\<close>; \<open>Envir.norm_term\<close> looks a variable up when it reaches it, and
   it does not reach an argument that \<open>\<beta>\<close>-reduction discards. So a result of normalization
   exists only if every occurrence that is reached has the type of its binding, and it does not
@@ -16,8 +15,9 @@ text \<open>
   closed terms, for instance by variables of other names. The functions that build the new
   theorems of \<open>assumption\<close> and \<open>flexflex_rule\<close> inherit this.
 
-  This is a description of the code, not a soundness result: it does not say that a result
-  whose environment binds such a name is valid.
+  This is a description of the code, not a soundness result. That a result whose environment
+  binds such a name is valid is part of the soundness theorem of theory \<open>Thm_Derivable\<close>, by
+  other means (the typed solutions of the unifiers).
 \<close>
 
 subsection \<open>Occurrences at another type\<close>

@@ -393,21 +393,21 @@ qed
 text \<open>The environments of the results: the invariants that the proofs of the results need.\<close>
 
 definition env_inv :: "env \<Rightarrow> bool" where
-  "env_inv env \<longleftrightarrow> acyc env \<and> closed_env env \<and> tacyc (tyenv env) \<and> tcons_env (tyenv env) \<and>
+  "env_inv env \<longleftrightarrow> closed_env env \<and> tacyc (tyenv env) \<and> tcons_env (tyenv env) \<and>
     (\<forall>(x, T)\<in>evars env. 0 \<le> snd x) \<and> (\<forall>p\<in>tvars_env (tyenv env). 0 \<le> snd (fst p)) \<and>
     (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p)))"
 
 text \<open>Variables that are not in a problem and not above its maximal index do not occur in a solution (as \<open>unifiers_fresh\<close>):\<close>
 
 lemma dstep_fresh:
-  assumes ds: "dstep env (tdps tus) env' (tdps tps)" and ei': "einv A' K' env'" and si: "sinv A K X env (tdps tus)"
+  assumes ds: "dstep env (tdps tus) env' (tdps tps)" and ei': "einvw A' K' env'" and si: "sinv A K X env (tdps tus)"
     and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
     and nl: "v \<notin> loose"
   shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
 proof
   assume vin: "v \<in> fst ` (evars env' \<union> dvars (tdps tps))"
   let ?\<rho> = "tnorm_inst (tyenv env')"
-  note r0 = einv_rho0[OF ei']
+  note r0 = einvw_rho0[OF ei']
   have t: "tsol (tyenv env) ?\<rho>" by (rule extends_tsol[OF r0(1) dstepD(1)[OF ds]])
   from sinv_gtyped[OF si] t r0(2) have w: "wt_env ?\<rho> env" "dtyped ?\<rho> (tdps tus)" "vinv ?\<rho> env (dvars (tdps tus))"
     unfolding gtyped_def by blast+
@@ -451,7 +451,7 @@ theorem unif_thm_inv:
   assumes st: "thm_inv m hs tps0 P0"
     and si: "sinv (tvars_thm tps0 P0) K0 (vars_thm tps0 P0) (empty_env m) (tdps tus)"
     and ds: "dstep (empty_env m) (tdps tus) env' (tdps tps)"
-    and ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
+    and ei': "einvw A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
     and AA: "tvars_thm tps0 P0 \<subseteq> A'"
     and tA: "tvars_env (tyenv env') \<union> A' \<subseteq> tvars_thm tps0 P0 \<union> {p. m < snd (fst p)}"
     and ZP: "wtp P" "vars P \<subseteq> vars_thm tps0 P0" "ttvars P \<subseteq> tvars_thm tps0 P0"
@@ -475,7 +475,7 @@ proof -
   have ext: "extends ?env env'" by (rule dstepD(1)[OF ds])
   have mx': "m \<le> maxidx env'" using ext by (simp add: extends_def)
   let ?\<theta> = "tyenv env'" and ?\<rho> = "tnorm_inst (tyenv env')"
-  note e' = einvD[OF ei'] and r0 = einv_rho0[OF ei']
+  note e' = einvwD[OF ei'] and r0 = einvw_rho0[OF ei']
   have ac': "tacyc ?\<theta>" by (rule e'(6))
   have t0: "tsol (tyenv ?env) ?\<rho>" by (rule extends_tsol[OF r0(1) ext])
   from winvD[OF wZ t0 r0(2)] have w0: "wt_env ?\<rho> ?env" and v0: "vinv ?\<rho> ?env (?X \<union> dvars (tdps tus))"
@@ -633,8 +633,8 @@ proof -
   have ei: "env_inv env'"
     unfolding env_inv_def
   proof (intro conjI)
-    show "acyc env'" "closed_env env'" "tacyc ?\<theta>" "tcons_env ?\<theta>"
-      using e'(3,4,6,7) by simp_all
+    show "closed_env env'" "tacyc ?\<theta>" "tcons_env ?\<theta>"
+      using e'(4,6,7) by simp_all
     show "\<forall>(x, T)\<in>evars env'. 0 \<le> snd x" using nnS0 SV(2) by blast
     show "\<forall>p\<in>tvars_env ?\<theta>. 0 \<le> snd (fst p)" using nnA by blast
     show "\<forall>x U u. vt_lookup (tenv env') x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))"
@@ -773,7 +773,7 @@ proof -
       (\<exists>ntps0. list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
         (tps @ []) ntps0 \<and> set (th_tpairs (ar_thm r)) \<subseteq> set ntps0) \<and> ok (norm_term env (list_implies Bs C)) (th_prop (ar_thm r))"
     using n by auto
-  from unif_thm_inv[OF st si ds ei' wi' tpok AA tA ZP _ new l0] n show ?thesis by simp
+  from unif_thm_inv[OF st si ds einv_einvw[OF ei' wi'] wi' tpok AA tA ZP _ new l0] n show ?thesis by simp
 qed
 
 end
@@ -866,7 +866,7 @@ begin
 text \<open>Without loose names:\<close>
 
 lemma dstep_fresh:
-  assumes ds: "dstep env (tdps tus) env' (tdps tps)" and ei': "einv A' K' env'" and si: "sinv A K X env (tdps tus)"
+  assumes ds: "dstep env (tdps tus) env' (tdps tps)" and ei': "einvw A' K' env'" and si: "sinv A K X env (tdps tus)"
     and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
   shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
   by (rule dstep_fresh[OF ds ei' si v]) simp
@@ -875,7 +875,7 @@ theorem unif_thm_inv:
   assumes st: "thm_inv m hs tps0 P0"
     and si: "sinv (tvars_thm tps0 P0) K0 (vars_thm tps0 P0) (empty_env m) (tdps tus)"
     and ds: "dstep (empty_env m) (tdps tus) env' (tdps tps)"
-    and ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
+    and ei': "einvw A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
     and AA: "tvars_thm tps0 P0 \<subseteq> A'"
     and tA: "tvars_env (tyenv env') \<union> A' \<subseteq> tvars_thm tps0 P0 \<union> {p. m < snd (fst p)}"
     and ZP: "wtp P" "vars P \<subseteq> vars_thm tps0 P0" "ttvars P \<subseteq> tvars_thm tps0 P0"
@@ -1042,8 +1042,7 @@ text \<open>The data of a result of \<^const>\<open>flexflex_rule\<close> that i
 lemma flexflex_data:
   assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx th) hs (th_tpairs th) (th_prop th)"
-    and nf: "nfree env"
-  obtains A' K' X' where "ok (fnewth th env) th'" "einv A' K' env" "winv env X'"
+  obtains A' K' X' where "ok (fnewth th env) th'" "einvw A' K' env" "winv env X'"
     "dstep (empty_env (th_maxidx th)) (tdps (th_tpairs th)) env (tdps [])"
     "tvars_thm (th_tpairs th) (th_prop th) \<subseteq> A'"
     "tvars_env (tyenv env) \<union> A' \<subseteq> tvars_thm (th_tpairs th) (th_prop th) \<union> {p. th_maxidx th < snd (fst p)}"
@@ -1059,10 +1058,10 @@ proof -
     by (rule uresD[OF ur _ _ si]) simp_all
   from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'" and tn: "tnew ?A (empty_env (th_maxidx th)) A' env'"
     and ff: "ffres A' K' X' env' tps" and fl: "fflex A' K' e0 env' tps" by blast
-  note smi = smash_flexflex_inv[OF ff fl sm nf]
+  note smi = smash_flexflex_invw[OF ff sm]
   have "dstep (empty_env (th_maxidx th)) (tdps (th_tpairs th)) env (tdps [])"
     using dstep_trans[OF uresultD(1)[OF urs] smi(1)] by simp
-  moreover have "einv A' K' env" using smi(2) by (simp add: finv_def)
+  moreover note smi(2)
   moreover have "tvars_env (tyenv env) \<union> A' \<subseteq> ?A \<union> {p. th_maxidx th < snd (fst p)}"
     using tn smi(4) by (simp add: tnew_def)
   ultimately show thesis using that n smi(3) AA si by blast
@@ -1080,16 +1079,16 @@ text \<open>The results of \<^const>\<open>flexflex_rule\<close> of a theorem ar
 theorem flexflex_thm_inv:
   assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx th) hs (th_tpairs th) (th_prop th)"
-    and nf: "nfree env" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "thm_inv (th_maxidx th') hs (th_tpairs th') (th_prop th') \<and> env_inv env"
 proof -
-  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einv A' K' env" and wi: "winv env X'"
+  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einvw A' K' env" and wi: "winv env X'"
     and ds: "dstep (empty_env (th_maxidx th)) (tdps (th_tpairs th)) env (tdps [])"
     and AA: "tvars_thm (th_tpairs th) (th_prop th) \<subseteq> A'"
     and tA: "tvars_env (tyenv env) \<union> A' \<subseteq> tvars_thm (th_tpairs th) (th_prop th) \<union> {p. th_maxidx th < snd (fst p)}"
     and si: "sinv (tvars_thm (th_tpairs th) (th_prop th)) (tvars_thm (th_tpairs th) (th_prop th))
       (vars_thm (th_tpairs th) (th_prop th)) (empty_env (th_maxidx th)) (tdps (th_tpairs th))"
-    by (rule flexflex_data[OF a res cfg st nf])
+    by (rule flexflex_data[OF a res cfg st])
   have wS: "wtp (th_prop th)" using st by (simp add: thm_inv_def wt_thm_def)
   have ZP: "wtp (th_prop th)" "vars (th_prop th) \<subseteq> vars_thm (th_tpairs th) (th_prop th)"
     "ttvars (th_prop th) \<subseteq> tvars_thm (th_tpairs th) (th_prop th)"
@@ -1146,11 +1145,11 @@ begin
 theorem flexflex_valid:
   assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx th) hs (th_tpairs th) (th_prop th)"
-    and v: "valid Sh hs (th_tpairs th) (th_prop th)" and nf: "nfree env"
+    and v: "valid Sh hs (th_tpairs th) (th_prop th)"
   shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs th') (th_prop th')"
 proof -
-  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einv A' K' env" and wi: "winv env X'"
-    by (rule flexflex_data[OF a res cfg st nf])
+  obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einvw A' K' env" and wi: "winv env X'"
+    by (rule flexflex_data[OF a res cfg st])
   have wt: "wt_thm (th_maxidx th) hs (th_tpairs th) (th_prop th)" using st by (simp add: thm_inv_def)
   show ?thesis by (rule fnewth_valid[OF n v wt ei wi])
 qed
@@ -1168,58 +1167,27 @@ lemma fresult_char:
     ok (fnewth th (fst x)) (snd x)"
   using fresult_char[OF assms(1,2)] assms(3) by (simp add: cfin_strict)
 
-lemma flexflex_data:
-  assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
-    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx th) hs (th_tpairs th) (th_prop th)"
-  obtains A' K' X' where "ok (fnewth th env) th'" "einv A' K' env" "winv env X'"
-    "dstep (empty_env (th_maxidx th)) (tdps (th_tpairs th)) env (tdps [])"
-    "tvars_thm (th_tpairs th) (th_prop th) \<subseteq> A'"
-    "tvars_env (tyenv env) \<union> A' \<subseteq> tvars_thm (th_tpairs th) (th_prop th) \<union> {p. th_maxidx th < snd (fst p)}"
-    "sinv (tvars_thm (th_tpairs th) (th_prop th)) (tvars_thm (th_tpairs th) (th_prop th))
-      (vars_thm (th_tpairs th) (th_prop th)) (empty_env (th_maxidx th)) (tdps (th_tpairs th))"
-proof -
-  show thesis by (rule flexflex_data[OF a res cfg st nfree0]) (rule that; assumption)
-qed
-
 theorem flexflex_thm_inv:
   assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx th) hs (th_tpairs th) (th_prop th)"
   shows "thm_inv (th_maxidx th') hs (th_tpairs th') (th_prop th') \<and> env_inv env"
-  by (rule flexflex_thm_inv[OF a res cfg st nfree0]) simp
-
-end
-
-context pure_model
-begin
-
-theorem flexflex_valid:
-  assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"
-    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx th) hs (th_tpairs th) (th_prop th)"
-    and v: "valid Sh hs (th_tpairs th) (th_prop th)"
-  shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs th') (th_prop th')"
-  by (rule flexflex_valid[OF a res cfg st v nfree0])
+  by (rule flexflex_thm_inv[OF a res cfg st]) simp
 
 end
 
 subsection \<open>Names with two types\<close>
 
 text \<open>
-  The names of the variables of a set that occur in it with two types, and environments that
-  bind none of a set of names. The general forms of the rules that unify ask that the
-  environment of a result binds no name that has two types in the arguments.
+  The names of the variables of a set that occur in it with two types. The general forms of the
+  rules that unify take them as the loose names of the locale; the environment of a result may
+  bind them.
 \<close>
 
 definition vclash :: "(indexname \<times> ptyp) set \<Rightarrow> indexname set" where
   "vclash X = {x. \<exists>T U. (x, T) \<in> X \<and> (x, U) \<in> X \<and> T \<noteq> U}"
 
-definition binds_none :: "env \<Rightarrow> indexname set \<Rightarrow> bool" where
-  "binds_none env L \<longleftrightarrow> (\<forall>x\<in>L. vt_lookup (tenv env) x = None)"
-
 lemma (in pure_sig_gen) lvtcons_vclash: "vclash X \<subseteq> loose \<Longrightarrow> lvtcons X"
   unfolding lvtcons_def vclash_def by blast
-
-lemma (in pure_sig_gen) nfree_binds_none: "binds_none env loose \<Longrightarrow> nfree env"
-  unfolding nfree_def binds_none_def by fastforce
 
 subsection \<open>The rules on theorems\<close>
 
@@ -1530,8 +1498,8 @@ proof -
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using pure_thm_inv[OF ps cs] by simp
-  have "\<exists>A K. einv A K env" by (rule flexflex_data[OF a res cfg st]) blast
-  then have "tsorted (sg_alg ?c) (tyenv env)" using einvD(12) by blast
+  have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
+  then have "tsorted (sg_alg ?c) (tyenv env)" using einvwD(12) by blast
   then show ?thesis by (simp add: thm_of_fres_def cons_ok_env)
 qed
 
@@ -1546,8 +1514,8 @@ proof -
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using pure_thm_inv[OF ps cs] by simp
-  have "\<exists>A K. einv A K env" by (rule flexflex_data[OF a res cfg st]) blast
-  then have "scert (sg_alg ?c) (tyenv env)" using einvD(9) by blast
+  have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
+  then have "scert (sg_alg ?c) (tyenv env)" using einvwD(9) by blast
   then show ?thesis using scert_env_sorts by blast
 qed
 
@@ -1590,17 +1558,13 @@ next
   then show ?thesis using ti by (simp add: thm_sem_def eq thm_inv_wf)
 qed
 
-text \<open>
-  The same without the condition on the names of the variables, for a result whose environment
-  binds no name that has two types in the theorem:
-\<close>
+text \<open>The same without the condition on the names of the variables:\<close>
 
 lemma cons_ok_thm_of_fres_gen:
   assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-    and nb: "binds_none env (ares_clash th)"
   shows "cons_ok (sign_of (th :: 'u pure_thm)) (th_constraints (thm_of_fres th env r))"
 proof -
   let ?c = "sign_of th"
@@ -1608,14 +1572,13 @@ proof -
   interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
   have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using pure_thm_inv0[OF ps] sc by simp
-  have nfL: "nfree env" using nb by (rule nfree_binds_none)
   have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
   have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  have "\<exists>A K. einv A K env" by (rule flexflex_data[OF a res cfg st nfL]) blast
-  then have "tsorted (sg_alg ?c) (tyenv env)" using einvD(12) by blast
+  have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
+  then have "tsorted (sg_alg ?c) (tyenv env)" using einvwD(12) by blast
   then show ?thesis by (simp add: thm_of_fres_def cons_ok_env)
 qed
 
@@ -1624,7 +1587,6 @@ lemma sorts_ok_thm_of_fres_gen:
     and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-    and nb: "binds_none env (ares_clash th)"
   shows "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (sign_of (th :: 'u pure_thm))) S"
 proof -
   let ?c = "sign_of th"
@@ -1632,14 +1594,13 @@ proof -
   interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
   have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using pure_thm_inv0[OF ps] sc by simp
-  have nfL: "nfree env" using nb by (rule nfree_binds_none)
   have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
   have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  have "\<exists>A K. einv A K env" by (rule flexflex_data[OF a res cfg st nfL]) blast
-  then have "scert (sg_alg ?c) (tyenv env)" using einvD(9) by blast
+  have "\<exists>A K. einvw A K env" by (rule flexflex_data[OF a res cfg st]) blast
+  then have "scert (sg_alg ?c) (tyenv env)" using einvwD(9) by blast
   then show ?thesis using scert_env_sorts by blast
 qed
 
@@ -1648,7 +1609,6 @@ lemma thm_sem_thm_of_fres_gen:
     and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
-    and nb: "binds_none env (ares_clash th)"
   shows "thm_sem TYPE('u) (thm_of_fres (th :: 'u pure_thm) env r)"
 proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u)")
   case True
@@ -1664,13 +1624,12 @@ next
   interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
   have st0: "thm_inv0 (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using pure_thm_inv0[OF ps] sc by simp
-  have nfL: "nfree env" using nb by (rule nfree_binds_none)
   have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
   have lv: "lvtcons (vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)))"
     by (rule lvtcons_vclash) (simp add: ares_clash_def)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
-  note ti = flexflex_thm_inv[OF a res cfg st nfL l0]
+  note ti = flexflex_thm_inv[OF a res cfg st l0]
   have ws: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
     using st by (simp add: thm_inv_def)
   have "valid_in ?c M (shyps_of th \<union> env_sorts env) (hyps_of th) (th_tpairs r) (th_prop r)"
@@ -1681,7 +1640,7 @@ next
       by (rule pure_model_gen_of[OF is_modelD[OF M]])
     have vs: "valid (shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
       using pure_thm_valid[OF M] by (simp add: valid_in_def)
-    from flexflex_valid[OF a res cfg st vs nfL]
+    from flexflex_valid[OF a res cfg st vs]
     show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
   qed
   then show ?thesis using ti

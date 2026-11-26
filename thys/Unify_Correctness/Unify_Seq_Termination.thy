@@ -370,19 +370,6 @@ next
   qed (use Cons.hyps(1) in simp_all)
 qed
 
-lemma lfin_pull:
-  assumes "lfin cfg s P" "pull cfg s = Some (evs, Ok (Some (x, s')))"
-  shows "(nfree (eenv x) \<longrightarrow> P x) \<and> lfin cfg s' P"
-proof (cases "loose = {}")
-  case True
-  from assms(1) have "cfin cfg s P" by (subst (asm) lfin_strict[OF True]) (rule fin_cfin)
-  from cfin_pull[OF this assms(2)] show ?thesis by (auto intro: lfin_cfin)
-next
-  case False
-  from cfin_pull[OF lfin_loose[OF False assms(1)] assms(2)] show ?thesis
-    using False by (auto simp: lfin_looseI)
-qed
-
 end
 
 end
