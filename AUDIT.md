@@ -2327,3 +2327,38 @@ can be said about completeness, and about the exceptions, without it.
   `'u pure_thm`, and `Thm_Derivable` converts each of them to data (`sound_…`). Stating them on
   data would remove the type and the conversions; it changes about 350 statements in
   `Thm_Soundness` and `Thm_Proofs` and was not done.
+- **Session `Thm_Complete`.** The theories of `Thm_Soundness` imported the termination and
+  completeness of the rules that unify, because general lemmas on the new premises of a
+  composition were in `Bicompose_Termination.thy` and the theories were in one chain. The
+  general lemmas are in `Bicompose_Premises.thy` now; `Bicompose_Termination`,
+  `Bicompose_Complete`, `Bicompose_Shape`, the termination and completeness of `biresolution`
+  (`Biresolution_Complete`, split off `Biresolution_Sound`) and the termination of `assumption`
+  and `flexflex_rule` (`Thm_Assumption_Termination`, split off `Thm_Assumption`) form the
+  session `Thm_Complete`, which no theory of `Thm_Soundness` imports. No statement changed.
+  After these changes `derivable_sem` uses 19.4k of 22.9k lemma lines of `Thm_Soundness`
+  (84%; 64% before), and the theories that `Thm_Derivable` imports have 83k lines (95k
+  before): the completeness theories of `Unify_Correctness` are no longer among them. Those of
+  `Pattern_Correctness` still are: definitions and about 35 basic lemmas that soundness uses
+  (`tvinv`, `vtvars`, `etvars`, `env_apply`, …) are in `Pattern_Complete_….thy` and
+  `Pattern_Most_General.thy`; moving them was not done.
+- **Not done: soundness of the unifiers without termination.** `derivable_sem` still depends
+  on the termination proofs of the unifiers (about 11k lemma lines of the theories
+  `…_Termination`, `Pattern_Size`, `Pattern_Unfold_Checked`, `Pattern_Type_Reach` and
+  `Pure_SN`). The rules get the invariant of a unifier (`uresult`: the step relation, the
+  invariant of the environment `einv`, well-typedness and bounds of the variables `winv`, the
+  flex-flex pairs `upok`, the new type variables `tnew`, and `finv` for smashing) from
+  `unifiers_cfin_uresult`, which says that the enumeration ends and every element satisfies
+  it; its proof is the induction on the termination measure, in which the invariants are
+  proved together with the decrease. The route without termination (`Unify_Typed_Inv`,
+  `Unify_Typed_Match`, `Unify_Typed_Pattern`, `Unify_Acyclic_Simpl`, `Unify_Acyclic`; about 3.3k
+  lines, used by no rule) proves less: the step relation, the invariant of the type
+  environment and acyclicity, for every enumerated element. It does not prove the typing of
+  the bindings under every solution of the type environment, the bounds on indices, one
+  type per name that is not loose, the conditions on the flex-flex pairs, `tnew` and `finv`,
+  which the rules use at about thirty places. So the rules cannot be based on it as it is.
+  Two ways remain. (a) Prove the missing invariants as partial correctness, by induction on
+  the computations (`raw_induct` of the partial functions) for `unif`, `pr`, `SIMPL`, `MATCH`,
+  the flex-flex treatment and the search; the termination proofs could then use these lemmas
+  and lose their invariant parts. This is a re-proof of the invariant content of the
+  termination theories (several thousand lines) and was not started. (b) Remove the route
+  without termination; this was not done either, because it is the part of (a) that exists.
