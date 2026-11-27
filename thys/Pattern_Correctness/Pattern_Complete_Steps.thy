@@ -16,12 +16,6 @@ text \<open>
   are known to the type environment or in \<open>A\<close>.
 \<close>
 
-definition vtvars :: "(indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> psort) set" where
-  "vtvars X = (\<Union>(x, T)\<in>X. tvars T)"
-
-definition btvars :: "binders \<Rightarrow> (indexname \<times> psort) set" where
-  "btvars bs = (\<Union>(x, T)\<in>set bs. tvars T)"
-
 definition cinv :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> binders \<Rightarrow>
     (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
   "cinv \<rho> \<sigma> env e bs X A \<longleftrightarrow> solution \<rho> \<sigma> env \<and> wt_env \<rho> env \<and> bs_env \<rho> e bs \<and> vinv \<rho> env X \<and>
@@ -85,21 +79,6 @@ lemma ccon_mono: "ccon \<rho> \<sigma> env e bs X A r \<Longrightarrow> Y \<subs
 
 
 subsection \<open>Agreement\<close>
-
-lemma evarsE:
-  assumes "(x, T) \<in> evars env"
-  obtains y U u where "vt_lookup (tenv env) y = Some (U, u)" "(x, T) = (y, U) \<or> (x, T) \<in> vars u"
-  using assms unfolding evars_def bnds_def by blast
-
-lemma tvinv_evars:
-  assumes "tvinv A env" "(x, T) \<in> evars env"
-  shows "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
-proof -
-  from assms(2) obtain y U u where b: "vt_lookup (tenv env) y = Some (U, u)" "(x, T) = (y, U) \<or> (x, T) \<in> vars u"
-    by (rule evarsE)
-  have "tvars U \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A" by (rule tvinvD(2)[OF assms(1) b(1)])
-  with b(2) show ?thesis by (auto simp: ttvars_def dest: vars_typs)
-qed
 
 lemma tsubst_agree: "tagree n \<rho> \<rho>' \<Longrightarrow> tbelow n (tvars T) \<Longrightarrow> tsubst \<rho>' T = tsubst \<rho> T"
   by (rule tagree_tsubst) (auto simp: tbelow_def)
@@ -198,85 +177,6 @@ proof (intro conjI allI impI)
 qed
 
 subsection \<open>Head normalization\<close>
-
-definition etvars :: "env \<Rightarrow> (indexname \<times> psort) set" where
-  "etvars env = (\<Union>(x, U, u)\<in>bnds env. tvars U \<union> ttvars u)"
-
-lemma etvarsI: "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> ttvars u \<subseteq> etvars env"
-  unfolding etvars_def bnds_def by blast
-
-lemma tvinv_etvars: "tvinv A env \<Longrightarrow> etvars env \<subseteq> tvars_env (tyenv env) \<union> A"
-  unfolding etvars_def bnds_def using tvinvD(2) by blast
-
-lemma ttvars_subst: "ttvars (t[s/k]) \<subseteq> ttvars t \<union> ttvars s"
-proof (induction t arbitrary: s k)
-  case (Abs a T t)
-  then show ?case using Abs.IH[of "lift s 0" "k + 1"] by (auto simp: ttvars_def)
-next
-  case (App t1 t2)
-  have "ttvars (t1[s/k]) \<subseteq> ttvars t1 \<union> ttvars s" "ttvars (t2[s/k]) \<subseteq> ttvars t2 \<union> ttvars s"
-    by (rule App.IH(1), rule App.IH(2))
-  then show ?case by auto
-qed (auto simp: subst_Bound)
-
-lemma head_norm_ttvars:
-  assumes "head_norm env t = Some r"
-  shows "r = Ok t' \<Longrightarrow> ttvars t' \<subseteq> ttvars t \<union> etvars env"
-  using assms
-proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consumes 1])
-  case (1 hn env t r)
-  note h = "1.hyps"[unfolded "1.prems"(1)]
-  have IH: "ttvars u' \<subseteq> ttvars u \<union> etvars env" if "ok (hn env u) u'" for u u'
-    using "1.IH"[OF that refl] .
-  show ?case
-  proof (cases t)
-    case (Var x T)
-    with h obtain lr where lr: "ok (lookup env x T) lr"
-      and rest: "ok (case lr of Some u \<Rightarrow> hn env u | None \<Rightarrow> return t) t'"
-      by auto
-    show ?thesis
-    proof (cases lr)
-      case (Some u)
-      with lr obtain U where "vt_lookup (tenv env) x = Some (U, u)" by (auto elim: ok_lookup_Some)
-      with IH[of u t'] rest Some show ?thesis by (auto dest: etvarsI)
-    qed (use rest in simp)
-  next
-    case (Abs a T body)
-    with h IH show ?thesis by fastforce
-  next
-    case (App f u)
-    have redex: "ttvars t' \<subseteq> ttvars (Abs b U0 body $ u) \<union> etvars env"
-      if "ok (hn env (subst_bound u body)) t'" for b U0 body
-      using IH[OF that] ttvars_subst[of body u 0] by (auto simp: subst_bound_subst)
-    show ?thesis
-    proof (cases "is_Abs f")
-      case True
-      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
-      with h App redex show ?thesis by simp
-    next
-      case False
-      with h App obtain nf where hf: "ok (hn env f) nf"
-        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> hn env (subst_bound u body) | _ \<Rightarrow> return (nf $ u)) t'"
-        by (cases f) auto
-      from IH[OF hf] have nf: "ttvars nf \<subseteq> ttvars f \<union> etvars env" .
-      show ?thesis
-      proof (cases nf)
-        case (Abs b U0 body)
-        with rest have "ok (hn env (subst_bound u body)) t'" by simp
-        from redex[OF this] nf App Abs show ?thesis by auto
-      qed (use rest nf App in auto)
-    qed
-  qed (use h in auto)
-qed
-
-lemma vtvars_Un [simp]: "vtvars (X \<union> Y) = vtvars X \<union> vtvars Y"
-  by (auto simp: vtvars_def)
-
-lemma vtvars_vars: "vtvars (vars t) \<subseteq> ttvars t"
-  by (auto simp: vtvars_def ttvars_def dest: vars_typs)
-
-lemma vtvars_evars: "tvinv A env \<Longrightarrow> vtvars (evars env) \<subseteq> tvars_env (tyenv env) \<union> A"
-  using tvinv_evars unfolding vtvars_def by blast
 
 lemma cterm_head_norm:
   assumes "cterm \<rho> env e bs A t T" "ok (head_norm env t) t'" "solution \<rho> \<sigma> env" "wt_env \<rho> env"

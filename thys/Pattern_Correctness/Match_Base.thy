@@ -125,65 +125,11 @@ lemma set_loose_bnos: "set (loose_bnos t) = {k. 0 \<le> k \<and> loose_bvar1 t k
 lemma subset_iff_set: "subset xs ys \<longleftrightarrow> set xs \<subseteq> set ys"
   by (auto simp: subset_def list_all_iff)
 
-lemma closed_iff_loose_bvar1: "closed t \<longleftrightarrow> (\<forall>k. 0 \<le> k \<longrightarrow> \<not> loose_bvar1 t k)"
-  by (auto simp: closed_def loose_bvar_iff)
-
 lemma is_open_closed: "is_open t \<longleftrightarrow> \<not> closed t"
   by (simp add: is_open_def closed_def)
 
 
 subsection \<open>\<open>\<eta>\<close>-contraction\<close>
-
-lemma decr_subst: "\<not> loose_bvar1 f lev \<Longrightarrow> decr lev f = f[d/lev]"
-proof (induction f arbitrary: lev d)
-  case (Bound i)
-  then show ?case by (auto simp: subst_Bound)
-next
-  case (Abs a T t)
-  then show ?case by simp
-qed simp_all
-
-lemma eta_contract_reds: "t \<rightarrow>\<^sub>\<eta>\<^sup>* eta_contract t"
-proof (induction t)
-  case (Abs a T body)
-  let ?b = "eta_contract body"
-  have 1: "Abs a T body \<rightarrow>\<^sub>\<eta>\<^sup>* Abs a T ?b" using Abs.IH by (rule rtrancl_eta_Abs)
-  have 2: "Abs a T ?b \<rightarrow>\<^sub>\<eta>\<^sup>* eta_contract (Abs a T body)"
-  proof (cases "\<exists>f. ?b = f $ Bound 0 \<and> \<not> is_dependent f")
-    case True
-    then obtain f where b: "?b = f $ Bound 0" "\<not> is_dependent f" by blast
-    then have "eta_contract (Abs a T body) = decr 0 f" by simp
-    moreover have "Abs a T (f $ Bound 0) \<rightarrow>\<^sub>\<eta> f[Bound 0/0]"
-      using b(2) by (intro eta.eta) (simp add: is_dependent_def)
-    moreover have "decr 0 f = f[Bound 0/0]"
-      using b(2) by (intro decr_subst) (simp add: is_dependent_def)
-    ultimately show ?thesis using b(1) by simp
-  next
-    case False
-    then have "eta_contract (Abs a T body) = Abs a T ?b"
-      by (auto simp: Let_def split: pterm.splits)
-    then show ?thesis by simp
-  qed
-  from 1 2 show ?case by (rule rtranclp_trans)
-next
-  case (App s t)
-  then show ?case by (simp add: rtrancl_eta_App)
-qed simp_all
-
-lemma aeconv_conv: "aeconv s t \<Longrightarrow> wt s \<Longrightarrow> wt t \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
-  unfolding aeconv_def
-proof (elim disjE)
-  assume "aconv_term s t"
-  then show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" by (rule aconv_term_conv)
-next
-  assume a: "aconv_term (eta_contract s) (eta_contract t)" and w: "wt s" "wt t"
-  have "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eta_contract s"
-    using w(1) eta_contract_reds[of s] by (intro beta_eta_conv) (simp add: eta_reds_beta_eta_reds)
-  also have "eta_contract s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eta_contract t" using a by (rule aconv_term_conv)
-  also have "eta_contract t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
-    using beta_eta_conv[OF eta_reds_beta_eta_reds[OF eta_contract_reds] w(2)] by (rule conv_sym)
-  finally show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" .
-qed
 
 text \<open>Equivalent terms have the same type:\<close>
 
@@ -199,58 +145,6 @@ qed
 
 lemma typing_lift0D: "e\<langle>0:U\<rangle> \<turnstile> lift s 0 : T \<Longrightarrow> e \<turnstile> s : T"
   using strengthening[of "e\<langle>0:U\<rangle>" "lift s 0" T e 0 U s] by simp
-
-
-subsection \<open>Types of terms\<close>
-
-lemma fastype_of_bound_typed:
-  "0 \<le> i \<Longrightarrow> i < ilength Ts \<Longrightarrow> fastype_of_bound Ts i = return (Ts ! nat_of_integer i)"
-proof (induction Ts arbitrary: i)
-  case (Cons T Ts)
-  show ?case
-  proof (cases "i = 0")
-    case False
-    with Cons.prems have i: "0 \<le> i - 1" "i - 1 < ilength Ts" by (simp_all add: integer_arith)
-    have "nat_of_integer i = Suc (nat_of_integer (i - 1))"
-      using False Cons.prems(1) by (simp add: integer_arith nat_of_integer.rep_eq)
-    with Cons.IH[OF i] False show ?thesis by simp
-  qed simp
-qed (simp add: integer_arith)
-
-lemma fastype_of_typed:
-  "e \<turnstile> t : T \<Longrightarrow>
-    (\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 t k \<longrightarrow> k < ilength Ts \<and> e k = Ts ! nat_of_integer k) \<Longrightarrow>
-    fastype_of_term Ts t = return T \<and> (\<forall>A B. T = A \<rightarrow>\<^sub>T B \<longrightarrow> range_type_of Ts t = return B)"
-proof (induction arbitrary: Ts rule: typing.induct)
-  case (Bound i e T)
-  then have "i < ilength Ts" "T = Ts ! nat_of_integer i" by auto
-  with Bound show ?case by (auto simp: fastype_of_bound_typed return_def)
-next
-  case (Abs T e t U a)
-  have "\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 t k \<longrightarrow> k < ilength (T # Ts) \<and> (e\<langle>0:T\<rangle>) k = (T # Ts) ! nat_of_integer k"
-  proof (intro allI impI)
-    fix k assume k: "0 \<le> k" "loose_bvar1 t k"
-    show "k < ilength (T # Ts) \<and> (e\<langle>0:T\<rangle>) k = (T # Ts) ! nat_of_integer k"
-    proof (cases "k = 0")
-      case False
-      with k have k1: "0 \<le> k - 1" "loose_bvar1 (Abs a T t) (k - 1)" by (simp_all add: integer_arith)
-      with Abs.prems have "k - 1 < ilength Ts" "e (k - 1) = Ts ! nat_of_integer (k - 1)" by blast+
-      moreover have "nat_of_integer k = Suc (nat_of_integer (k - 1))"
-        using False k(1) by (simp add: integer_arith nat_of_integer.rep_eq)
-      ultimately show ?thesis using False k(1) by (simp add: integer_arith)
-    qed (use ilength_nonneg[of Ts] in \<open>simp add: integer_arith\<close>)
-  qed
-  with Abs.IH show ?case by (simp add: return_def)
-next
-  case (App e s T U t)
-  have "\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 s k \<longrightarrow> k < ilength Ts \<and> e k = Ts ! nat_of_integer k"
-    "\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 t k \<longrightarrow> k < ilength Ts \<and> e k = Ts ! nat_of_integer k"
-    using App.prems by auto
-  with App.IH(1)[of Ts] show ?case by (simp add: return_def)
-qed (simp_all add: return_def)
-
-lemma fastype_of_closed: "e \<turnstile> t : T \<Longrightarrow> closed t \<Longrightarrow> fastype_of t = return T"
-  using fastype_of_typed[of e t T "[]"] by (simp add: fastype_of_def closed_iff_loose_bvar1)
 
 
 subsection \<open>Instantiation of types\<close>
@@ -281,37 +175,8 @@ lemma cert_typ_tsubst_tvars:
   "cert_typ alg ar (tsubst \<rho> T) \<Longrightarrow> (v, S) \<in> tvars T \<Longrightarrow> cert_typ alg ar (\<rho> v S)"
   by (induction T) (auto simp: cert_typ_def)
 
-lemma cert_typ_fun: "cert_typ alg ar (T \<rightarrow>\<^sub>T U) \<longleftrightarrow> cert_typ alg ar T \<and> cert_typ alg ar U"
-  by (auto simp: cert_typ_def tarity_def)
-
-lemma cert_typ_TVar: "cert_typ alg ar (TVar v S) \<longleftrightarrow> sort_ok alg S"
-  by (simp add: cert_typ_def)
-
 definition tye_cert :: "tyenv \<Rightarrow> bool" where
   "tye_cert tye \<longleftrightarrow> (\<forall>v S U. vt_lookup tye v = Some (S, U) \<longrightarrow> cert_typ alg ar U)"
-
-lemma typing_cert:
-  "e \<turnstile> t : T \<Longrightarrow> (\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> cert_typ alg ar (e i)) \<Longrightarrow> cert_typ alg ar T"
-proof (induction rule: typing.induct)
-  case (Abs T e t U a)
-  have "\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> cert_typ alg ar ((e\<langle>0:T\<rangle>) i)"
-  proof (intro allI impI)
-    fix i assume i: "0 \<le> i" "loose_bvar1 t i"
-    show "cert_typ alg ar ((e\<langle>0:T\<rangle>) i)"
-    proof (cases "i = 0")
-      case False
-      with i have "0 \<le> i - 1" "loose_bvar1 (Abs a T t) (i - 1)" by (simp_all add: integer_arith)
-      with Abs.prems False i(1) show ?thesis by (simp add: integer_arith)
-    qed (use Abs.hyps(1) in simp)
-  qed
-  with Abs show ?case by (simp add: cert_typ_fun)
-next
-  case (App e s T U t)
-  then show ?case by (auto simp: cert_typ_fun)
-qed auto
-
-lemma typing_cert_closed: "e \<turnstile> t : T \<Longrightarrow> closed t \<Longrightarrow> cert_typ alg ar T"
-  by (erule typing_cert) (simp add: closed_iff_loose_bvar1)
 
 lemma cert_inst_mtinst: "tye_cert tye \<Longrightarrow> cert_inst (mtinst tye)"
   by (auto simp: cert_inst_def tye_cert_def mtinst_def cert_typ_TVar split: option.splits)

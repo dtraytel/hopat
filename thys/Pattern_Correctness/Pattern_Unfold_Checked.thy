@@ -480,9 +480,6 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
   qed (subst head_norm.simps, simp add: return_def)+
 qed
 
-abbreviation rho0 :: "env \<Rightarrow> tinst" where
-  "rho0 env \<equiv> tnorm_inst (tyenv env)"
-
 lemma allM_dfd: "(\<And>x. x \<in> set xs \<Longrightarrow> dfd (P x)) \<Longrightarrow> dfd (allM P xs)"
   by (induction xs) (auto intro!: dfd_bindM)
 

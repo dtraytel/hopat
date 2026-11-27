@@ -1,7 +1,7 @@
 section \<open>The Results of Higher-Order Unification\<close>
 
 theory Unify_Results
-  imports Unify_Search_Inv Unify_Smash_Sound
+  imports Unify_Search_Inv Unify_Result_Base Unify_Sound
 begin
 
 context pure_sig_gen
@@ -29,19 +29,6 @@ definition fflex :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
     (pterm \<times> pterm) list \<Rightarrow> bool" where
   "fflex A K e0 env tps \<longleftrightarrow> finv A K e0 env \<and> (\<forall>(t, u)\<in>set tps. flexb e0 t \<and> flexb e0 u)"
 
-text \<open>
-  The invariant of the results, for the type variables \<open>A0\<close> of the problem: the known type
-  variables \<open>A\<close> of a result include \<open>A0\<close>, and the result introduces only type variables that are
-  known in the problem or have indices above its maximal index (\<^const>\<open>tnew\<close>). This invariant
-  (\<open>uresult\<close>) holds for every element of the enumeration, by induction on the computations
-  (theory \<open>Unify_Invariant\<close>). The termination of smashing needs in addition that the
-  flex-flex pairs are flexible (\<open>uresult_flex\<close>), which is proved here together with termination.
-\<close>
-
-definition uresult :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
-  "uresult A0 env tus x \<longleftrightarrow> (\<exists>env' tps. x = El_R env' tps \<and> dstep env (tdps tus) env' (tdps tps) \<and>
-    (\<exists>A K X. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps))"
-
 definition uresult_flex :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
   "uresult_flex A0 env tus x \<longleftrightarrow> (\<exists>env' tps. x = El_R env' tps \<and> dstep env (tdps tus) env' (tdps tps) \<and>
     (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
@@ -50,24 +37,11 @@ definition uresult_flex :: "(indexname \<times> psort) set \<Rightarrow> env \<R
 lemma uresult_flex_uresult: "uresult_flex A0 env tus x \<Longrightarrow> uresult A0 env tus x"
   unfolding uresult_flex_def uresult_def by blast
 
-lemma uresult_El_R:
-  "uresult A0 env tus (El_R env' tps) \<longleftrightarrow> dstep env (tdps tus) env' (tdps tps) \<and>
-    (\<exists>A K X. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps)"
-  unfolding uresult_def by blast
-
 lemma uresult_flex_El_R:
   "uresult_flex A0 env tus (El_R env' tps) \<longleftrightarrow> dstep env (tdps tus) env' (tdps tps) \<and>
     (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
       fflex A K e0 env' tps)"
   unfolding uresult_flex_def by blast
-
-lemma uresultI:
-  assumes "dstep env (tdps tus) env' (tdps tps)" "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env A env'"
-    "ffres A K X env' tps"
-  shows "uresult A0 env tus (El_R env' tps)"
-  unfolding uresult_El_R
-  by (rule conjI[OF assms(1)], rule exI[of _ A], rule exI[of _ K], rule exI[of _ X])
-    (simp add: assms(2-6))
 
 lemma uresult_flexI:
   assumes "dstep env (tdps tus) env' (tdps tps)" "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env A env'"
@@ -199,12 +173,6 @@ corollary unifiers_cfin_uresult:
   shows "cfin cfg s (uresult A env tus)"
   by (rule cfin_mono[OF unifiers_cfin_uresult_flex[OF assms] uresult_flex_uresult])
 
-lemma uresultD:
-  assumes "uresult A0 env tus (El_R env' tps)"
-  shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
-    and "\<exists>A K X. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps"
-  using assms dstepD(1) unfolding uresult_def by blast+
-
 lemma uresult_flexD:
   assumes "uresult_flex A0 env tus (El_R env' tps)"
   shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
@@ -212,22 +180,6 @@ lemma uresult_flexD:
       fflex A K e0 env' tps"
   using assms dstepD(1) unfolding uresult_flex_def by blast+
 
-
-subsection \<open>Typing of the input\<close>
-
-lemma ur_vinv_sub: "vinv \<rho> env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> vinv \<rho> env Y"
-proof -
-  assume v: "vinv \<rho> env X" and Y: "Y \<subseteq> X \<union> evars env"
-  then have sub: "Y \<union> evars env \<subseteq> X \<union> evars env" by blast
-  from v have "vcons \<rho> (X \<union> evars env)" "below (maxidx env) (X \<union> evars env)" by (simp_all add: vinv_def)
-  with sub show ?thesis unfolding vinv_def by (blast intro: vcons_mono below_mono)
-qed
-
-lemma ur_winv_sub: "winv env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> winv env Y"
-  unfolding winv_def using ur_vinv_sub by blast
-
-lemma sinv_dtyped: "sinv A K X env dps \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps"
-  unfolding sinv_def dtyped_def by (fastforce dest: upokD(7-9))
 
 end
 
@@ -321,39 +273,6 @@ corollary unifiers_uresult:
   shows "uresult A env tus x"
   by (rule uresult_flex_uresult[OF unifiers_uresult_flex[OF assms]])
 
-
-end
-
-context pure_sig_gen
-begin
-
-text \<open>A well-formed problem is well-typed at the certified solutions of its type environment:\<close>
-
-lemma sinv_gtyped:
-  assumes si: "sinv A K X env dps"
-  shows "gtyped env dps"
-  unfolding gtyped_def
-proof (intro allI impI conjI)
-  fix \<rho> assume t: "tsol (tyenv env) \<rho>" and c: "cert_inst \<rho>"
-  have wi: "winv env X" using si by (simp add: sinv_def)
-  from winvD[OF wi t c] have "wt_env \<rho> env" "vinv \<rho> env X" by blast+
-  then show "wt_env \<rho> env" "vinv \<rho> env (dvars dps)" using ur_vinv_sub sinv_dvars[OF si] by blast+
-  show "dtyped \<rho> dps" by (rule sinv_dtyped[OF si t c])
-qed
-
-
-subsection \<open>Smashing the flex-flex pairs\<close>
-
-lemma ffres_smash:
-  assumes "ffres A K X env tps"
-  shows "tacyc (tyenv env)" "tcons_env (tyenv env)" "cert_inst (tsol0 (tyenv env))" "gtyped env (tdps tps)"
-proof -
-  have ei: "einv A K env" using assms by (simp add: ffres_def)
-  note e = einvD[OF ei]
-  show "tacyc (tyenv env)" "tcons_env (tyenv env)" by (rule e(6), rule e(7))
-  show "cert_inst (tsol0 (tyenv env))" by (rule tsol0(3)[OF e(2) e(12) e(9)])
-  show "gtyped env (tdps tps)" by (rule sinv_gtyped) (use assms in \<open>simp add: ffres_sinv\<close>)
-qed
 
 end
 
@@ -589,9 +508,6 @@ proof -
   then have "finv A K e0 env'" by (rule finv_trans[OF fv])
   with upd ok_update(2-4)[OF upd'] show ?thesis by blast
 qed
-
-lemma ur_vupdate_nonVar: "\<not> (\<exists>y Y. s = Var y Y) \<Longrightarrow> vupdate aU s env = update aU s env"
-  by (subst vupdate.simps) (auto split: pterm.splits)
 
 text \<open>Binding an unbound variable to a constant function over an unbound variable:\<close>
 
@@ -972,6 +888,28 @@ proof -
   ultimately show thesis using that sm th fin' A' by blast
 qed
 
+text \<open>
+  Hence smashing a unifier that the enumeration of \<^const>\<open>unifiers\<close> yields gives a unifier of
+  the input without flex-flex pairs, if the input is in the invariant of the termination proof
+  (for the soundness of \<^const>\<open>unifiers\<close>) and well-typed at every certified solution of its type
+  environment, and the type environment of the unifier is acyclic and consistent in its sorts, with
+  a certified most general solution.
+\<close>
+
+theorem unifiers_smash_sound:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and sm: "okW (smash_flexflex (env', tps)) env''"
+    and gt: "gtyped env (map (\<lambda>(t, u). ([], t, u)) tus)"
+    and ac: "tacyc (tyenv env')" and tc: "tcons_env (tyenv env')" and ci: "cert_inst (tsol0 (tyenv env'))"
+  shows "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env'' []"
+proof -
+  from unifiers_sound[OF cfg fin si u es x]
+  have s1: "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env' (tdps tps)" by simp
+  have "gtyped env' (tdps tps)" by (rule gtyped_dstep[OF s1 gt])
+  from dstep_trans[OF s1 smash_flexflex_sound[OF sm ac tc this ci]] show ?thesis .
+qed
+
 text \<open>The hypotheses of @{thm [source] unifiers_smash_sound} hold on well-formed problems:\<close>
 
 corollary unifiers_smash_ok:
@@ -1046,47 +984,6 @@ qed
 
 end
 
-context pure_sig_gen
-begin
-
-subsection \<open>Fresh variables and the maximal index\<close>
-
-lemma ur_fun_type_neq: "T \<rightarrow>\<^sub>T T \<noteq> T"
-proof
-  assume "T \<rightarrow>\<^sub>T T = T"
-  then have "size (T \<rightarrow>\<^sub>T T) = size T" by simp
-  then show False by simp
-qed
-
-lemma ur_vinv_fresh:
-  assumes "vinv \<rho> env D" "v \<notin> fst ` (D \<union> evars env)" "snd v \<le> maxidx env"
-  shows "vinv \<rho> env ({(v, T)} \<union> D)"
-proof -
-  have vc: "vcons \<rho> (D \<union> evars env)" and bl: "below (maxidx env) (D \<union> evars env)"
-    using assms(1) by (simp_all add: vinv_def)
-  have "vcons \<rho> ({(v, T)} \<union> D \<union> evars env)"
-    unfolding vcons_def
-  proof (intro allI impI)
-    fix x T1 T2 assume nl: "x \<notin> loose"
-      and 1: "(x, T1) \<in> {(v, T)} \<union> D \<union> evars env" and 2: "(x, T2) \<in> {(v, T)} \<union> D \<union> evars env"
-    show "tsubst \<rho> T1 = tsubst \<rho> T2"
-    proof (cases "x = v")
-      case True
-      then have "(x, T1) \<notin> D \<union> evars env" "(x, T2) \<notin> D \<union> evars env" using assms(2) by force+
-      with 1 2 show ?thesis by simp
-    next
-      case False
-      with 1 2 have "(x, T1) \<in> D \<union> evars env" "(x, T2) \<in> D \<union> evars env" by auto
-      from vconsD[OF vc nl this] show ?thesis .
-    qed
-  qed
-  moreover have "below (maxidx env) ({(v, T)} \<union> D \<union> evars env)"
-    using bl assms(3) by (simp add: below_def)
-  ultimately show ?thesis by (simp add: vinv_def)
-qed
-
-end
-
 context pure_sig
 begin
 
@@ -1149,13 +1046,6 @@ theorem unifiers_maxidx:
     and u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
   shows "maxidx env \<le> maxidx env'"
   using unifiers_sound[OF cfg fin si u es x] dstepD(1) extends_maxidx by blast
-
-end
-
-context pure_sig_gen
-begin
-
-subsection \<open>Fresh type variables\<close>
 
 end
 

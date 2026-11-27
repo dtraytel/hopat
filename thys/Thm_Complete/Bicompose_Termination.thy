@@ -1,7 +1,7 @@
 section \<open>Termination of \<open>bicompose_aux\<close>\<close>
 
 theory Bicompose_Termination
-  imports "Thm_Soundness.Bicompose_Premises"
+  imports "Thm_Soundness.Bicompose_Premises" "Unify_Correctness.Unify_Results"
 begin
 
 text \<open>

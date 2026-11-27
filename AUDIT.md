@@ -2448,3 +2448,87 @@ depends on the termination of the unifiers.
   The invariant `einv` still has the component `tcovered` with its finite set `K`, which the
   termination measures use; whether soundness can do without it was not examined.
   (4) One lemma lost its last use and was removed (`evalx_det`).
+
+### Additions after the twenty-third execution (the import graph of the soundness sessions)
+
+Point (2) of "What is not done" in the previous section is done: the theories of
+`Thm_Soundness`, `Thm_Proofs` and `Thm_Model_ZFC` no longer import a theory on the termination
+or the completeness of pattern unification or of the higher-order unifier.
+
+- **What was moved.** 198 lemmas and 43 definitions, abbreviations and functions (3,016
+  lines with headers and texts) went, unchanged, from theories named after termination,
+  completeness or normal forms into eleven new theories below them:
+  `Pure_Apps` (from `Pure_SN`, `Pure_Normal`: applications to lists, their typing, `→βη`);
+  `Pattern_Renaming` (from `Pattern_Normal`, `Match_Base`: renaming of bound variables, type
+  variables of terms, `fastype_of`), `Pattern_Known_Types` (from `Pattern_Complete_…`: `tvinv`,
+  `etvars`, `btvars`), `Pattern_Closed_Env` (from `Pattern_Size`: `closed_env`, `usubst`),
+  `Pattern_Invariant` (from `Pattern_Termination_Base`, `Pattern_Termination_Inv`: `einv`, `winv`,
+  `tnew`, `newb`, `upok`, `unify_types_term`), `Pattern_Env_Apply` (from
+  `Pattern_Patterns_Success`, `Pattern_Unify_Correctness`, `Pattern_Most_General`: `occt`,
+  `tsol0`, `env_apply`, `norm_term_env_apply`);
+  `Unify_Inv_Base` (from `Unify_Simpl_Inv`, `Unify_Sound`: `sinv`, the lemmas on the type
+  computations, `foldM_unify_dstep`), `Unify_Flexflex_Base` (from `Unify_Flexflex_Inv`: `ffres`,
+  `dstep_winv`), `Unify_Match_Base` (from `Unify_Match_Inv`), `Unify_Search_Base` (from
+  `Unify_Match_Termination`, `Unify_Search_Inv`: `sinv_MATCH_ok`), `Unify_Result_Base` (from
+  `Unify_Results`, `Unify_Typed_Results`: `uresult`, `gsolution`, `uresult_solves`).
+  What to move was computed, not chosen by hand: the lemmas are those among the transitive
+  dependencies of the theorems of `Thm_Soundness` and `Thm_Proofs` (15,630 named facts, read
+  from the proof terms of the built sessions as in the two previous sections), the
+  definitions are those that these lemmas or the importing theories mention. The new
+  theories are split along the old imports (for example `Pattern_Known_Types` does not import
+  `Pattern_Acyclic`, as `Pattern_Complete_Base` did not), because a first version with fewer
+  theories made a proof by `auto` in `Pattern_Complete_Base` run forever.
+- **The imports now.** `Thm_Syntax` imports `Unify_Invariant` instead of `Unify_Results`. The
+  theories of `Thm_Soundness`, `Thm_Proofs` and `Thm_Model_ZFC` import, directly or
+  indirectly, 52 of the 101 theories of `Pure_Lambda`, `Pattern_Correctness` and
+  `Unify_Correctness` (6 of 8, 21 of 46, 25 of 47; 27.9k of 62.7k lines). Not imported: the
+  theories with `Termination`, `Complete`, `Unfold_Checked`, `Flexflex_Simpl` in their names,
+  `Pure_SN`, `Pure_Normal`, `Pattern_Normal`, `Pattern_Size`, `Pattern_Patterns`,
+  `Pattern_Patterns_Success`, `Pattern_Unify_Correctness`, `Pattern_Most_General`,
+  `Pattern_Example`, the eight theories on matching, `Unify_Simpl_Inv`, `Unify_Flexflex_Inv`,
+  `Unify_Match_Inv`, `Unify_Search_Inv`, `Unify_Sound`, `Unify_Results`, `Unify_Typed_Results`,
+  `Unify_Outcome`. `Thm_Complete` imports the termination and completeness theories
+  explicitly (`Bicompose_Termination` imports `Unify_Results`); `Thm_Extras` imports
+  `Match_Sound` as before.
+- **Changes other than moves.**
+  (1) Three theorems of otherwise termination-free theories use termination and went to
+  theories on that side: `unifiers_smash_sound` (from `Unify_Smash_Sound` to `Unify_Results`,
+  its only use), `unifiers_pattern_typed` and `hounifiers_ev_sound_sinv` (from
+  `Unify_Typed_Pattern` to `Unify_Typed_Results`; no theorem uses them, the README cites them).
+  (2) `flex_conv` (`Unify_Smash_Sound`) is removed: no theorem used it, and its proof needs the
+  uniqueness of the types of convertible terms, which is proved with normal forms
+  (`conv_typing_eq` in `Match_Base`).
+  (3) Names. Two different lemmas were called `head_of_strip_comb` (`Pattern_Complete_Occurs`,
+  `Unify_Simpl_Inv`); the second hid the first because its theory came later. They are in
+  theories that no longer import each other, and the merge chose the first, which broke three
+  proofs; the lemma of `Pattern_Complete_Occurs` is now `strip_comb_head_of`. `typing_aconv`
+  and `typings_nthI` existed twice with the same statement (`Pattern_Normal`,
+  `Pattern_Complete_Occurs`; `Unify_Flexflex_Sound`); one copy each is left
+  (`Pattern_Renaming`, `Pattern_Known_Types`).
+  (4) The abbreviation `rho0` moved from `Pattern_Unfold_Checked` to `Pattern_Invariant`, and
+  the declaration of `ttvars_types_abs` as a simplification rule from
+  `Unify_Match_Termination` to `Unify_Search_Base`, next to the lemmas that use them. A check
+  for names that are defined only on the termination side and occur in a theory of the
+  soundness side (where they would be parsed as free variables) finds no further case.
+  No statement of a moved lemma or definition changed.
+- **Build.** `Pure_Lambda`, `Pattern_Correctness` (2:16), `Unify_Correctness` (3:00),
+  `Thm_Soundness` (4:43), `Thm_Proofs` (5:39), `Thm_Model_ZFC` (0:56), `Thm_Extras` (0:25) and
+  `Thm_Complete` (0:42) were rebuilt after the change.
+- **What is not done.**
+  (1) The sessions are not split. `Thm_Soundness` has `Unify_Correctness` as its parent
+  session, and `Unify_Correctness` and `Pattern_Correctness` each contain both sides, so
+  building `Thm_Soundness` still builds the termination and completeness proofs. A split
+  into sessions for the soundness side and for termination and completeness would follow the
+  new import boundary; it renames the sessions that the README and the session
+  descriptions refer to and was not started.
+  (2) The termination proofs are unchanged (point (1) of the previous section).
+  (3) The type level is unchanged (point (3) of the previous section): `Type_Unify`,
+  `Type_Mgu` and `Pattern_Type_Reach` are on the soundness side with their termination and
+  most-general-unifier results on types, and the moved lemmas `unify_types_term`,
+  `cunify_types_term`, `body_type_term`, `binder_types_term`, `env_fastype_term`,
+  `eta_norm_term` state that type-level computations return a result.
+  (4) Lemmas of the same name in theories that do not import each other remain between the
+  theories on matching and those on the higher-order unifier (`bs_env_Nil`, `cert_wft`,
+  `closed_inst`, `bs_env_cert`, `nabs`); they meet only in `Thm_Extras` and were there before.
+  (5) The theory `Unify_Typed_Pattern` kept its name; it now contains only the soundness of
+  the search by induction on the enumeration (`hounifiers_ev_sound`).

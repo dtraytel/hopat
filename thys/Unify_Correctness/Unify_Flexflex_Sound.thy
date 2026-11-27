@@ -694,9 +694,6 @@ lemma dsolved_tdps: "dsolved \<rho> \<sigma> (tdps tps) \<longleftrightarrow> (\
 lemma typing_unname: "e \<turnstile> unname t : T \<longleftrightarrow> e \<turnstile> t : T"
   by (induction t arbitrary: e T) auto
 
-lemma typing_aconv: "aconv_term s t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
-  by (metis aconv_term_unname typing_unname)
-
 lemma aconv_term_inst: "aconv_term s t \<Longrightarrow> aconv_term (inst \<rho> s) (inst \<rho> t)"
   using aconv_term_ap[of s t \<rho> "\<lambda>x T. Var x T"] by (simp add: ap_Var)
 
@@ -1054,14 +1051,6 @@ subsection \<open>Cleaning terms\<close>
 
 lemma typings_map: "(\<And>x. x \<in> set xs \<Longrightarrow> e \<turnstile> f x : g x) \<Longrightarrow> e \<tturnstile> map f xs : map g xs"
   by (induction xs) auto
-
-lemma typings_nthI: "length xs = length Ys \<Longrightarrow> (\<And>i. i < length xs \<Longrightarrow> e \<turnstile> xs ! i : Ys ! i) \<Longrightarrow> e \<tturnstile> xs : Ys"
-proof (induction xs arbitrary: Ys)
-  case (Cons x xs)
-  then obtain Y Ys' where Ys: "Ys = Y # Ys'" by (cases Ys) auto
-  from Cons.prems(2)[of 0] Cons.prems(2)[of "Suc i" for i] Cons.IH[of Ys'] Cons.prems(1) Ys
-  show ?case by auto
-qed simp
 
 lemma flexargs_ok:
   "okW (flexargs js ts Ts) fas \<Longrightarrow>

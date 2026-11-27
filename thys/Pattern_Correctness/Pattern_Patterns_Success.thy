@@ -1,7 +1,7 @@
 section \<open>Pattern Unification Does Not Give Up on Patterns\<close>
 
 theory Pattern_Patterns_Success
-  imports Pattern_Patterns Pattern_Termination_Inv
+  imports Pattern_Patterns Pattern_Termination_Inv Pattern_Env_Apply
 begin
 
 text \<open>
@@ -196,48 +196,11 @@ lemma env_pinv_update:
 
 subsection \<open>Occurrences of unbound variables reachable through bindings\<close>
 
-definition occt :: "env \<Rightarrow> indexname \<Rightarrow> pterm \<Rightarrow> bool" where
-  "occt env F t \<longleftrightarrow> vt_lookup (tenv env) F = None \<and> (\<exists>y\<in>fst ` vars t. (F, y) \<in> (dep env)\<^sup>*)"
-
 lemma occt_mono: "occt env F t \<Longrightarrow> vars t \<subseteq> vars t' \<Longrightarrow> occt env F t'"
   unfolding occt_def by blast
 
-lemma occt_simps [simp]:
-  "occt env F (s $ t) \<longleftrightarrow> occt env F s \<or> occt env F t" "occt env F (Abs a T t) \<longleftrightarrow> occt env F t"
-  "occt env F (Bound i) \<longleftrightarrow> False" "occt env F (Const c T) \<longleftrightarrow> False" "occt env F (Free c T) \<longleftrightarrow> False"
-  by (auto simp: occt_def)
-
 lemma occt_apps: "occt env F (h \<degree>\<degree> ts) \<longleftrightarrow> occt env F h \<or> (\<exists>u\<in>set ts. occt env F u)"
   by (induction ts arbitrary: h) auto
-
-lemma occt_Var_bound:
-  assumes lk: "vt_lookup (tenv env) y = Some (U, u)"
-  shows "occt env F (Var y T) \<longleftrightarrow> occt env F u"
-proof
-  assume "occt env F (Var y T)"
-  then have F: "vt_lookup (tenv env) F = None" and Fy: "(F, y) \<in> (dep env)\<^sup>*" by (simp_all add: occt_def)
-  from Fy show "occt env F u"
-  proof (cases rule: rtranclE)
-    case base
-    with F lk show ?thesis by simp
-  next
-    case (step z)
-    from step(2) obtain U' u' T' where "vt_lookup (tenv env) y = Some (U', u')" "(z, T') \<in> vars u'"
-      by (rule depE)
-    with lk have "(z, T') \<in> vars u" by simp
-    then have "z \<in> fst ` vars u" by force
-    with step(1) F show ?thesis unfolding occt_def by blast
-  qed
-next
-  assume "occt env F u"
-  then obtain z T' where F: "vt_lookup (tenv env) F = None" and z: "(z, T') \<in> vars u" "(F, z) \<in> (dep env)\<^sup>*"
-    by (auto simp: occt_def)
-  have "(z, y) \<in> dep env" by (rule depI[OF lk z(1)])
-  with z(2) F show "occt env F (Var y T)" by (simp add: occt_def)
-qed
-
-lemma occt_Var_unbound: "vt_lookup (tenv env) y = None \<Longrightarrow> occt env F (Var y T) \<longleftrightarrow> F = y"
-  by (auto simp: occt_def elim: rtranclE elim!: depE)
 
 lemma occurs_occt:
   assumes "occurs F t env = Some r"

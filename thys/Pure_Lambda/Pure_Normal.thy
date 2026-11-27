@@ -10,12 +10,6 @@ text \<open>
   size, and keeps the term \<open>\<beta>\<close>-normal.
 \<close>
 
-abbreviation beta_eta :: "pterm \<Rightarrow> pterm \<Rightarrow> bool"  (infixl \<open>\<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<close> 50) where
-  "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta> t \<equiv> sup beta eta s t"
-
-abbreviation beta_eta_reds :: "pterm \<Rightarrow> pterm \<Rightarrow> bool"  (infixl \<open>\<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>*\<close> 50) where
-  "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t \<equiv> (sup beta eta)\<^sup>*\<^sup>* s t"
-
 definition normal :: "pterm \<Rightarrow> bool" where
   "normal t \<longleftrightarrow> \<not> (\<exists>u. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta> u)"
 
@@ -102,17 +96,8 @@ lemma no_redex_etas: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> n
 
 subsection \<open>Existence and uniqueness of \<open>\<beta>\<eta>\<close>-normal forms\<close>
 
-lemma beta_reds_beta_eta_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t"
-  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
-
-lemma eta_reds_beta_eta_reds: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t"
-  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
-
 lemma normal_reds: "u \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* v \<Longrightarrow> normal u \<Longrightarrow> v = u"
   by (induction rule: converse_rtranclp_induct) (auto simp: normal_def)
-
-lemma aconv_term_refl [simp]: "aconv_term t t"
-  by (simp add: aconv_term_unname)
 
 context signature
 begin

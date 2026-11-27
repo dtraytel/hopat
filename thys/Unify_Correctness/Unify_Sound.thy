@@ -18,22 +18,6 @@ lemma evals_Empty: "evals cfg S_Empty xs \<Longrightarrow> xs = []"
 lemma evals_Single: "evals cfg (S_Single y) xs \<Longrightarrow> xs = [y]"
   by (erule evals.cases) (auto simp: pull_simps returnW_def dest: evals_Empty)
 
-lemma foldM_unify_dstep:
-  assumes "ok (foldM (\<lambda>(t, u) env. unify alg' t u env) tus env) env'"
-  shows "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env' []"
-  using assms
-proof (induction rule: ok_foldM_induct)
-  case (Nil b)
-  then show ?case by (simp add: dstep_refl)
-next
-  case (Cons x xs b b1 b')
-  obtain t u where x: "x = (t, u)" by force
-  from Cons.hyps(1) have "unif alg' [] t u b = Some (Ok b1)" by (simp add: x unify_def)
-  from unif_gsound[OF this refl] have "dstep b [([], t, u)] b1 []" by (rule step_okg_dstep)
-  from dstep_frame[OF this, of "map (\<lambda>(t, u). ([], t, u)) xs"] Cons.IH
-  show ?case by (simp add: x) (rule dstep_trans)
-qed
-
 end
 
 context pure_sig

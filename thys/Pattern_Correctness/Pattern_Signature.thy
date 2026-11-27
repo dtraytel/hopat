@@ -1,10 +1,7 @@
 section \<open>The Signature of Pure\<close>
 
 theory Pattern_Signature
-  imports
-    "Pure_Lambda.Pure_Normal"
-    "Pure_Lambda.Pure_Subst"
-    Type_Mgu
+  imports "Pure_Lambda.Pure_Apps" "Pure_Lambda.Pure_Subst" Type_Mgu
 begin
 
 text \<open>

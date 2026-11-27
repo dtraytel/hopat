@@ -14,14 +14,6 @@ text \<open>
 
 subsection \<open>The measure\<close>
 
-fun dom_type :: "ptyp \<Rightarrow> ptyp" where
-  "dom_type (Type a [T, U]) = (if a = STR ''fun'' then T else Type a [T, U])"
-| "dom_type T = T"
-
-fun rng_type :: "ptyp \<Rightarrow> ptyp" where
-  "rng_type (Type a [T, U]) = (if a = STR ''fun'' then U else Type a [T, U])"
-| "rng_type T = T"
-
 lemma dom_rng_fun [simp]: "dom_type (T \<rightarrow>\<^sub>T U) = T" "rng_type (T \<rightarrow>\<^sub>T U) = U"
   by simp_all
 
@@ -600,7 +592,7 @@ next
   then show ?case by simp
 qed
 
-lemma head_of_strip_comb: "strip_comb t = (h, ts) \<Longrightarrow> head_of t = h"
+lemma strip_comb_head_of: "strip_comb t = (h, ts) \<Longrightarrow> head_of t = h"
 proof -
   have "strip_comb_acc t us = (h, ts) \<Longrightarrow> head_of t = h" for us
     by (induction t us rule: strip_comb_acc.induct) auto
@@ -616,7 +608,7 @@ proof -
     by (auto simp: rigid_head_def)
   obtain h ts where hts: "strip_comb t' = (h, ts)" by force
   have "rigid h"
-    using r head_of_strip_comb[OF hts] strip_comb_head[OF hts] by (cases h) auto
+    using r strip_comb_head_of[OF hts] strip_comb_head[OF hts] by (cases h) auto
   with hn strip_comb_apps[OF hts] show thesis by (rule that)
 qed
 
@@ -658,13 +650,6 @@ proof -
       using at by (subst no_redex_apps) (auto simp: normal_iff elim: atom.elims)
   qed
 qed
-
-lemma typings_nthI: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
-proof (induction ts arbitrary: Ts)
-  case (Cons t ts)
-  then obtain U Us where "Ts = U # Us" by (cases Ts) auto
-  with Cons show ?case by (fastforce simp: nth_Cons')
-qed simp
 
 text \<open>
   An occurrence of \<open>F\<close> whose arguments have rigid heads bounds the measure of its instances

@@ -1,7 +1,7 @@
 section \<open>Soundness of Smashing Flex-Flex Pairs\<close>
 
 theory Unify_Smash_Sound
-  imports Unify_Sound
+  imports Unify_Flexflex_Base Unify_Match_Base Unify_Search_Sound
 begin
 
 context pure_sig_gen
@@ -263,64 +263,6 @@ qed (simp add: abs_list_def)
 lemma closed_types_abs_closed: "closed G \<Longrightarrow> closed (types_abs Ps G)"
   by (simp add: types_abs_abs_list closed_abs_list closed_loose_bvar)
 
-text \<open>A flexible term whose head is bound to a constant function:\<close>
-
-lemma flex_conv:
-  assumes ty: "e \<turnstile> inst \<rho> (abs_list bs (Var v T \<degree>\<degree> ts)) : X" and T: "tsubst \<rho> T = Ps \<Rrightarrow> R"
-    and le: "length ts \<le> length Ps"
-    and sv: "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ps G" and cl: "closed G" and tG: "\<And>e. e \<turnstile> G : R"
-    and ws: "wt_subst \<sigma>"
-  shows "ap \<rho> \<sigma> (abs_list bs (Var v T \<degree>\<degree> ts)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>
-    types_abs (map (\<lambda>(x, T). tsubst \<rho> T) bs @ drop (length ts) Ps) G"
-proof -
-  let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs" and ?ts = "map (ap \<rho> \<sigma>) ts"
-  let ?H = "types_abs Ps G" and ?j = "length ts"
-  have ms: "map snd ?bs = map (\<lambda>(x, T). tsubst \<rho> T) bs" by (auto simp: split_def)
-  have ap: "ap \<rho> \<sigma> (abs_list bs (Var v T \<degree>\<degree> ts)) = abs_list ?bs (\<sigma> v (tsubst \<rho> T) \<degree>\<degree> ?ts)"
-    by (simp add: ap_abs_list ap_apps)
-  have cT: "cert_typ alg ar (tsubst \<rho> T)" by (rule flex_typing[OF ty]) assumption
-  have cP: "\<forall>P\<in>set Ps. cert_typ alg ar P" using cT T cert_typ_funs by simp
-  have tyap: "e \<turnstile> abs_list ?bs (\<sigma> v (tsubst \<rho> T) \<degree>\<degree> ?ts) : X" using typing_ap[OF ty ws] ap by simp
-  then obtain V where X: "X = map snd ?bs \<Rrightarrow> V"
-    and tb: "pushes e (map snd ?bs) \<turnstile> \<sigma> v (tsubst \<rho> T) \<degree>\<degree> ?ts : V"
-    by (rule typing_abs_listE)
-  from tb obtain As where th: "pushes e (map snd ?bs) \<turnstile> \<sigma> v (tsubst \<rho> T) : As \<Rrightarrow> V"
-    and tts: "pushes e (map snd ?bs) \<tturnstile> ?ts : As"
-    by (rule list_app_typeE)
-  have AV: "As \<Rrightarrow> V = tsubst \<rho> T"
-    using conv_typing_eq[OF th wt_subst_typing[OF ws cT] conv_refl] .
-  have tH: "e' \<turnstile> ?H : Ps \<Rrightarrow> R" for e' by (rule typing_types_abs[OF tG cP])
-  have tHa: "pushes e (map snd ?bs) \<turnstile> ?H \<degree>\<degree> ?ts : V"
-    by (rule list_app_typeI[OF _ tts]) (use tH AV T in simp)
-  have ty2: "e \<turnstile> abs_list ?bs (?H \<degree>\<degree> ?ts) : X"
-    using typing_abs_list_replace[OF tyap[unfolded X] tHa] X by simp
-  have c1: "abs_list ?bs (\<sigma> v (tsubst \<rho> T) \<degree>\<degree> ?ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs (?H \<degree>\<degree> ?ts)"
-  proof (rule conv_abs_list)
-    show "wt (abs_list ?bs (\<sigma> v (tsubst \<rho> T) \<degree>\<degree> ?ts))" using tyap by (auto simp: wt_def)
-    show "wt (abs_list ?bs (?H \<degree>\<degree> ?ts))" using ty2 by (auto simp: wt_def)
-    show "\<sigma> v (tsubst \<rho> T) \<degree>\<degree> ?ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?H \<degree>\<degree> ?ts"
-      by (rule conv_apps[OF list_all2_refl _ _ sv]) (use tb tHa in \<open>auto simp: wt_def\<close>)
-  qed
-  let ?G' = "types_abs (drop ?j Ps) G"
-  have H: "?H = abs_list (map (\<lambda>T. (STR '''', T)) (take ?j Ps)) ?G'"
-    using types_abs_append[of "take ?j Ps" "drop ?j Ps" G] by (simp add: types_abs_abs_list)
-  have clG': "closed ?G'" by (rule closed_types_abs_closed[OF cl])
-  have "?H \<degree>\<degree> ?ts \<rightarrow>\<^sub>\<beta>\<^sup>* ssub (?G' \<degree>\<degree> []) ?ts"
-    unfolding H using beta_abs_list_ssub[of "map (\<lambda>T. (STR '''', T)) (take ?j Ps)" ?ts ?G'] le by simp
-  also have "ssub (?G' \<degree>\<degree> []) ?ts = ?G'" using ssub_closed_apps[OF clG', of "[]" ?ts] by simp
-  finally have red: "abs_list ?bs (?H \<degree>\<degree> ?ts) \<rightarrow>\<^sub>\<beta>\<^sup>* abs_list ?bs ?G'" by (rule beta_reds_abs_list)
-  have "wt (abs_list ?bs (?H \<degree>\<degree> ?ts))" using ty2 by (auto simp: wt_def)
-  from conv_beta_eta[OF this red] have c2: "abs_list ?bs (?H \<degree>\<degree> ?ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs ?G'" .
-  have "abs_list ?bs ?G' = abs_list (?bs @ map (\<lambda>T. (STR '''', T)) (drop ?j Ps)) G"
-    by (simp add: types_abs_abs_list abs_list_def)
-  moreover have "aconv_term (abs_list (?bs @ map (\<lambda>T. (STR '''', T)) (drop ?j Ps)) G)
-      (types_abs (map (\<lambda>(x, T). tsubst \<rho> T) bs @ drop ?j Ps) G)"
-    unfolding types_abs_abs_list by (rule aconv_abs_list_names') (simp add: ms[symmetric] comp_def)
-  ultimately have c3: "abs_list ?bs ?G' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs (map (\<lambda>(x, T). tsubst \<rho> T) bs @ drop ?j Ps) G"
-    by (simp add: aconv_term_conv)
-  from conv_trans[OF conv_trans[OF c1 c2] c3] show ?thesis unfolding ap .
-qed
-
 lemma eqv_abs_list_typed:
   "e \<turnstile> abs_list bs s : map snd bs \<Rrightarrow> V \<Longrightarrow> eqv E (pushes e (map snd bs)) s t \<Longrightarrow>
     eqv E e (abs_list bs s) (abs_list bs t)"
@@ -333,7 +275,7 @@ proof (induction bs arbitrary: e)
   from eqv.eqv_abs[OF this c, of x x] b show ?case by (simp add: abs_list_def)
 qed simp
 
-text \<open>The equational version of @{thm [source] flex_conv}:\<close>
+text \<open>A flexible term whose head is bound to a constant function:\<close>
 
 lemma flex_eqv:
   assumes ty: "e \<turnstile> inst \<rho> (abs_list bs (Var v T \<degree>\<degree> ts)) : X" and T: "tsubst \<rho> T = Ps \<Rrightarrow> R"
@@ -709,33 +651,6 @@ theorem smash_flexflex_sound:
     "gtyped env (tdps tps)" "cert_inst (tsol0 (tyenv env))"
   shows "dstep env (tdps tps) env' []"
   using foldrW_smash_flexflex1_sound[of tps env env'] assms by (simp add: smash_flexflex_def)
-
-end
-
-context pure_sig
-begin
-
-text \<open>
-  Hence smashing a unifier that the enumeration of \<^const>\<open>unifiers\<close> yields gives a unifier of
-  the input without flex-flex pairs, if the input is in the invariant of the termination proof
-  (for the soundness of \<^const>\<open>unifiers\<close>) and well-typed at every certified solution of its type
-  environment, and the type environment of the unifier is acyclic and consistent in its sorts, with
-  a certified most general solution.
-\<close>
-
-theorem unifiers_smash_sound:
-  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
-    and u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
-    and sm: "okW (smash_flexflex (env', tps)) env''"
-    and gt: "gtyped env (map (\<lambda>(t, u). ([], t, u)) tus)"
-    and ac: "tacyc (tyenv env')" and tc: "tcons_env (tyenv env')" and ci: "cert_inst (tsol0 (tyenv env'))"
-  shows "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env'' []"
-proof -
-  from unifiers_sound[OF cfg fin si u es x]
-  have s1: "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env' (tdps tps)" by simp
-  have "gtyped env' (tdps tps)" by (rule gtyped_dstep[OF s1 gt])
-  from dstep_trans[OF s1 smash_flexflex_sound[OF sm ac tc this ci]] show ?thesis .
-qed
 
 end
 

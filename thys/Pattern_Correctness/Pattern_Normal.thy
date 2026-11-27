@@ -1,7 +1,7 @@
 section \<open>Renaming and Normal Forms\<close>
 
 theory Pattern_Normal
-  imports Pattern_Sound
+  imports Pattern_Renaming "Pure_Lambda.Pure_Normal"
 begin
 
 text \<open>
@@ -10,9 +10,6 @@ text \<open>
 \<close>
 
 subsection \<open>Renaming\<close>
-
-lemma nonnegD: "nonneg f \<Longrightarrow> 0 \<le> k \<Longrightarrow> 0 \<le> f k"
-  by (simp add: nonneg_def)
 
 lemma rename_comp: "nonneg g \<Longrightarrow> rename f d (rename g d t) = rename (\<lambda>k. f (g k)) d t"
 proof (induction g d t rule: rename.induct)
@@ -34,110 +31,6 @@ next
   case (Abs a T t)
   then show ?case using Abs.IH[of "d + 1"] by (simp add: algebra_simps)
 qed auto
-
-lemma loose_bvar1_rename:
-  "nonneg f \<Longrightarrow> loose_bvar1 (rename f d t) j \<longleftrightarrow>
-    (j < d \<and> loose_bvar1 t j) \<or> (\<exists>k\<ge>0. loose_bvar1 t (k + d) \<and> j = f k + d)"
-proof (induction t arbitrary: d j)
-  case (Bound i)
-  show ?case
-  proof (cases "i < d")
-    case False
-    then have f0: "0 \<le> f (i - d)" by (intro nonnegD[OF Bound]) simp
-    have ex: "(\<exists>k\<ge>0. loose_bvar1 (Bound i) (k + d) \<and> j = f k + d) \<longleftrightarrow> j = f (i - d) + d"
-    proof
-      assume "\<exists>k\<ge>0. loose_bvar1 (Bound i) (k + d) \<and> j = f k + d"
-      then obtain k where "i = k + d" "j = f k + d" by auto
-      then show "j = f (i - d) + d" by simp
-    next
-      assume "j = f (i - d) + d"
-      with False show "\<exists>k\<ge>0. loose_bvar1 (Bound i) (k + d) \<and> j = f k + d"
-        by (intro exI[of _ "i - d"]) simp
-    qed
-    from False f0 have "\<not> (j < d \<and> i = j)" by auto
-    with False ex show ?thesis by (auto simp: eq_commute[of j])
-  qed auto
-next
-  case (Abs a T t)
-  from Abs.IH[OF Abs.prems, of "d + 1" "j + 1"] show ?case by (simp add: algebra_simps)
-next
-  case (App s u)
-  from App.IH(1)[OF App.prems, of d j] App.IH(2)[OF App.prems, of d j] show ?case by auto
-qed auto
-
-lemma rename_lift:
-  "0 \<le> j \<Longrightarrow> j \<le> d \<Longrightarrow> nonneg f \<Longrightarrow> lift (rename f d u) j = rename f (d + 1) (lift u j)"
-proof (induction u arbitrary: j d)
-  case (Bound i)
-  show ?case
-  proof (cases "i < d")
-    case False
-    then have f0: "0 \<le> f (i - d)" by (intro nonnegD[OF Bound.prems(3)]) simp
-    have "j \<le> f (i - d) + d" using f0 Bound.prems(2) by (simp add: integer_arith)
-    moreover have "\<not> i + 1 < d + 1" using False by simp
-    ultimately show ?thesis using False Bound.prems by (simp add: algebra_simps)
-  qed (use Bound.prems in \<open>auto simp: integer_arith\<close>)
-next
-  case (Abs a T u)
-  then show ?case using Abs.IH[of "j + 1" "d + 1"] by (simp add: integer_arith algebra_simps)
-qed auto
-
-lemma rename_subst:
-  "0 \<le> j \<Longrightarrow> j \<le> d \<Longrightarrow> nonneg f \<Longrightarrow> (rename f (d + 1) s)[rename f d u / j] = rename f d (s[u/j])"
-proof (induction s arbitrary: j d u)
-  case (Bound i)
-  consider "i < j" | "i = j" | "j < i" "i \<le> d" | "d < i" by fastforce
-  then show ?case
-  proof cases
-    case 4
-    then have f0: "0 \<le> f (i - (d + 1))" by (intro nonnegD[OF Bound.prems(3)]) (simp add: integer_arith)
-    have "j < f (i - (d + 1)) + (d + 1)" using f0 Bound.prems(2) by (simp add: integer_arith)
-    moreover have "\<not> i < d + 1" "\<not> i - 1 < d" using 4 by (simp_all add: integer_arith)
-    ultimately show ?thesis using 4 Bound.prems by (simp add: subst_Bound algebra_simps)
-  qed (use Bound.prems in \<open>auto simp: subst_Bound integer_arith\<close>)
-next
-  case (Abs a T s)
-  have "lift (rename f d u) 0 = rename f (d + 1) (lift u 0)"
-    using Abs.prems by (intro rename_lift) simp_all
-  with Abs.prems Abs.IH[of "j + 1" "d + 1" "lift u 0"] show ?case
-    by (simp add: integer_arith algebra_simps)
-qed auto
-
-lemma beta_rename: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> nonneg f \<Longrightarrow> 0 \<le> d \<Longrightarrow> rename f d s \<rightarrow>\<^sub>\<beta> rename f d t"
-proof (induction arbitrary: d set: beta)
-  case (beta a T s t)
-  then show ?case using rename_subst[of 0 d f s t] beta.beta[of a T "rename f (d + 1) s" "rename f d t"]
-    by simp
-next
-  case (abs s t a T)
-  then show ?case by (simp add: integer_arith)
-qed simp_all
-
-lemma eta_rename: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> nonneg f \<Longrightarrow> 0 \<le> d \<Longrightarrow> rename f d s \<rightarrow>\<^sub>\<eta> rename f d t"
-proof (induction arbitrary: d set: eta)
-  case (eta s a T dummy)
-  have "f k + (d + 1) \<noteq> 0" if "0 \<le> k" for k
-    using nonnegD[OF eta.prems(1) that] eta.prems(2) by (simp add: integer_arith)
-  then have nf: "\<not> loose_bvar1 (rename f (d + 1) s) 0"
-    using eta loose_bvar1_rename[of f "d + 1" s 0] eta.prems(2) by (auto simp: integer_arith)
-  have "rename f d (Abs a T (s $ Bound 0)) = Abs a T (rename f (d + 1) s $ Bound 0)"
-    using eta.prems by (simp add: integer_arith)
-  also have "\<dots> \<rightarrow>\<^sub>\<eta> (rename f (d + 1) s)[rename f d dummy/0]" using nf by (rule eta.eta)
-  also have "(rename f (d + 1) s)[rename f d dummy/0] = rename f d (s[dummy/0])"
-    using eta.prems by (intro rename_subst) simp_all
-  finally show ?case .
-next
-  case (abs s t a T)
-  then show ?case by (simp add: integer_arith)
-qed simp_all
-
-lemma reds_rename:
-  "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> nonneg f \<Longrightarrow> 0 \<le> d \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (rename f d s) (rename f d t)"
-  by (induction rule: rtranclp_induct)
-    (auto intro: rtranclp.rtrancl_into_rtrancl beta_rename eta_rename)
-
-lemma aconv_rename: "aconv_term u v \<Longrightarrow> aconv_term (rename f d u) (rename f d v)"
-  by (induction u v arbitrary: d rule: aconv_term.induct) (auto split: if_splits)
 
 lemma aconv_rename_agree:
   "aconv_term (rename f d t) (rename g d t) \<Longrightarrow> nonneg f \<Longrightarrow> nonneg g \<Longrightarrow>
@@ -280,24 +173,6 @@ qed auto
 lemma no_redex_abs_list [simp]: "no_redex (abs_list bs t) \<longleftrightarrow> no_redex t"
   by (induction bs) (auto simp: case_prod_unfold abs_list_def)
 
-lemma typs_apps: "typs (s \<degree>\<degree> ts) = typs s \<union> \<Union> (typs ` set ts)"
-  by (induction ts arbitrary: s) auto
-
-lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
-  by (induction t arbitrary: k) auto
-
-definition ttvars :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
-  "ttvars t = (\<Union>U\<in>typs t. tvars U)"
-
-lemma ttvars_simps [simp]:
-  "ttvars (s $ t) = ttvars s \<union> ttvars t" "ttvars (Abs a T t) = tvars T \<union> ttvars t"
-  "ttvars (Bound i) = {}" "ttvars (Var x T) = tvars T" "ttvars (Const c T) = tvars T"
-  "ttvars (Free f T) = tvars T"
-  by (auto simp: ttvars_def)
-
-lemma ttvars_apps: "ttvars (s \<degree>\<degree> ts) = ttvars s \<union> \<Union> (ttvars ` set ts)"
-  by (induction ts arbitrary: s) auto
-
 fun bnds_nonneg :: "pterm \<Rightarrow> bool" where
   "bnds_nonneg (Bound i) \<longleftrightarrow> 0 \<le> i"
 | "bnds_nonneg (Abs a T t) \<longleftrightarrow> bnds_nonneg t"
@@ -322,9 +197,6 @@ lemma rtrancl_eta_abs_list: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrighta
 lemma reds_abs_list: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (abs_list bs s) (abs_list bs t)"
   by (induction bs) (auto intro: rtrancl_beta_eta_Abs)
 
-lemma incr_bv_closed: "closed t \<Longrightarrow> 0 \<le> k \<Longrightarrow> incr_bv n k t = t"
-  by (simp add: incr_bv_no_loose closed_loose_bvar)
-
 text \<open>\<open>\<eta>\<close>-expansion of a closed term:\<close>
 
 lemma eta_abs_list_downs: "closed u \<Longrightarrow> abs_list bs (u \<degree>\<degree> map Bound (downs (length bs))) \<rightarrow>\<^sub>\<eta>\<^sup>* u"
@@ -348,20 +220,6 @@ proof (induction bs rule: rev_induct)
   finally show ?case .
 qed simp
 
-lemma conv_rename:
-  assumes "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" "wt s" "wt (rename f d s)" "wt (rename f d t)" "nonneg f" "0 \<le> d"
-  shows "rename f d s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename f d t"
-proof -
-  obtain u v where uv: "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* t v" "aconv_term u v"
-    using church_rosser[OF assms(2,1)] by blast
-  have "rename f d s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename f d u"
-    using reds_rename[OF uv(1) assms(5,6)] assms(3) by (rule beta_eta_conv)
-  also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename f d v" using aconv_rename[OF uv(3)] by (rule aconv_term_conv)
-  also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename f d t"
-    using reds_rename[OF uv(2) assms(5,6)] assms(4) by (blast intro: beta_eta_conv conv_sym)
-  finally show ?thesis .
-qed
-
 lemma conv_normal_aconv:
   assumes "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" "wt s" "normal s" "normal t"
   shows "aconv_term s t"
@@ -372,25 +230,6 @@ proof -
 qed
 
 subsection \<open>Loose bound variables under reduction\<close>
-
-lemma loose_bvar_iff: "loose_bvar t k \<longleftrightarrow> (\<exists>j\<ge>k. loose_bvar1 t j)"
-proof (induction t arbitrary: k)
-  case (Abs a T t)
-  have "(\<exists>j\<ge>k + 1. loose_bvar1 t j) \<longleftrightarrow> (\<exists>j\<ge>k. loose_bvar1 t (j + 1))"
-  proof
-    assume "\<exists>j\<ge>k + 1. loose_bvar1 t j"
-    then obtain j where "j \<ge> k + 1" "loose_bvar1 t j" by blast
-    then show "\<exists>j\<ge>k. loose_bvar1 t (j + 1)" by (intro exI[of _ "j - 1"]) simp
-  next
-    assume "\<exists>j\<ge>k. loose_bvar1 t (j + 1)"
-    then obtain j where "j \<ge> k" "loose_bvar1 t (j + 1)" by blast
-    then show "\<exists>j\<ge>k + 1. loose_bvar1 t j" by (intro exI[of _ "j + 1"]) simp
-  qed
-  with Abs.IH show ?case by simp
-qed auto
-
-lemma loose_bvar_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar t k \<Longrightarrow> loose_bvar s k"
-  unfolding loose_bvar_iff by (meson free_beta order_trans)
 
 lemma loose_bvar_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar t k \<Longrightarrow> loose_bvar s k"
   unfolding loose_bvar_iff by (meson free_eta order_trans)
@@ -517,9 +356,6 @@ qed simp
 
 subsection \<open>Strengthening\<close>
 
-lemma beta_reds_abs_list: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> abs_list bs s \<rightarrow>\<^sub>\<beta>\<^sup>* abs_list bs t"
-  by (induction bs) auto
-
 definition sabs :: "(integer \<Rightarrow> ptyp) \<Rightarrow> integer list \<Rightarrow> pterm \<Rightarrow> pterm" where
   "sabs e0 ks N = abs_list (map (\<lambda>k. (STR '''', e0 k)) ks) (rename (bidx ks) 0 N)"
 
@@ -577,10 +413,6 @@ proof -
     by (rule rename_cong) (simp add: bren_bidx lb)
   then show ?thesis by (simp add: rename_id)
 qed
-
-lemma loose_bvar1_less: "\<not> loose_bvar t n \<Longrightarrow> loose_bvar1 t k \<Longrightarrow> k < n"
-  by (meson loose_bvar1_imp loose_bvar_mono not_le)
-
 
 subsection \<open>Flex-flex problems with the same head\<close>
 
@@ -660,9 +492,6 @@ subsection \<open>Flex-flex problems with different heads\<close>
 
 lemma loose_bvar1_reds: "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar1 t k \<Longrightarrow> loose_bvar1 s k"
   by (induction rule: rtranclp_induct) (auto dest: free_beta simp: free_eta)
-
-lemma loose_bvar1_aconv: "aconv_term s t \<Longrightarrow> loose_bvar1 s k \<longleftrightarrow> loose_bvar1 t k"
-  by (metis aconv_term_unname loose_bvar1_unname)
 
 lemma aconv_abs_list: "aconv_term s t \<Longrightarrow> aconv_term (abs_list bs s) (abs_list bs t)"
   by (induction bs) auto
@@ -815,9 +644,6 @@ lemma loose_bvar1_nf:
   by (auto simp: loose_bvar1_apps)
 
 subsection \<open>Loose bound variables of normal forms\<close>
-
-lemma typing_aconv: "aconv_term s t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
-  by (metis aconv_term_unname typing_unname_iff)
 
 lemma typing_conv_normal:
   assumes "e \<turnstile> t : T" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" "normal N"

@@ -60,42 +60,6 @@ proof (intro conjI allI impI)
 qed
 
 
-subsection \<open>The type invariant for new bindings\<close>
-
-lemma tvinv_genvar: "genvar a env T = (env', G) \<Longrightarrow> tvinv A env \<Longrightarrow> tvinv A env'"
-  unfolding tvinv_def using tinv_mono by (auto simp: genvar_simps)
-
-lemma tvinv_update:
-  assumes "ok (update (F, T) t env) env'" "tvinv A env" "tvars T \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
-  shows "tvinv A env'"
-  using assms ok_update[OF assms(1)] unfolding tvinv_def by (auto split: if_splits)
-
-lemma tvars_funs: "tvars (Ts \<Rrightarrow> T) = (\<Union>U\<in>set Ts. tvars U) \<union> tvars T"
-  by (induction Ts) auto
-
-lemma type_of_G_tvars:
-  assumes "ok (type_of_G env T n is) G" "tvinv A env" "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
-  shows "tvars G \<subseteq> tvars_env (tyenv env) \<union> A"
-proof -
-  let ?\<theta> = "tyenv env"
-  have inv: "tinv ar (maxidx env) ?\<theta> A" by (rule tvinvD(1)[OF assms(2)])
-  have nt: "norm_type ?\<theta> T = return (tnorm ?\<theta> T)"
-    by (rule norm_type_ok[OF tinv_tacyc[OF inv] tinv_tcons_env[OF inv] tinv_tcons[OF inv assms(3)]])
-  from assms(1) nt obtain Ts U Us where st: "ok (split_type (tnorm ?\<theta> T) n []) (Ts, U)"
-    and us: "ok (mapM (nth Ts) is) Us" and G: "G = foldr (\<rightarrow>\<^sub>T) Us U"
-    by (auto simp: type_of_G_def split: prod.splits)
-  from ok_split_type[OF st] obtain Vs where Vs: "tnorm ?\<theta> T = foldr (\<rightarrow>\<^sub>T) Vs U" "Ts = rev Vs"
-    by auto
-  have tvn: "tvars (tnorm ?\<theta> T) \<subseteq> tvars_env ?\<theta> \<union> A"
-    using tvars_tnorm[OF tinv_tacyc[OF inv], of T] assms(3) by blast
-  have nth_set: "x \<in> set Ts" if "ok (nth Ts i) x" for i x
-    using that nat_of_integer_less_ilength[of i Ts] by (auto simp: ok_nth)
-  have "list_all2 (\<lambda>i x. ok (nth Ts i) x) is Us" using us by (simp add: ok_mapM)
-  then have "set Us \<subseteq> set Ts" by (induction rule: list_all2_induct) (auto dest: nth_set)
-  then show ?thesis using tvn Vs G by (auto simp: tvars_funs)
-qed
-
-
 subsection \<open>Flex-flex problems with the same head\<close>
 
 lemma ok_mk_ff_list_aux_complete:
@@ -145,23 +109,8 @@ proof -
   ultimately show ?thesis by simp
 qed
 
-lemma ttvars_abs_list: "ttvars (abs_list bs t) = btvars bs \<union> ttvars t"
-  by (induction bs) (auto simp: btvars_def)
-
-lemma btvars_nths:
-  assumes "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
-  shows "btvars (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> btvars bs"
-proof -
-  have "set (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> set bs"
-    using assms by (auto intro!: nth_mem simp: nat_of_integer_less_ilength)
-  then show ?thesis unfolding btvars_def by blast
-qed
-
 lemma app_Bounds_less: "\<not> loose_bvar (app s is) n \<Longrightarrow> \<forall>i\<in>set is. i < n"
   by (auto simp: app_apps loose_bvar_apps not_le)
-
-lemma ttvars_app [simp]: "ttvars (app s is) = ttvars s"
-  by (simp add: app_apps ttvars_apps)
 
 text \<open>The data of a flex problem \<open>F xs\<close> in the invariant:\<close>
 

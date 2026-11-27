@@ -33,27 +33,6 @@ definition rres :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarro
     finv A K env env' \<and> (\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
     (\<forall>(t, u)\<in>set tps. flexb env t \<and> flexb env u)))"
 
-text \<open>
-  The hypothesis of \<^const>\<open>MATCH\<close> holds for flex-rigid pairs in the invariant: the types of the
-  two sides are equal modulo the type environment.
-\<close>
-
-lemma sinv_MATCH_ok:
-  assumes sh: "frs_shape (rb, t, u)" and si: "sinv A K X env ((rb, t, u) # dps)"
-  shows "MATCH_ok env (rb, t, u)"
-proof -
-  have ei: "einv A K env" and p: "upok A env rb X t u" using si by (auto simp: sinv_def)
-  note e = einvD[OF ei]
-  from fastype_pair_term[OF ei p] obtain T1 U1 where
-    ty: "fastype env rb t = return T1" "fastype env rb u = return U1"
-      "tvars T1 \<subseteq> tvars_env (tyenv env) \<union> A" "tvars U1 \<subseteq> tvars_env (tyenv env) \<union> A"
-      "tnorm (tyenv env) T1 = tnorm (tyenv env) U1"
-    by blast
-  have "tspine (tyenv env) T1 U1"
-    by (rule tspine_tnorm[OF e(6,7) tinv_tcons[OF e(2) ty(3)] tinv_tcons[OF e(2) ty(4)] ty(5)])
-  with ty(1,2) show ?thesis by (intro frs_shape_MATCH_ok[OF sh]) (simp_all add: return_def)
-qed
-
 lemma resW_handleW_bindW_ok: "okW m x \<Longrightarrow> resW (handleW (bindW m f) h) r \<longleftrightarrow> resW (handleW (f x) h) r"
   by (rule resW_cong_handleW) (simp_all add: resW_bindW_ok)
 

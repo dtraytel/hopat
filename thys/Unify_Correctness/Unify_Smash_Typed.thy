@@ -1,7 +1,7 @@
 section \<open>Smashed Unifiers that Bind Names with Several Types\<close>
 
 theory Unify_Smash_Typed
-  imports Unify_Typed_Results Unify_Acyclic
+  imports Unify_Result_Base Unify_Acyclic
 begin
 
 text \<open>

@@ -21,57 +21,6 @@ definition unifiable :: "env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarro
 subsection \<open>Solutions of the resulting environments\<close>
 
 text \<open>
-  A sorted type environment has a well-sorted certified solution: it maps a bound variable of the
-  sort of its binding to the normal form of the binding, and other variables to themselves.
-\<close>
-
-definition tsol0 :: "tyenv \<Rightarrow> tinst" where
-  "tsol0 \<theta> v S = (case vt_lookup \<theta> v of
-     Some (S', U) \<Rightarrow> if S = S' then tnorm \<theta> U else TVar v S
-   | None \<Rightarrow> TVar v S)"
-
-lemma tsubst_tsol0: "tacyc \<theta> \<Longrightarrow> tcons \<theta> T \<Longrightarrow> tsubst (tsol0 \<theta>) T = tnorm \<theta> T"
-proof -
-  assume ac: "tacyc \<theta>" and tc: "tcons \<theta> T"
-  have "tsol0 \<theta> v S = tnorm \<theta> (TVar v S)" if "(v, S) \<in> tvars T" for v S
-  proof (cases "vt_lookup \<theta> v")
-    case (Some b)
-    obtain S' U where b: "b = (S', U)" by force
-    with Some tc that have "S' = S" unfolding tcons_def by blast
-    with Some b show ?thesis by (simp add: tsol0_def tnorm_TVar[OF ac])
-  qed (simp add: tsol0_def tnorm_TVar[OF ac])
-  then show ?thesis unfolding tnorm_tsubst[of \<theta> T] by (rule tsubst_cong)
-qed
-
-lemma tsol0:
-  assumes inv: "tinv ar n \<theta> A" and srt: "tsorted alg \<theta>" and sc: "scert alg \<theta>"
-  shows "tsol \<theta> (tsol0 \<theta>)" "wsinst alg (tsol0 \<theta>)" "cert_inst (tsol0 \<theta>)"
-proof -
-  have ac: "tacyc \<theta>" and tc: "tcons_env \<theta>" by (rule tinv_tacyc[OF inv], rule tinv_tcons_env[OF inv])
-  show "tsol \<theta> (tsol0 \<theta>)"
-    unfolding tsol_def using tsubst_tsol0[OF ac] tcons_envD[OF tc] by (simp add: tsol0_def)
-  show "wsinst alg (tsol0 \<theta>)"
-    unfolding wsinst_def
-  proof (intro allI)
-    fix v S
-    have "bsorted alg \<theta> v" using srt by (cases v) (simp add: tsorted_def)
-    then show "has_sort alg (tsol0 \<theta> v S) S"
-      by (auto simp: tsol0_def bsorted_def simp del: has_sort.simps split: option.splits)
-  qed
-  have ci: "cert_inst (tnorm_inst \<theta>)"
-    by (rule cert_inst_tnorm[OF ac]) (use inv tinv_wft sc in \<open>auto simp: scert_def\<close>)
-  show "cert_inst (tsol0 \<theta>)"
-    unfolding cert_inst_def
-  proof (intro allI impI)
-    fix v S assume S: "sort_ok alg S"
-    have "tsol0 \<theta> v S = tnorm_inst \<theta> v S \<or> tsol0 \<theta> v S = TVar v S"
-      by (auto simp: tsol0_def tnorm_TVar[OF ac] split: option.splits)
-    then show "cert_typ alg ar (tsol0 \<theta> v S)"
-      using ci[unfolded cert_inst_def, rule_format, OF S, of v] S by (auto simp: cert_typ_def)
-  qed
-qed
-
-text \<open>
   An acyclic environment is solved by the unfoldings of its bindings, at the instances of the
   types of the bindings.
 \<close>

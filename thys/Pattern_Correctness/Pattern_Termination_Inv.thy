@@ -63,22 +63,12 @@ qed
 lemma loose_bvar_app_Var: "\<not> loose_bvar (app (Var x T) ks) n \<longleftrightarrow> (\<forall>k\<in>set ks. k < n)"
   by (auto simp: app_apps loose_bvar_apps)
 
-lemma not_dep_unbound:
-  "vt_lookup (tenv env) G = None \<Longrightarrow> F \<noteq> G \<Longrightarrow> (F, G) \<notin> (dep env)\<^sup>*"
-  by (auto elim: rtranclE elim!: depE)
-
 end
 
 subsection \<open>Auxiliary facts on projection\<close>
 
 context pure_sig_gen
 begin
-
-lemma beta_vars: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> vars t \<subseteq> vars s"
-  by (induction rule: beta.induct) (use vars_subst in auto)
-
-lemma beta_reds_vars: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> vars t \<subseteq> vars s"
-  by (induction rule: rtranclp_induct) (use beta_vars in auto)
 
 lemma idx_result: "idx xs j = return (bidx xs j) \<or> idx xs j = raise (Unif No_Trace)"
   by (induction xs) auto
@@ -199,27 +189,6 @@ begin
 
 subsubsection \<open>Problems\<close>
 
-text \<open>
-  A problem \<open>s =?= t\<close> under the binders \<open>bs\<close> is well-formed for the variables \<open>X\<close> if its
-  variables are in \<open>X\<close> or the environment, its type variables are known, its loose bound variables
-  are bound by \<open>bs\<close>, and it is well-typed for every certified solution of the type environment.
-\<close>
-
-definition upok :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "upok A env bs X s t \<longleftrightarrow> vars s \<union> vars t \<subseteq> X \<union> evars env \<and>
-    ttvars s \<union> ttvars t \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A \<and>
-    \<not> loose_bvar s (ilength bs) \<and> \<not> loose_bvar t (ilength bs) \<and>
-    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T))"
-
-lemma upokD:
-  assumes "upok A env bs X s t"
-  shows "vars s \<subseteq> X \<union> evars env" "vars t \<subseteq> X \<union> evars env"
-    "ttvars s \<subseteq> tvars_env (tyenv env) \<union> A" "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
-    "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
-    "\<not> loose_bvar s (ilength bs)" "\<not> loose_bvar t (ilength bs)"
-    "tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
-  using assms unfolding upok_def by blast+
-
 lemma upok_sym: "upok A env bs X s t \<Longrightarrow> upok A env bs X t s"
   unfolding upok_def by blast
 
@@ -271,26 +240,8 @@ proof (intro conjI allI impI)
     using pd(9) extends_tsol[OF _ assms(2)] by blast
 qed
 
-lemma cert_typ_tsubst_rev:
-  assumes "cert_typ alg ar (tsubst \<rho> T)" "tcert alg (tvars T)"
-  shows "wft ar T" "sorts_ok alg T"
-proof -
-  have "wft ar (tsubst \<rho> T) \<Longrightarrow> wft ar T" by (induction T) auto
-  then show "wft ar T" using assms(1) by (simp add: cert_typ_def)
-  have "sorts_ok alg (tsubst \<rho> T) \<Longrightarrow> tcert alg (tvars T) \<Longrightarrow> sorts_ok alg T"
-  proof (induction T)
-    case (Type a Ts)
-    then show ?case by (auto simp: tcert_def)
-  qed (auto simp: tcert_def)
-  then show "sorts_ok alg T" using assms by (simp add: cert_typ_def)
-qed
-
-
 lemma ubv_tenv: "tenv env1 = tenv env \<Longrightarrow> ubv env1 X = ubv env X"
   by (simp add: ubv_def evars_def bnds_def)
-
-lemma lift_rigid: "rigid h \<Longrightarrow> rigid (lift h k)"
-  by (cases h) simp_all
 
 lemma strip_comb_head_cases:
   assumes "\<not> is_Abs h" "\<not> (\<exists>f u. h = f $ u)"

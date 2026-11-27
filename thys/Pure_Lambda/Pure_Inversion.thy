@@ -1,7 +1,7 @@
 section \<open>Inversion of \<open>\<alpha>\<beta>\<eta>\<close>-Equivalence\<close>
 
 theory Pure_Inversion
-  imports Pure_Normal
+  imports Pure_Apps
 begin
 
 text \<open>

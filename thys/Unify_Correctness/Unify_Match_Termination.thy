@@ -1,7 +1,7 @@
 section \<open>Termination of \<open>MATCH\<close>: Finiteness of the Copies of \<open>mc\<close>\<close>
 
 theory Unify_Match_Termination
-  imports Unify_Seq_Termination Unify_Shape
+  imports Unify_Seq_Termination Unify_Search_Base
 begin
 
 text \<open>
@@ -258,9 +258,6 @@ proof (intro ballI, clarify)
   show "(\<exists>e T. bs_env \<rho> e rb \<and> e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T) \<and>
       \<not> loose_bvar t (ilength rb) \<and> \<not> loose_bvar u (ilength rb)" by blast
 qed
-
-lemma sinv_dvars: "sinv A K X env dps \<Longrightarrow> dvars dps \<subseteq> X \<union> evars env"
-  unfolding sinv_def dvars_def by (fastforce dest: upokD(1,2))
 
 lemma sinv_dstep_c:
   assumes si: "sinv A K X env dps" and d: "dstep env dps env' dps'" and ei': "einv A' K' env'"
@@ -555,9 +552,6 @@ abbreviation CQc :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarr
 lemma tnew_same_c: "tvars_env (tyenv env') = tvars_env (tyenv env) \<Longrightarrow> tnew A env A env'"
   by (auto simp: tnew_def)
 
-lemma ttvars_combound: "ttvars (combound t m k) = ttvars t"
-  by (simp add: combound_apps ttvars_apps)
-
 text \<open>The unfolding of a copied term in \<open>envM\<close> is well-typed:\<close>
 
 lemma unfM_typed_c:
@@ -569,11 +563,6 @@ proof -
   from winvD[OF wi \<rho>] have w: "wt_env \<rho> env" "vinv \<rho> env X" by blast+
   from typing_unfc[OF m(1) wt_env_extends[OF w(1) ext] extends_tsol[OF \<rho>(1) ext] ty] show ?thesis .
 qed
-
-declare ttvars_types_abs [simp]
-
-lemma finite_dvars [simp]: "finite (dvars dps)"
-  by (auto simp: dvars_def)
 
 lemma vtvars_mono_c: "Y \<subseteq> Z \<Longrightarrow> vtvars Y \<subseteq> vtvars Z"
   by (auto simp: vtvars_def)

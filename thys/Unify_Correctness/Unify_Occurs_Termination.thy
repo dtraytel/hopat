@@ -1,7 +1,7 @@
 section \<open>Termination of the Occurs Checks\<close>
 
 theory Unify_Occurs_Termination
-  imports Unify_Occurs_Sound
+  imports Unify_Occurs_Sound Unify_Simpl_Inv
 begin
 context pure_sig_gen
 begin

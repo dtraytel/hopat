@@ -1,7 +1,7 @@
 section \<open>A Typed Unifier for Names with Several Types\<close>
 
 theory Pattern_Typed_Unifier
-  imports Pattern_Most_General
+  imports Pattern_Env_Apply
 begin
 
 text \<open>
@@ -267,7 +267,7 @@ subsection \<open>Unification keeps the environment acyclic\<close>
 
 text \<open>
   The solution \<open>gsol\<close> needs an acyclic environment. The termination proof
-  (@{theory Pattern_Correctness.Pattern_Termination}, \<open>unify_inv\<close>) gives acyclicity for problems that
+  (theory \<open>Pattern_Termination\<close>, \<open>unify_inv\<close>) gives acyclicity for problems that
   satisfy its invariants, which include typing. The proof below does not use types: a new binding
   is to a new variable, to an unbound variable, or to a term that passed the occurs check.
 \<close>

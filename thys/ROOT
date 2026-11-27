@@ -30,6 +30,7 @@ session Pure_Lambda in Pure_Lambda = HOL +
     Type_Subst
     Pure_Lambda
     Pure_Typing
+    Pure_Apps
     Pure_SN
     Pure_Subst
     Pure_Normal
@@ -58,6 +59,14 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Sound_Flex
     Pattern_Sound_Proj
     Pattern_Sound
+    Pattern_Renaming
+    Pattern_Known_Types
+    Pattern_Acyclic
+    Pattern_Closed_Env
+    Pattern_Type_Reach
+    Pattern_Invariant
+    Pattern_Env_Apply
+    Pattern_Typed_Unifier
     Pattern_Normal
     Pattern_Complete_Base
     Pattern_Complete_Steps
@@ -65,9 +74,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Complete_Proj
     Pattern_Complete_Occurs
     Pattern_Complete
-    Pattern_Acyclic
     Pattern_Size
-    Pattern_Type_Reach
     Pattern_Termination_Base
     Pattern_Termination_Inv
     Pattern_Unfold_Checked
@@ -76,7 +83,6 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Patterns_Success
     Pattern_Unify_Correctness
     Pattern_Most_General
-    Pattern_Typed_Unifier
     Pattern_Example
     Match_Types
     Match_Base
@@ -104,41 +110,46 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Seq
     Unify_Base_Sound
     Unify_Simpl_Sound
-    Unify_Simpl_Inv
     Unify_Flexflex_Sound
     Unify_Match_Sound
     Unify_Shape
     Unify_Search_Sound
-    Unify_Flexflex_Inv
-    Unify_Flexflex_Simpl
-    Unify_Match_Inv
-    Unify_Search_Inv
+    Unify_Inv_Base
     Unify_Occurs_Sound
-    Unify_Occurs_Termination
-    Unify_Simpl_Termination
-    Unify_Flexflex_Termination
-    Unify_Seq_Termination
-    Unify_Match_Termination
-    Unify_Search_Termination
-    Unify_Termination
-    Unify_Sound
-    Unify_Typed_Pattern
+    Unify_Flexflex_Base
+    Unify_Match_Base
+    Unify_Search_Base
     Unify_Smash_Sound
+    Unify_Result_Base
+    Unify_Typed_Pattern
     Unify_Typed_Inv
     Unify_Acyclic_Simpl
     Unify_Typed_Match
     Unify_Acyclic
     Unify_Flexflex_Typed
     Unify_Pattern_Inv
+    Unify_Smash_Typed
+    Unify_Invariant
+    Unify_Simpl_Inv
+    Unify_Flexflex_Inv
+    Unify_Occurs_Termination
+    Unify_Simpl_Termination
+    Unify_Flexflex_Termination
+    Unify_Flexflex_Simpl
+    Unify_Match_Inv
+    Unify_Seq_Termination
+    Unify_Match_Termination
+    Unify_Search_Inv
+    Unify_Search_Termination
+    Unify_Termination
+    Unify_Sound
+    Unify_Results
+    Unify_Typed_Results
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete
     Unify_Complete
     Unify_Complete_Two_Types
-    Unify_Results
-    Unify_Typed_Results
-    Unify_Smash_Typed
-    Unify_Invariant
     Unify_Results_Complete
     Unify_Outcome
 

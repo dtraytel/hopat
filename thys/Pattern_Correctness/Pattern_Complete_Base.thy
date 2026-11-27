@@ -1,7 +1,7 @@
 section \<open>Completeness: Basic Notions\<close>
 
 theory Pattern_Complete_Base
-  imports Pattern_Normal
+  imports Pattern_Known_Types Pattern_Normal
 begin
 
 subsection \<open>Computations without unification failures\<close>
@@ -220,14 +220,8 @@ lemma sagree_trans: "sagree n \<sigma>1 \<sigma>2 \<Longrightarrow> sagree n' \<
 definition tbelow :: "integer \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
   "tbelow n A \<longleftrightarrow> (\<forall>p\<in>A. snd (fst p) \<le> n)"
 
-lemma vars_typs: "(x, T) \<in> vars t \<Longrightarrow> T \<in> typs t"
-  by (induction t) auto
-
 lemma inst_agree: "tagree n \<rho> \<rho>' \<Longrightarrow> tbelow n (ttvars t) \<Longrightarrow> inst \<rho>' t = inst \<rho> t"
   by (rule inst_cong, rule tagree_tsubst) (auto simp: tbelow_def ttvars_def)
-
-lemma vars_inst: "vars (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vars t"
-  by (induction t) auto
 
 context pure_sig_gen
 begin
@@ -246,30 +240,8 @@ subsection \<open>Types\<close>
 lemma wft_tsubstD: "wft ar (tsubst \<rho> U) \<Longrightarrow> wft ar U"
   by (induction U) auto
 
-lemma typing_typs: "e \<turnstile> t : T \<Longrightarrow> U \<in> typs t \<Longrightarrow> cert_typ alg ar U"
-  by (induction rule: typing.induct) auto
-
-lemma typs_inst: "typs (inst \<rho> t) = tsubst \<rho> ` typs t"
-  by (induction t) auto
-
 lemma typing_inst_wft: "e \<turnstile> inst \<rho> t : T \<Longrightarrow> U \<in> typs t \<Longrightarrow> wft ar U"
   using typing_typs[of e "inst \<rho> t" T "tsubst \<rho> U"] by (auto simp: typs_inst cert_typ_def intro: wft_tsubstD)
-
-text \<open>
-  The invariant of the type environment (\<^const>\<open>tinv\<close>), for a set \<open>A\<close> of type variables of the
-  problem, which also contains the type variables of the bindings.
-\<close>
-
-definition tvinv :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> bool" where
-  "tvinv A env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) A \<and>
-    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
-      tvars U \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A)"
-
-lemma tvinvD:
-  assumes "tvinv A env"
-  shows "tinv ar (maxidx env) (tyenv env) A"
-    and "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> tvars U \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
-  using assms unfolding tvinv_def by blast+
 
 lemma tvinv_tbelow: "tvinv A env \<Longrightarrow> B \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> tbelow (maxidx env) B"
   unfolding tbelow_def by (meson subsetD tinv_idx tvinvD(1))
