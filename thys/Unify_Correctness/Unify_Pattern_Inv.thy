@@ -158,12 +158,6 @@ lemma tkn_grow: "tkn A env bs t \<Longrightarrow> tgrow A env env' \<Longrightar
 lemma tkn_tyenv: "tkn A env bs t \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> tkn A env' bs t"
   unfolding tkn_def by simp
 
-lemma tkn_bs: "tkn A env bs t \<Longrightarrow> tkn A env bs (Bound i)"
-  unfolding tkn_def by simp
-
-lemma tkn_App: "tkn A env bs (f $ u) \<longleftrightarrow> tkn A env bs f \<and> tkn A env bs u"
-  unfolding tkn_def by auto
-
 lemma tkn_apps: "tkn A env bs (h \<degree>\<degree> ts) \<longleftrightarrow> tkn A env bs h \<and> (\<forall>t\<in>set ts. tkn A env bs t)"
   unfolding tkn_def by (auto simp: ttvars_apps ctyps_apps)
 

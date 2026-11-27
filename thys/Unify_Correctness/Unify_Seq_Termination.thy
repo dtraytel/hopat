@@ -290,23 +290,6 @@ proof -
   with xs(2) show ?thesis by (auto simp: cfin_def)
 qed
 
-lemma evalx_det: "evalx cfg s xs \<Longrightarrow> evalx cfg s ys \<Longrightarrow> xs = ys"
-proof (induction arbitrary: ys rule: evalx.induct)
-  case (Nil s evs)
-  from Nil.prems show ?case by (cases rule: evalx.cases) (use Nil.hyps in simp_all)
-next
-  case (Exn s evs e)
-  from Exn.prems show ?case by (cases rule: evalx.cases) (use Exn.hyps in simp_all)
-next
-  case (Cons s evs x s' xs)
-  from Cons.prems show ?case
-  proof (cases rule: evalx.cases)
-    case (Cons evs' x' s'' ys')
-    with Cons.hyps(1) have "x' = x" "s'' = s'" by simp_all
-    with Cons.IH[OF Cons(3)[unfolded \<open>s'' = s'\<close>]] Cons show ?thesis by simp
-  qed (use Cons.hyps(1) in simp_all)
-qed
-
 end
 
 end

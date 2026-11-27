@@ -2362,3 +2362,89 @@ can be said about completeness, and about the exceptions, without it.
   and lose their invariant parts. This is a re-proof of the invariant content of the
   termination theories (several thousand lines) and was not started. (b) Remove the route
   without termination; this was not done either, because it is the part of (a) that exists.
+
+### Additions after the twenty-second execution (the invariant of the unifiers without termination)
+
+The last point of the previous section is done by way (a): the soundness theorem no longer
+depends on the termination of the unifiers.
+
+- **The theorem.** `unifiers_ev_uresult` (`Unify_Invariant.thy`): for a well-formed problem
+  (`sinv`), every element `x` of the enumeration of the sequence that `unifiers` returns
+  (`ev cfg s x`, the evaluation relation of the lazy sequences) satisfies `uresult`: it is
+  `El_R env' tps` with `dstep` from the problem to `tps`, a well-formed environment (`einv`),
+  well-typed and bounded variables (`winv`), well-formed flex-flex pairs (`upok`), and only
+  type variables that are known in the problem or have new indices (`tnew`). Nothing is
+  assumed about the names of the variables or about the finiteness of the enumeration.
+- **How it is proved.** No invariant content of the termination theories was re-proved by a
+  second induction on a measure. The parts are:
+  (1) Typing. `dstep` was already proved for every step by induction on the computations. With
+  the typing of the problem it gives, for every solution of the resulting type environment,
+  well-typed bindings, well-typed remaining pairs and one type per name that is not loose
+  (`gtyped_dstep`); closed bindings and the bound on the indices of bound names follow
+  (`einv_of_typed`, `ffres_of_typed`).
+  (2) The type-level invariant (well-formed type environment, known type variables of
+  bindings and pairs). It existed for `SIMPL` and `MATCH` (`Unify_Typed_Inv`,
+  `Unify_Typed_Match`); it now also states how the known type variables grow (`tgrow`, and the
+  bound `tub` in the invariant `tst` of the states), which gives `tnew`. New:
+  `Unify_Flexflex_Typed.thy` (normalization, `vupdate`, `ff_assign`, `clean_term`,
+  `clean_ffpair`, `add_ffpair`; 574 lemma lines) and `Unify_Pattern_Inv.thy` (pattern
+  unification with projection and the flex cases; 767 lemma lines). For pattern unification
+  the invariant is syntactic: the types that are unified occur at abstractions, constants and
+  free variables of the terms and of the bindings, and these are certified (`ctyps`, `pinv`,
+  `tkn`); on a well-formed problem this follows from typing (`sinv_pinv`).
+  (3) Acyclicity, which existed (`unif_acyc`, `hounifiers_acyc`); for lists of pattern
+  problems `foldM_unify_acyc`.
+  `Unify_Invariant.thy` (288 lemma lines) puts them together for the pattern case and the
+  search (`hounifiers_ev_uresult`, with the generic lemma `ev_sgood_R` on the search).
+- **`uresult` and `uresult_flex`.** `uresult` no longer contains the flexibility of the
+  remaining flex-flex pairs (`fflex`), which only the termination of smashing uses. The old
+  invariant is `uresult_flex`; the termination theorems of `Unify_Results.thy`
+  (`unifiers_cfin_uresult_flex`, `unifiers_fin`, `unifiers_uresult_flex`) state it, and
+  `uresult_flex_uresult` gives `uresult`.
+- **The rules.** `ures env tus x` (`Bicompose_Call.thy`) now says that `x` is an element of the
+  enumeration of the unifiers of the problem; `uresD` gives its invariant by
+  `unifiers_ev_uresult`. The invariant of the sequences of unifiers in a state of
+  `bicompose_aux` was `cfin` (the enumeration ends, possibly with an exception of a clash,
+  and all elements are unifiers), which came from the termination theorem. It is a parameter
+  now (locale `seq_inv`, with two assumptions: pulling a unifier keeps it, and the sequence
+  of the unifiers of a well-formed problem satisfies it). The instance for soundness is `eall`
+  (every element of the sequence is a unifier), proved from `pull_some_ev`; `assumption` and
+  `flexflex_rule` use `eall` directly. The session `Thm_Complete` instantiates the parameter
+  with the finite enumerations (`fin`, prefix `F`) and gets the flexibility of the flex-flex
+  pairs from termination (`ures_flex`). No statement of `derivable`, of the lemmas on the
+  rules or of the termination and completeness theorems changed.
+- **Measurement** (same method as in the previous section, on the rebuilt sessions).
+  `derivable_sem` uses 13.5k of 31.7k lemma lines of `Unify_Correctness` (17.6k of 30.0k
+  before) and 8.0k of 21.5k of `Pattern_Correctness` (11.0k before); `Thm_Soundness` is
+  unchanged (19.3k of 22.8k). It uses no lemma of `Pattern_Termination`,
+  `Pattern_Unfold_Checked`, `Unify_Occurs_Termination`, `Unify_Simpl_Termination`,
+  `Unify_Flexflex_Termination`, `Unify_Flexflex_Simpl`, `Unify_Seq_Termination`,
+  `Unify_Search_Termination`, `Unify_Termination`, and of the completeness theories; from
+  `Unify_Match_Termination` three basic lemmas (`finite_dvars`, `sinv_dvars`,
+  `ttvars_combound`). No measure of the termination proofs, no strong normalization and no
+  statement of definedness of a term-level function is among its dependencies. From `Pure_SN`
+  it uses lemmas on applications and typing (`list_app_typeD`, `subject_reduction_beta'`, …),
+  not strong normalization.
+- **What is not done.**
+  (1) The termination proofs are unchanged. They still prove the invariants together with the
+  decrease of their measures (`upostc`, `spost`, `finv`, `mres`, `rres`), about 9k lines. They
+  could now take the invariants of the results of recursive calls from the lemmas above and
+  prove only definedness and the decrease; this rewrite was not started.
+  (2) The theories that `Thm_Derivable` imports still contain the termination theories (131
+  theories, among them all `…_Termination` theories of the two unifier sessions), because
+  about 200 definitions and basic lemmas that soundness uses are in theories named after
+  termination or completeness (`einv`, `winv`, `tnew`, `unify_types_term` in
+  `Pattern_Termination_Base`; `upok` in `Pattern_Termination_Inv`; `tvinv`, `etvars`, `btvars` in
+  `Pattern_Complete_…`; `sinv` and the lemmas on the type computations in `Unify_Simpl_Inv`;
+  `ffres` in `Unify_Flexflex_Inv`; `uresult` in `Unify_Results`; `foldM_unify_dstep` in
+  `Unify_Sound`). So the separation holds for the dependencies of the theorems, not yet for
+  the import graph; moving these definitions and lemmas into theories below the termination
+  theories is mechanical and was not done.
+  (3) The type level is still total correctness: the lemmas on type unification and on the
+  computations that follow the type environment (`unify_types_term`, `body_type_term`,
+  `binder_types_term`, `env_fastype_term`, `eta_norm_term`, …) say that these functions return
+  a result on a well-formed type environment, and soundness uses them. They are about the
+  first-order unifier of types and acyclic type environments (`Type_Mgu`, `Pattern_Type_Reach`).
+  The invariant `einv` still has the component `tcovered` with its finite set `K`, which the
+  termination measures use; whether soundness can do without it was not examined.
+  (4) One lemma lost its last use and was removed (`evalx_det`).

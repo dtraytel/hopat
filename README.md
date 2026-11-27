@@ -260,10 +260,13 @@ does not check:
   `pure_sig` is that locale without loose names. A step of a unifier
   (`step_okg`, `dstep`) makes no hypothesis on the names: the problem follows
   from the remaining pairs, the bindings of the resulting environment, and
-  the bindings of loose names read at other types (`ghosts`). Termination is
-  proved once, with no hypothesis on the names (see below), and every
+  the bindings of loose names read at other types (`ghosts`). Every
   element of the enumeration of `Unify.unifiers` satisfies the invariant of
-  the results (`unifiers_cfin_uresult` in `Unify_Typed_Results.thy`). A
+  the results (`unifiers_ev_uresult` in `Unify_Invariant.thy`); this is
+  proved by induction on the computations, without the termination of the
+  unifiers, and it is all that the soundness of the rules uses about the
+  unifiers (see "Soundness without termination" below). Termination is
+  proved separately, with no hypothesis on the names. A
   solution that also satisfies the readings at other types (`gsolution`)
   solves the problem if it solves the remaining flex-flex pairs
   (`deqv_ebinds_dsolved`), and an acyclic, well-typed environment has one that
@@ -349,6 +352,39 @@ does not check:
   `unifiers` terminates (`unifiers_cfin` in `Unify_Termination.thy`): it returns a finite sequence or
   raises `TYPE` or `Fail "mk_ff_list"` (`AUDIT.md`,
   "Additions after the fourteenth execution" to "... eighteenth execution").
+  Soundness without termination. The rules use one theorem about the
+  unifiers: every element of the enumeration of `unifiers` on a well-formed
+  problem is a step from the problem (`dstep`) whose environment and
+  remaining flex-flex pairs are well-formed again, with a bound on the new
+  type variables (`uresult`; `unifiers_ev_uresult`, `Unify_Invariant.thy`).
+  Its proof combines statements that are proved by induction on the
+  computations (`raw_induct` of the partial functions, or the evaluation
+  relation `ev` of the lazy sequences): the steps give the typing of the
+  bindings and of the remaining pairs for every solution of the resulting
+  type environment (`gtyped_dstep`), hence closed bindings and bounded
+  indices; the type environment stays well-formed and the type variables
+  stay known, with the growth relation `tgrow`, for pattern unification
+  (`Unify_Pattern_Inv.thy`, a syntactic invariant: the types at
+  abstractions, constants and free variables are certified), for `SIMPL`
+  and `MATCH` (`Unify_Typed_Inv.thy`, `Unify_Typed_Match.thy`) and for the
+  treatment of the flex-flex pairs (`Unify_Flexflex_Typed.thy`); and the
+  environments stay acyclic (`Pattern_Typed_Unifier.thy`,
+  `Unify_Acyclic.thy`). At the rules, a unifier of a problem is an element
+  of the enumeration (`ures`, `Bicompose_Call.thy`), and the invariant of
+  the sequences of unifiers in the states of `bicompose_aux` is a locale
+  parameter (`seq_inv`): for soundness it says that every element of a
+  sequence is a unifier (`eall`); the session `Thm_Complete` instantiates it
+  with the finite enumerations. The transitive dependencies of the
+  soundness theorem `derivable_sem` contain no lemma of the termination
+  proofs of pattern unification, `SIMPL`, the flex-flex treatment, `MATCH`
+  and the search (`AUDIT.md`, "Additions after the twenty-second
+  execution"). The termination proofs themselves are unchanged: they still
+  prove the invariants together with the decrease of their measures, and
+  the theories of `Thm_Soundness` still import them, since definitions and
+  basic lemmas are in those theories. The flexibility of the remaining
+  flex-flex pairs, which the termination of smashing needs, is part of the
+  invariant `uresult_flex` that is proved with termination
+  (`Unify_Results.thy`).
   Completeness does not hold for solutions that keep a name at two types:
   the occurs checks and the flex-flex case with one head compare names only,
   so `Unify.unifiers` returns no unifier for the solvable
@@ -1097,7 +1133,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     schematic type variables and sorts (session `Pattern_Correctness`).
   - `Unify_Correctness/`: soundness of the enumeration of `unify.ML`,
     completeness up to the search bound, and termination
-    (session `Unify_Correctness`); `Unify_Outcome.thy` states the outcomes of
+    (session `Unify_Correctness`); `Unify_Invariant.thy` proves the invariant
+    of every enumerated unifier without termination (with
+    `Unify_Pattern_Inv.thy`, `Unify_Typed_Inv.thy`, `Unify_Typed_Match.thy`,
+    `Unify_Flexflex_Typed.thy`, `Unify_Acyclic.thy`), which is what the
+    soundness of the rules uses; `Unify_Outcome.thy` states the outcomes of
     `Pattern.unify` and `Unify.unifiers` on problems in which a name may have
     two types.
   - `Pure_Thm/`: the formalization of the inference rules of

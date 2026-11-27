@@ -104,19 +104,6 @@ proof -
   with evals_ev[OF _ e] show ?thesis by blast
 qed
 
-text \<open>A state in the invariant with finite enumerations is in the invariant for soundness:\<close>
-
-lemma fin_eall: "fin cfg s Q \<Longrightarrow> eall cfg s Q"
-  unfolding fin_def eall_def using evals_ev by blast
-
-lemma F_binv_binv: "F.binv sp s \<Longrightarrow> binv sp s"
-proof (induction rule: F.binv.induct)
-  case (Its A na tus xq yq)
-  have "uqinv sp tus xq" using Its.hyps(2) fin_eall
-    by (auto simp: F.uqinv_def uqinv_def split: uq.splits prod.splits)
-  with Its show ?case by (intro binv.Its)
-qed (auto intro: binv.intros)
-
 text \<open>The length of the enumeration of a sequence of unifiers.\<close>
 
 definition elen :: "cfg \<Rightarrow> seq \<Rightarrow> nat" where
