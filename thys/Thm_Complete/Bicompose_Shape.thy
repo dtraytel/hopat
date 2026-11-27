@@ -1,7 +1,7 @@
 section \<open>The Shape of the Results of \<open>bicompose_aux\<close>\<close>
 
 theory Bicompose_Shape
-  imports Bicompose_Theorems
+  imports "Thm_Soundness.Bicompose_Theorems" Bicompose_Complete
 begin
 
 text \<open>

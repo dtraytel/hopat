@@ -1,7 +1,7 @@
 section \<open>The Results of \<open>bicompose_aux\<close> are Theorems\<close>
 
 theory Bicompose_Theorems
-  imports Bicompose_Complete
+  imports Bicompose_Premises
 begin
 
 text \<open>

@@ -1,7 +1,7 @@
 section \<open>The abstract type of theorems\<close>
 
 theory Thm_Type
-  imports Rules_Base Proof_Sig Bicompose_Shape
+  imports Rules_Base Proof_Sig
 begin
 
 text \<open>

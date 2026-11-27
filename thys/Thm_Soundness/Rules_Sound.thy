@@ -1,7 +1,7 @@
 section \<open>Soundness of the primitive and derived rules\<close>
 
 theory Rules_Sound
-  imports Free_Subst Bicompose_Shape "Pure_Thm.Pure_Subst_Rules" "Pure_Thm.Pure_Rules"
+  imports Free_Subst "Pure_Thm.Pure_Subst_Rules" "Pure_Thm.Pure_Rules"
 begin
 
 text \<open>

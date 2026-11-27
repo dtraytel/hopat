@@ -686,7 +686,7 @@ a patch fails there.
   without premises are still skipped. The model (`test_hyps` and
   `could_bires` in `Pure_Biresolution.thy`) is for the patched function, and
   with it, the quick test skips only rules without results
-  (`compose_result_could_bires` in `Biresolution_Sound.thy`). The fix
+  (`compose_result_could_bires` in `Biresolution_Complete.thy`). The fix
   affects completeness only.
 - `patches/10-thm-assumption.patch`: the classic proof of `Thm.assumption`.
   The unifier considers the assumptions of the subgoal before normalisation
@@ -1213,10 +1213,16 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Sign.certify_term`, `Thm.global_cterm_of` and `Thm.global_ctyp_of` that
     is not part of the generated `thm.ML`) against these functions
     (`Pure_Certify_Test`).
-  - `Thm_Soundness/` and `Thm_Proofs/`: soundness, termination and
-    completeness of `bicompose_aux` and `biresolution`, the abstract type of
+  - `Thm_Soundness/`, `Thm_Complete/` and `Thm_Proofs/`: soundness of
+    `bicompose_aux` and `biresolution`, the abstract type of
     theorems and the soundness of the rules (session `Thm_Soundness`, theories
-    `Thm_Type` to `Thm_Derivable`), and the validity of the classic and tight
+    `Thm_Type` to `Thm_Derivable`); termination and completeness of
+    `bicompose_aux`, `biresolution`, `assumption` and `flexflex_rule` for
+    theorems with one type per name of a variable (session `Thm_Complete`:
+    `Bicompose_Termination.thy`, `Bicompose_Complete.thy`,
+    `Bicompose_Shape.thy`, `Biresolution_Complete.thy`,
+    `Thm_Assumption_Termination.thy`; no theory of `Thm_Soundness` imports
+    one of them); and the validity of the classic and tight
     proofs of the results (session `Thm_Proofs`). Of the theories named
     below, those on proof terms (`Proof_…`, `ZProof_…`, `Biresolution_Proofs`,
     `Rule_Proofs`, `ZRule_Proofs`, `ZSubst_Proofs`, `ZEq_Proofs`, and a theory

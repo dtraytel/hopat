@@ -229,10 +229,8 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Bicompose_Compose
     Bicompose_Typing
     Bicompose_Sound
-    Bicompose_Termination
-    Bicompose_Complete
+    Bicompose_Premises
     Bicompose_Theorems
-    Bicompose_Shape
     Lift_Rule
     Biresolution_Sound
     Free_Subst
@@ -265,6 +263,32 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Thm_Classes
     Thm_Example
     Thm_Clash_Example
+
+session Thm_Complete in Thm_Complete = Thm_Soundness +
+  description \<open>
+    Termination and completeness of the rules that unify, for theorems whose schematic
+    variables have one type for each name: bicompose_aux terminates and its sequence of results
+    is finite (Bicompose_Termination), it enumerates every result that a unifier within the
+    bounds of the configuration gives (Bicompose_Complete), its results described without its
+    internals (Bicompose_Shape), the same for biresolution (Biresolution_Complete), and the
+    termination of assumption and flexflex_rule (Thm_Assumption_Termination). No theory of
+    session Thm_Soundness imports a theory of this session: the soundness theorem does not
+    use these results.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pure_Unify
+    Pure_Thm
+    Pattern_Correctness
+    Unify_Correctness
+    Thm_Soundness
+  theories
+    Bicompose_Termination
+    Bicompose_Complete
+    Bicompose_Shape
+    Biresolution_Complete
+    Thm_Assumption_Termination
 
 session Thm_Extras in Thm_Extras = Thm_Soundness +
   description \<open>

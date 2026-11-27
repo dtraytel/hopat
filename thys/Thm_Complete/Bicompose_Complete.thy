@@ -16,9 +16,6 @@ text \<open>
 
 subsection \<open>The unifiers to come\<close>
 
-lemma okT_det: "okT m x \<Longrightarrow> okT m y \<Longrightarrow> x = y"
-  by auto
-
 lemma evals_pull_Some:
   assumes "evals cfg s xs" "pull cfg s = Some (evs, Ok (Some (x, s')))"
   shows "\<exists>xs'. xs = x # xs' \<and> evals cfg s' xs'"
