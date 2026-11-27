@@ -2521,7 +2521,29 @@ or the completeness of pattern unification or of the higher-order unifier.
   into sessions for the soundness side and for termination and completeness would follow the
   new import boundary; it renames the sessions that the README and the session
   descriptions refer to and was not started.
-  (2) The termination proofs are unchanged (point (1) of the previous section).
+  (2) The termination proofs are unchanged (point (1) of the previous section). The idea
+  there, that they could take the invariants of the results from the new lemmas and prove
+  only definedness and the decrease, was assessed by a count and not started. The 19
+  theories on the termination side (`Pattern_Size`, `Pattern_Termination_Base`,
+  `Pattern_Termination_Inv`, `Pattern_Unfold_Checked`, `Pattern_Termination`,
+  `Unify_Simpl_Inv` to `Unify_Results`) have 15.2k lines. Classified by the statement of each
+  lemma (by the constants it mentions, a rough count): 7.6k lines are lemmas that state that
+  a computation returns a result (with its postcondition), 2.4k lines are about the measures,
+  2.5k lines are auxiliary facts on terms and types, and 1.0k lines are lemmas that state
+  only that an invariant is kept (`einv_update`, `upok_mono`, `sinv_eta_expand`,
+  `sinv_make_args`, …). So at most 1.0k lines are separate lemmas that an invariant proved
+  elsewhere could replace; the rest of the invariant reasoning is inside the 7.6k lines,
+  whose postconditions (`upostc`, `hpostc`, `spost`, `simpl_post`, `mres`) put the invariant
+  and the relation on the measures in one statement. Two things stand in the way of
+  taking it out. The measures count the unbound variables of a fixed set `X` and the type
+  variables of a fixed finite set `K` (`ubv env X`, `uvarsA (tyenv env) K`), so the termination
+  proofs need the invariant of every intermediate result for the same `A`, `K` and `X`; the
+  lemmas of the previous section give the invariant of the final results for some `A`, `K`
+  and `X`, and for intermediate results the weaker type-level invariant `tyinv`. And the
+  1.0k lines of invariant lemmas are also used by the arguments on the measures. A rewrite
+  would therefore need new lemmas for `tcovered`, `winv` and `upok` with fixed sets, proved by
+  induction on the computations, and new proofs of the 7.6k lines; the expected saving is
+  below 2k lines.
   (3) The type level is unchanged (point (3) of the previous section): `Type_Unify`,
   `Type_Mgu` and `Pattern_Type_Reach` are on the soundness side with their termination and
   most-general-unifier results on types, and the moved lemmas `unify_types_term`,

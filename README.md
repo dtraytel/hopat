@@ -398,7 +398,8 @@ does not check:
   general unifiers of types (`Type_Mgu.thy`) are used by soundness and are
   on its side. The termination proofs themselves are
   unchanged: they still prove the invariants together with the decrease of
-  their measures. The flexibility of the remaining
+  their measures, for the fixed sets of variables that the measures count
+  (`AUDIT.md`, "Additions after the twenty-third execution"). The flexibility of the remaining
   flex-flex pairs, which the termination of smashing needs, is part of the
   invariant `uresult_flex` that is proved with termination
   (`Unify_Results.thy`).
