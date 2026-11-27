@@ -128,6 +128,7 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Acyclic_Simpl
     Unify_Typed_Match
     Unify_Acyclic
+    Unify_Flexflex_Typed
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete
