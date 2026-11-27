@@ -1,7 +1,7 @@
 section \<open>The Calls of \<open>bicompose_aux\<close> and their Sequences of Unifiers\<close>
 
 theory Bicompose_Call
-  imports Thm_Semantics "Unify_Correctness.Unify_Invariant"
+  imports Thm_Semantics "Unify_Soundness.Unify_Invariant"
 begin
 
 text \<open>

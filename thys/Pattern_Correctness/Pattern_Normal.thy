@@ -1,7 +1,7 @@
 section \<open>Renaming and Normal Forms\<close>
 
 theory Pattern_Normal
-  imports Pattern_Renaming "Pure_Lambda.Pure_Normal"
+  imports "Pattern_Soundness.Pattern_Renaming" "Pure_Lambda.Pure_Normal"
 begin
 
 text \<open>

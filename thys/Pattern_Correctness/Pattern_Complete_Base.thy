@@ -1,7 +1,7 @@
 section \<open>Completeness: Basic Notions\<close>
 
 theory Pattern_Complete_Base
-  imports Pattern_Known_Types Pattern_Normal
+  imports "Pattern_Soundness.Pattern_Known_Types" Pattern_Normal
 begin
 
 subsection \<open>Computations without unification failures\<close>

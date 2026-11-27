@@ -1,7 +1,7 @@
 section \<open>The Outcomes of Unification on Problems with a Name at Two Types\<close>
 
 theory Unify_Outcome
-  imports Unify_Results_Complete Unify_Smash_Typed Unify_Complete_Two_Types
+  imports Unify_Results_Complete "Unify_Soundness.Unify_Smash_Typed" Unify_Complete_Two_Types
 begin
 
 text \<open>

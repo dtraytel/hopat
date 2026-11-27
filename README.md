@@ -383,16 +383,20 @@ does not check:
   (`Pure_Apps.thy`; `Pattern_Renaming.thy`, `Pattern_Known_Types.thy`,
   `Pattern_Closed_Env.thy`, `Pattern_Invariant.thy`, `Pattern_Env_Apply.thy`;
   `Unify_Inv_Base.thy`, `Unify_Flexflex_Base.thy`, `Unify_Match_Base.thy`,
-  `Unify_Search_Base.thy`, `Unify_Result_Base.thy`), and the theories of
+  `Unify_Search_Base.thy`, `Unify_Result_Base.thy`), and the sessions are
+  split along this line. The sessions `Pattern_Soundness` (21 theories) and
+  `Unify_Soundness` (25 theories) contain what the theories of
   `Thm_Soundness`, `Thm_Proofs` and `Thm_Model_ZFC` import, directly or
-  indirectly, 52 of the 101 theories of `Pure_Lambda`, `Pattern_Correctness`
-  and `Unify_Correctness`: no theory on the termination or the completeness
-  of pattern unification or of the higher-order unifier, on matching, on
-  strong normalization (`Pure_SN.thy`) or on normal forms (`Pure_Normal.thy`,
-  `Pattern_Normal.thy`). The sessions are not split along this line:
-  `Thm_Soundness` still has `Unify_Correctness` as its parent session, so
-  building it builds the termination and completeness proofs as well. The
-  type level is different: the lemmas that type unification and the
+  indirectly, together with six of the eight theories of `Pure_Lambda`: no
+  theory on the termination or the completeness of pattern unification or
+  of the higher-order unifier, on matching, on strong normalization
+  (`Pure_SN.thy`) or on normal forms (`Pure_Normal.thy`,
+  `Pattern_Normal.thy`). `Thm_Soundness` has `Unify_Soundness` as its parent
+  session, so building it, `Thm_Proofs` or `Thm_Model_ZFC` checks no
+  termination or completeness proof of the unifiers. These proofs are in
+  the sessions `Pattern_Correctness` (on `Pattern_Soundness`) and
+  `Unify_Correctness` (on `Unify_Soundness`), which only `Thm_Complete` and
+  `Thm_Extras` import. The type level is different: the lemmas that type unification and the
   computations along the type environment return a result on a well-formed
   type environment (`unify_types_term`, `body_type_term`, …) and the most
   general unifiers of types (`Type_Mgu.thy`) are used by soundness and are
@@ -457,7 +461,7 @@ does not check:
   longer assume. The proof is one induction over `derivable` together with
   soundness (`derivable_inv`): the rules that unify add the sorts of the
   types of their environments, which the unifiers keep certified (an
-  invariant of `Pattern_Correctness`, now exported through the results of
+  invariant of `Pattern_Soundness`, now exported through the results of
   `assumption`, `flexflex_rule`, `bicompose` and `biresolution`), and
   `strip_shyps` leaves sorts of the types of the theorem and minimized
   sorts of the old hypotheses.
@@ -1146,26 +1150,31 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     (session `Pure_Pattern`).
   - `Pure_Unify/`: the formalization of `src/Pure/unify.ML`
     (session `Pure_Unify`).
-  - `Pattern_Correctness/`: soundness, completeness and termination of
-    the model of `pattern.ML` (unification and matching), for problems with
-    schematic type variables and sorts (session `Pattern_Correctness`). The
-    theories that the soundness of the rules imports end in
-    `Pattern_Typed_Unifier.thy`; they contain the invariants
-    (`Pattern_Invariant.thy`) but no termination or completeness proof of
-    pattern unification.
-  - `Unify_Correctness/`: soundness of the enumeration of `unify.ML`,
-    completeness up to the search bound, and termination
-    (session `Unify_Correctness`); `Unify_Invariant.thy` proves the invariant
-    of every enumerated unifier without termination (with
-    `Unify_Pattern_Inv.thy`, `Unify_Typed_Inv.thy`, `Unify_Typed_Match.thy`,
-    `Unify_Flexflex_Typed.thy`, `Unify_Acyclic.thy`), which is what the
-    soundness of the rules uses and the only part of the session that the
-    theories on the rules import (25 theories; the definitions that the
+  - `Pattern_Soundness/`: soundness of the model of pattern unification of
+    `pattern.ML`, for problems with schematic type variables and sorts
+    (session `Pattern_Soundness`): type unification and its most general
+    unifiers, the semantics of environments, soundness by induction on the
+    computation, the invariants of environments and problems
+    (`Pattern_Invariant.thy`), and typed solutions when a name has several
+    types (`Pattern_Typed_Unifier.thy`). No termination or completeness proof
+    of pattern unification.
+  - `Unify_Soundness/`: soundness of the enumeration of `unify.ML`
+    (session `Unify_Soundness`, on `Pattern_Soundness`): `Unify_Invariant.thy`
+    proves the invariant of every enumerated unifier without termination
+    (with `Unify_Pattern_Inv.thy`, `Unify_Typed_Inv.thy`,
+    `Unify_Typed_Match.thy`, `Unify_Flexflex_Typed.thy`, `Unify_Acyclic.thy`),
+    which is what the soundness of the rules uses. The definitions that the
     termination proofs share with it are in `Unify_Inv_Base.thy`,
     `Unify_Flexflex_Base.thy`, `Unify_Match_Base.thy`, `Unify_Search_Base.thy`
-    and `Unify_Result_Base.thy`); `Unify_Outcome.thy` states the outcomes of
-    `Pattern.unify` and `Unify.unifiers` on problems in which a name may have
-    two types.
+    and `Unify_Result_Base.thy`.
+  - `Pattern_Correctness/`: termination and completeness of the model of
+    pattern unification, and the correctness of matching (session
+    `Pattern_Correctness`, on `Pattern_Soundness`).
+  - `Unify_Correctness/`: termination of the model of `unify.ML` and its
+    completeness up to the search bound (session `Unify_Correctness`, on
+    `Unify_Soundness` and `Pattern_Correctness`); `Unify_Outcome.thy` states
+    the outcomes of `Pattern.unify` and `Unify.unifiers` on problems in which
+    a name may have two types.
   - `Pure_Thm/`: the formalization of the inference rules of
     `src/Pure/thm.ML` (session `Pure_Thm`), on top of the models of
     `pattern.ML` and `unify.ML`: the primitive rules (`assume`, `implies_intr`,
@@ -1592,14 +1601,20 @@ extends env2 env3 ⟹ extends env1 env3`).
 The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
-      Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
-      Thm_Soundness Thm_Proofs Unpatched_Examples Pure_Kernel_Check Kernel_Digest
+      Pure_Unify Pure_Thm Pure_Thm_Test Pattern_Soundness Unify_Soundness \
+      Pattern_Correctness Unify_Correctness Thm_Soundness Thm_Proofs \
+      Thm_Complete Thm_Extras Unpatched_Examples Pure_Kernel_Check Kernel_Digest
 
 `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`, `Pure_Thm_Test` on
-`Pure_Thm`; `Unify_Correctness` builds on `Pattern_Correctness`,
-`Thm_Soundness` on `Unify_Correctness`, `Thm_Proofs` and `Thm_Model_ZFC` on
+`Pure_Thm`. The soundness theorem is on the chain `Pattern_Soundness`,
+`Unify_Soundness`, `Thm_Soundness`, with `Thm_Proofs` and `Thm_Model_ZFC` on
 `Thm_Soundness` (so that an interactive session on one of them loads the
-heap of its parent); the remaining sessions have `HOL` as their parent.
+heap of its parent); `isabelle build -d thys Thm_Soundness` checks it
+without the termination and completeness proofs. `Pattern_Correctness`
+builds on `Pattern_Soundness`, and `Unify_Correctness` on `Unify_Soundness`;
+it checks the theories of `Pattern_Correctness` that it imports again, as
+`Thm_Complete` (on `Thm_Soundness`) does with those of both, since a session
+has one parent. The remaining sessions have `HOL` as their parent.
 `Nipkow_Grobauer_Pattern` is independent of the
 others; it loads `HOL-Library` and `HOL-Proofs-Lambda` (for `Commutation` and
 `ListOrder`) from source, so it does not need a prebuilt `HOL-Proofs` heap.

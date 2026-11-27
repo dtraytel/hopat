@@ -1,7 +1,7 @@
 section \<open>Definitions and Invariants for the Termination of Pattern Unification\<close>
 
 theory Pattern_Termination_Base
-  imports Pattern_Size Pattern_Complete Pattern_Invariant
+  imports Pattern_Size Pattern_Complete "Pattern_Soundness.Pattern_Invariant"
 begin
 
 context pure_sig_gen

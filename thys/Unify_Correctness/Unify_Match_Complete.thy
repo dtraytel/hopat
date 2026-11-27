@@ -1,7 +1,7 @@
 section \<open>Completeness of \<open>MATCH\<close>\<close>
 
 theory Unify_Match_Complete
-  imports Unify_Simpl_Complete Unify_Match_Termination Unify_Shape
+  imports Unify_Simpl_Complete Unify_Match_Termination "Unify_Soundness.Unify_Shape"
 begin
 
 text \<open>

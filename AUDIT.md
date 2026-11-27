@@ -2554,3 +2554,42 @@ or the completeness of pattern unification or of the higher-order unifier.
   `closed_inst`, `bs_env_cert`, `nabs`); they meet only in `Thm_Extras` and were there before.
   (5) The theory `Unify_Typed_Pattern` kept its name; it now contains only the soundness of
   the search by induction on the enumeration (`hounifiers_ev_sound`).
+
+### Additions after the twenty-fourth execution (the sessions follow the import boundary)
+
+Point (1) of "What is not done" in the previous section is done.
+
+- **The sessions.** The 46 theories of `Pattern_Correctness` and `Unify_Correctness` that the
+  theories on the rules import moved, unchanged, into two new sessions with directories of
+  the same names: `Pattern_Soundness` (21 theories, 10.2k lines; parent `HOL`) and
+  `Unify_Soundness` (25 theories, 15.9k lines; parent `Pattern_Soundness`). `Thm_Soundness`
+  has `Unify_Soundness` as its parent. `Pattern_Correctness` (25 theories, 14.7k lines:
+  termination and completeness of pattern unification, matching, the example) has
+  `Pattern_Soundness` as its parent, and `Unify_Correctness` (22 theories, 19.6k lines:
+  termination and completeness of the higher-order unifier, `Unify_Outcome`) has
+  `Unify_Soundness`. Only imports, the references to theories in texts and the file `ROOT`
+  changed; `Pure_Lambda` is not split, because no session has it as its parent, so a session
+  loads only those of its theories that it imports (`Pure_SN` and `Pure_Normal` are loaded by
+  `Pattern_Correctness`, `Unify_Correctness`, `Thm_Complete` and `Thm_Extras` only).
+- **What each session loads** (by the imports of its theories). `Pattern_Soundness`,
+  `Unify_Soundness`, `Thm_Soundness`, `Thm_Proofs` and `Thm_Model_ZFC`: six theories of
+  `Pure_Lambda` and the theories of `Pattern_Soundness` and `Unify_Soundness`, none of
+  `Pattern_Correctness` or `Unify_Correctness`. `Thm_Complete`: in addition 18 theories of
+  `Pattern_Correctness` and 19 of `Unify_Correctness`. `Thm_Extras`: in addition four theories
+  of `Pattern_Correctness` (`Pattern_Normal`, `Match_Types`, `Match_Base`, `Match_Sound`).
+- **Build times** (one run each, two threads). `Pattern_Soundness` 1:00, `Unify_Soundness`
+  1:35, `Thm_Soundness` 5:29, `Thm_Proofs` 5:26, `Thm_Model_ZFC` 0:54, `Pattern_Correctness`
+  1:15, `Unify_Correctness` 2:27, `Thm_Complete` 2:34, `Thm_Extras` 0:39, `Pure_Lambda` 0:28;
+  22:31 for all. Before the split the two unifier sessions took 2:16 and 3:00 and were both
+  ancestors of `Thm_Soundness`; now its ancestors take 2:35.
+- **The price.** A session has one parent, and the theories of an imported session that are
+  not in the heap of the parent are checked again. `Unify_Correctness` needs
+  `Unify_Soundness` and `Pattern_Correctness`, which both extend `Pattern_Soundness`; it has
+  the first as its parent and checks the 18 theories of `Pattern_Correctness` that it imports
+  again. `Thm_Complete` needs `Thm_Soundness` and `Unify_Correctness`; it has the first as its
+  parent and checks the theories of `Pattern_Correctness` and `Unify_Correctness` that it
+  imports again (2:34 instead of 0:42). `Thm_Extras` checks the four theories on matching
+  again. The build of all sessions is about four minutes longer than before the split.
+- **Not changed.** The names of the sessions `Pattern_Correctness` and `Unify_Correctness`
+  are kept for the sessions on termination and completeness. Earlier sections of this file
+  name theories by the sessions they were in at the time.

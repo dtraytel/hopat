@@ -1,7 +1,7 @@
 section \<open>A Size Measure for Unification Problems\<close>
 
 theory Pattern_Size
-  imports Pattern_Closed_Env Pattern_Normal
+  imports "Pattern_Soundness.Pattern_Closed_Env" Pattern_Normal
 begin
 
 text \<open>

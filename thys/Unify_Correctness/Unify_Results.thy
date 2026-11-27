@@ -1,7 +1,7 @@
 section \<open>The Results of Higher-Order Unification\<close>
 
 theory Unify_Results
-  imports Unify_Search_Inv Unify_Result_Base Unify_Sound
+  imports Unify_Search_Inv "Unify_Soundness.Unify_Result_Base" Unify_Sound
 begin
 
 context pure_sig_gen

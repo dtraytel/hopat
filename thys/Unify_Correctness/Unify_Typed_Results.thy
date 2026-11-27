@@ -1,7 +1,7 @@
 section \<open>The Pattern Case and the Search with the Invariant of Termination\<close>
 
 theory Unify_Typed_Results
-  imports Unify_Results Unify_Typed_Pattern
+  imports Unify_Results "Unify_Soundness.Unify_Typed_Pattern"
 begin
 
 text \<open>

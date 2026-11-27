@@ -1,7 +1,7 @@
 section \<open>\<open>\<beta>\<close>-Normal Patterns\<close>
 
 theory Pattern_Patterns
-  imports Pattern_Vars
+  imports "Pattern_Soundness.Pattern_Vars"
 begin
 
 text \<open>

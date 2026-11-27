@@ -1,7 +1,8 @@
 section \<open>Invariants and Measure of \<open>SIMPL\<close>\<close>
 
 theory Unify_Simpl_Inv
-  imports Unify_Inv_Base "Pattern_Correctness.Pattern_Termination_Inv" "Pattern_Correctness.Pattern_Most_General" "Pattern_Correctness.Match_Base"
+  imports "Unify_Soundness.Unify_Inv_Base" "Pattern_Correctness.Pattern_Termination_Inv"
+    "Pattern_Correctness.Pattern_Most_General" "Pattern_Correctness.Match_Base"
 begin
 
 text \<open>

@@ -1,7 +1,7 @@
 section \<open>The Syntax of Propositions, Lifted Rules and Proof States\<close>
 
 theory Thm_Syntax
-  imports "Unify_Correctness.Unify_Invariant" "Pure_Thm.Pure_Bicompose"
+  imports "Unify_Soundness.Unify_Invariant" "Pure_Thm.Pure_Bicompose"
 begin
 
 text \<open>

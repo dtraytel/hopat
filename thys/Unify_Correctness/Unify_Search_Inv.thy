@@ -1,7 +1,8 @@
 section \<open>Invariants of the Search\<close>
 
 theory Unify_Search_Inv
-  imports Unify_Match_Termination Unify_Flexflex_Simpl Unify_Search_Sound Unify_Seq_Termination
+  imports Unify_Match_Termination Unify_Flexflex_Simpl "Unify_Soundness.Unify_Search_Sound"
+    Unify_Seq_Termination
 begin
 
 text \<open>

@@ -1,7 +1,7 @@
 section \<open>Invariants of \<open>MATCH\<close>\<close>
 
 theory Unify_Match_Inv
-  imports Unify_Simpl_Termination Unify_Match_Base
+  imports Unify_Simpl_Termination "Unify_Soundness.Unify_Match_Base"
 begin
 
 text \<open>

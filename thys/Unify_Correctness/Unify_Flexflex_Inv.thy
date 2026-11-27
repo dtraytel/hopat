@@ -1,7 +1,7 @@
 section \<open>Invariants of the Treatment of Flex-Flex Pairs\<close>
 
 theory Unify_Flexflex_Inv
-  imports Unify_Simpl_Inv Unify_Flexflex_Base
+  imports Unify_Simpl_Inv "Unify_Soundness.Unify_Flexflex_Base"
 begin
 
 text \<open>

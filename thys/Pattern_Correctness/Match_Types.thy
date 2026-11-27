@@ -1,7 +1,7 @@
 section \<open>Correctness of Type Matching\<close>
 
 theory Match_Types
-  imports Type_Mgu
+  imports "Pattern_Soundness.Type_Mgu"
 begin
 
 text \<open>

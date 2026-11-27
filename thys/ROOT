@@ -36,11 +36,16 @@ session Pure_Lambda in Pure_Lambda = HOL +
     Pure_Normal
     Pure_Inversion
 
-session Pattern_Correctness in Pattern_Correctness = HOL +
+session Pattern_Soundness in Pattern_Soundness = HOL +
   description \<open>
-    Correctness of the formalization of Isabelle/Pure's pattern unification (session
+    Soundness of the formalization of Isabelle/Pure's pattern unification (session
     Pure_Pattern), on the lambda-calculus of session Pure_Lambda, for problems with schematic
-    type variables and sorts.
+    type variables and sorts: type unification and its most general unifiers, the semantics of
+    environments, soundness of unification by induction on the computation, the invariants of
+    environments and problems, and typed solutions of the resulting environments for
+    variables whose names occur at several types. No theory of this session is about the
+    termination or the completeness of pattern unification, or about matching; these are in
+    session Pattern_Correctness.
   \<close>
   sessions
     Pure_Lambda
@@ -67,43 +72,23 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Invariant
     Pattern_Env_Apply
     Pattern_Typed_Unifier
-    Pattern_Normal
-    Pattern_Complete_Base
-    Pattern_Complete_Steps
-    Pattern_Complete_Flex
-    Pattern_Complete_Proj
-    Pattern_Complete_Occurs
-    Pattern_Complete
-    Pattern_Size
-    Pattern_Termination_Base
-    Pattern_Termination_Inv
-    Pattern_Unfold_Checked
-    Pattern_Termination
-    Pattern_Patterns
-    Pattern_Patterns_Success
-    Pattern_Unify_Correctness
-    Pattern_Most_General
-    Pattern_Example
-    Match_Types
-    Match_Base
-    Match_Sound
-    Match_Termination
-    Match_Exceptions
-    Match_Complete
-    Match_Pattern
-    Match_Correctness
 
-session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
+session Unify_Soundness in Unify_Soundness = Pattern_Soundness +
   description \<open>
-    Correctness of the formalization of Isabelle/Pure's higher-order unification (session
-    Pure_Unify), on the lambda-calculus of session Pure_Lambda and the results on pattern
-    unification of session Pattern_Correctness, for problems with schematic type variables.
+    Soundness of the formalization of Isabelle/Pure's higher-order unification (session
+    Pure_Unify), on session Pattern_Soundness: every element of the enumeration of
+    Unify.unifiers on a well-formed problem is a unifier whose environment and remaining
+    flex-flex pairs are well-formed again (unifiers_ev_uresult in Unify_Invariant), proved by
+    induction on the computations and on the evaluation of the lazy sequences, with no
+    hypothesis on the names of the variables. No theory of this session is about the
+    termination or the completeness of the unifiers; these are in session Unify_Correctness.
+    The soundness of the inference rules (session Thm_Soundness) builds on this session.
   \<close>
   sessions
     Pure_Lambda
     Pure_Pattern
     Pure_Unify
-    Pattern_Correctness
+    Pattern_Soundness
   theories
     Unify_Monad
     Unify_Semantics
@@ -130,6 +115,61 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Pattern_Inv
     Unify_Smash_Typed
     Unify_Invariant
+
+session Pattern_Correctness in Pattern_Correctness = Pattern_Soundness +
+  description \<open>
+    Termination and completeness of the formalization of Isabelle/Pure's pattern unification
+    (most general unifiers), and the correctness of matching, on the soundness results of
+    session Pattern_Soundness, for problems with schematic type variables and sorts.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pattern_Soundness
+  theories
+    Pattern_Normal
+    Pattern_Complete_Base
+    Pattern_Complete_Steps
+    Pattern_Complete_Flex
+    Pattern_Complete_Proj
+    Pattern_Complete_Occurs
+    Pattern_Complete
+    Pattern_Size
+    Pattern_Termination_Base
+    Pattern_Termination_Inv
+    Pattern_Unfold_Checked
+    Pattern_Termination
+    Pattern_Patterns
+    Pattern_Patterns_Success
+    Pattern_Unify_Correctness
+    Pattern_Most_General
+    Pattern_Example
+    Match_Types
+    Match_Base
+    Match_Sound
+    Match_Termination
+    Match_Exceptions
+    Match_Complete
+    Match_Pattern
+    Match_Correctness
+
+session Unify_Correctness in Unify_Correctness = Unify_Soundness +
+  description \<open>
+    Termination of the formalization of Isabelle/Pure's higher-order unification (session
+    Pure_Unify) and its completeness up to the search bound, on the soundness results of
+    session Unify_Soundness and the results on pattern unification of session
+    Pattern_Correctness, for problems with schematic type variables; Unify_Outcome states the
+    outcomes of Pattern.unify and Unify.unifiers on problems in which a name may have two
+    types.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pure_Unify
+    Pattern_Soundness
+    Unify_Soundness
+    Pattern_Correctness
+  theories
     Unify_Simpl_Inv
     Unify_Flexflex_Inv
     Unify_Occurs_Termination
@@ -209,7 +249,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Extra_Test
     Pure_Certify_Test
 
-session Thm_Soundness in Thm_Soundness = Unify_Correctness +
+session Thm_Soundness in Thm_Soundness = Unify_Soundness +
   description \<open>
     Soundness of the inference rules of Isabelle/Pure, without the correctness of proof terms:
     models of the meta-logic, validity of a theorem in a model (each instance holds whose
@@ -222,7 +262,7 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     derivable theorem is well-formed and valid in every model of its signature, so it is not
     \<And>P. P if its sort hypotheses are inhabited (derivable_consistent). The composition of
     theorems (bicompose_aux) rests on the results on higher-order unification of session
-    Unify_Correctness. The proofs of theorems are data in this session: no theory imports a
+    Unify_Soundness. The proofs of theorems are data in this session: no theory imports a
     theory on the correctness of classic or tight proofs; theory Proof_Sig has the
     definitions on proofs that the statements of the rules mention. Thm_Example gives a
     signature that satisfies all assumptions, with derivations in it.
@@ -232,8 +272,8 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Pure_Pattern
     Pure_Unify
     Pure_Thm
-    Pattern_Correctness
-    Unify_Correctness
+    Pattern_Soundness
+    Unify_Soundness
   theories
     Thm_Syntax
     Thm_Model
@@ -294,6 +334,8 @@ session Thm_Complete in Thm_Complete = Thm_Soundness +
     Pure_Pattern
     Pure_Unify
     Pure_Thm
+    Pattern_Soundness
+    Unify_Soundness
     Pattern_Correctness
     Unify_Correctness
     Thm_Soundness
@@ -318,6 +360,7 @@ session Thm_Extras in Thm_Extras = Thm_Soundness +
     Pure_Lambda
     Pure_Pattern
     Pure_Thm
+    Pattern_Soundness
     Pattern_Correctness
     Thm_Soundness
   theories
@@ -342,8 +385,8 @@ session Thm_Proofs in Thm_Proofs = Thm_Soundness +
     Pure_Pattern
     Pure_Unify
     Pure_Thm
-    Pattern_Correctness
-    Unify_Correctness
+    Pattern_Soundness
+    Unify_Soundness
     Thm_Soundness
   theories
     Proof_Judgment

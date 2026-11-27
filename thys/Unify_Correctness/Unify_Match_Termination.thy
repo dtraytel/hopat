@@ -1,7 +1,7 @@
 section \<open>Termination of \<open>MATCH\<close>: Finiteness of the Copies of \<open>mc\<close>\<close>
 
 theory Unify_Match_Termination
-  imports Unify_Seq_Termination Unify_Search_Base
+  imports Unify_Seq_Termination "Unify_Soundness.Unify_Search_Base"
 begin
 
 text \<open>

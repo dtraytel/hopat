@@ -1,7 +1,7 @@
 section \<open>Pattern Unification Does Not Give Up on Patterns\<close>
 
 theory Pattern_Patterns_Success
-  imports Pattern_Patterns Pattern_Termination_Inv Pattern_Env_Apply
+  imports Pattern_Patterns Pattern_Termination_Inv "Pattern_Soundness.Pattern_Env_Apply"
 begin
 
 text \<open>
