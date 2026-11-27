@@ -543,6 +543,6 @@ end
 text \<open>The instance for soundness:\<close>
 
 sublocale pure_sig_gen \<subseteq> seq_inv alg ar ctab loose eall
-  by unfold_locales (rule upull_eall, rule unifiers_eall)
+  by unfold_locales (fact upull_eall, fact unifiers_eall)
 
 end

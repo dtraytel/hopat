@@ -89,7 +89,7 @@ proof -
 qed
 
 sublocale F: seq_inv alg ar ctab "{}" fin
-  by unfold_locales (rule upull_fin, assumption+, rule unifiers_ures)
+  by unfold_locales (fact upull_fin, fact unifiers_ures)
 
 text \<open>The unifiers of a well-formed problem have flexible flex-flex pairs:\<close>
 
