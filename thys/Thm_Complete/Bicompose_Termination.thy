@@ -40,6 +40,83 @@ end
 context pure_sig
 begin
 
+text \<open>
+  Without loose names the enumerations of the unifiers are finite. The invariant of the sequences
+  of unifiers in the states of the enumeration of the results (locale \<^locale>\<open>seq_inv\<close>) is
+  instantiated with the finite enumerations (prefix \<open>F\<close>); the instance for soundness says only
+  that the elements are unifiers in the invariant.
+\<close>
+
+lemma fin_pull:
+  assumes "fin cfg s P"
+  obtains (none) evs where "pull cfg s = Some (evs, Ok None)"
+  | (some) evs x s' where "pull cfg s = Some (evs, Ok (Some (x, s')))" "P x" "fin cfg s' P"
+proof -
+  from assms obtain xs where es: "evals cfg s xs" and P: "\<forall>x\<in>set xs. P x" by (auto simp: fin_def)
+  from es show thesis
+  proof cases
+    case (Nil evs)
+    show thesis by (rule none[OF Nil(2)])
+  next
+    case (Cons evs x s' xs')
+    with P show thesis by (intro some[of evs x s']) (auto simp: fin_def)
+  qed
+qed
+
+lemma upull_fin:
+  assumes "fin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
+  shows "ures env tus (El_R env' tps) \<and> fin cfg s' (ures env tus)"
+proof -
+  from okT_upull[OF assms(2)] obtain evs where p: "pull cfg s = Some (evs, Ok (Some (El_R env' tps, s')))" .
+  from assms(1) obtain xs where es: "evals cfg s xs" and P: "\<forall>x\<in>set xs. ures env tus x"
+    by (auto simp: fin_def)
+  from es p obtain xs' where "xs = El_R env' tps # xs'" "evals cfg s' xs'" by cases auto
+  with P show ?thesis by (auto simp: fin_def)
+qed
+
+lemma unifiers_ures:
+  assumes "cfg_alg cfg = alg" "pwf env tus" "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
+  shows "fin cfg s (ures env tus)"
+proof -
+  from assms(2) obtain A K X where fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    by (auto simp: pwf_def)
+  from assms(1,3) have u: "unifiers alg env tus = Some (Ok s)"
+    by (auto simp: unify_ops_def liftMT_def liftWT_def liftM_def split: option.splits xres.splits)
+  from unifiers_fin[OF assms(1) fin si] u obtain xs where es: "evals cfg s xs" by (auto simp: fin_def)
+  have "ures env tus x" if "x \<in> set xs" for x
+    using unifiers_eall[OF assms] evalx_ev_set[OF evals_evalx[OF es] that] by (simp add: eall_def)
+  with es show ?thesis unfolding fin_def by blast
+qed
+
+sublocale F: seq_inv alg ar ctab "{}" fin
+  by unfold_locales (rule upull_fin, assumption+, rule unifiers_ures)
+
+text \<open>The unifiers of a well-formed problem have flexible flex-flex pairs:\<close>
+
+lemma ures_flex:
+  assumes "ures env tus x" "finite X" "finite K" "sinv A K X env (tdps tus)"
+  shows "uresult_flex A env tus x"
+proof -
+  from assms(1) obtain cfg s where c: "cfg_alg cfg = alg" and u: "unifiers alg env tus = Some (Ok s)"
+    and e: "ev cfg s x" unfolding ures_def by blast
+  from unifiers_fin[OF c assms(2-4)] u obtain xs where "evals cfg s xs" "\<forall>y\<in>set xs. uresult_flex A env tus y"
+    unfolding fin_def by auto
+  with evals_ev[OF _ e] show ?thesis by blast
+qed
+
+text \<open>A state in the invariant with finite enumerations is in the invariant for soundness:\<close>
+
+lemma fin_eall: "fin cfg s Q \<Longrightarrow> eall cfg s Q"
+  unfolding fin_def eall_def using evals_ev by blast
+
+lemma F_binv_binv: "F.binv sp s \<Longrightarrow> binv sp s"
+proof (induction rule: F.binv.induct)
+  case (Its A na tus xq yq)
+  have "uqinv sp tus xq" using Its.hyps(2) fin_eall
+    by (auto simp: F.uqinv_def uqinv_def split: uq.splits prod.splits)
+  with Its show ?case by (intro binv.Its)
+qed (auto intro: binv.intros)
+
 text \<open>The length of the enumeration of a sequence of unifiers.\<close>
 
 definition elen :: "cfg \<Rightarrow> seq \<Rightarrow> nat" where
@@ -81,7 +158,7 @@ proof -
   from assms(2) obtain A K X where fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
     by (auto simp: pwf_def)
   from unifiers_fin[OF assms(1) fin si] obtain s where u: "unifiers alg env tus = Some (Ok s)"
-    and f: "fin cfg s (uresult A env tus)" by blast
+    and f: "fin cfg s (uresult_flex A env tus)" by blast
   have ok: "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
     using assms(1) u by (simp add: unify_ops_def liftMT_def liftWT_def liftM_def)
   from ok unifiers_ures[OF assms ok] u show thesis by (rule that)
@@ -180,7 +257,7 @@ text \<open>Pulling a sequence of results in the invariant yields finitely many 
 lemma bpull_bevals:
   assumes cfg: "cfg_alg (sp_cfg sp) = alg" and pa: "pinv_all sp"
     and nok: "newas_ok sp" and rok: "results_ok sp" and ops: "ops = unify_ops (sp_cfg sp) (sp_vl sp)"
-  shows "binv sp s \<Longrightarrow> \<exists>rs. bevals ops s rs"
+  shows "F.binv sp s \<Longrightarrow> \<exists>rs. bevals ops s rs"
 proof (induction "bmu sp s" arbitrary: s rule: less_induct)
   case less
   show ?case
@@ -191,8 +268,8 @@ proof (induction "bmu sp s" arbitrary: s rule: less_induct)
   next
     case (BS_Its ctx A na xq yq)
     from less.prems[unfolded BS_Its] obtain tus where ctx: "ctx = sp_ctx sp" and its: "itsok sp A na tus"
-      and uq: "uqinv sp tus xq" and byq: "binv sp yq"
-      by (auto elim: binv_ItsE)
+      and uq: "F.uqinv sp tus xq" and byq: "F.binv sp yq"
+      by (auto elim: F.binv_ItsE)
     have bp: "bpull ops s = do {
         r \<leftarrow> (case xq of UQ_Cell c \<Rightarrow> returnW (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us);
         case r of
@@ -212,10 +289,10 @@ proof (induction "bmu sp s" arbitrary: s rule: less_induct)
       case (UQ_Cell c)
       obtain env' tps us' where c: "c = ((env', tps), us')" by (cases c) auto
       show thesis
-        by (rule that[of "Some c"]) (use uq UQ_Cell c BS_Its in \<open>auto simp: uqinv_def returnW_def\<close>)
+        by (rule that[of "Some c"]) (use uq UQ_Cell c BS_Its in \<open>auto simp: F.uqinv_def returnW_def\<close>)
     next
       case (UQ_Seq us)
-      have ui: "fin (sp_cfg sp) us (ures (sp_env sp) tus)" using uq UQ_Seq by (simp add: uqinv_def)
+      have ui: "fin (sp_cfg sp) us (ures (sp_env sp) tus)" using uq UQ_Seq by (simp add: F.uqinv_def)
       show thesis
       proof (rule upull_fin_cases[OF ui itsok_pwf[OF its pa]])
         assume "okT (upull (sp_cfg sp) us) None"
@@ -241,7 +318,7 @@ proof (induction "bmu sp s" arbitrary: s rule: less_induct)
       then obtain env' tps us' where c: "rr = Some ((env', tps), us')" by (cases c) auto
       note e = el[OF c]
       let ?s' = "BS_Its ctx A na (UQ_Seq us') yq"
-      have bi': "binv sp ?s'" unfolding ctx by (rule binv.Its[OF its _ byq]) (use e in \<open>simp add: uqinv_def\<close>)
+      have bi': "F.binv sp ?s'" unfolding ctx by (rule F.binv.Its[OF its _ byq]) (use e in \<open>simp add: F.uqinv_def\<close>)
       from less.hyps[OF conjunct2[OF conjunct2[OF e]] bi'] obtain rs where rs: "bevals ops ?s' rs" by blast
       from rok its conjunct1[OF conjunct2[OF e]] ctx
       consider th where "okT (addth ctx A na (env', tps)) th"
@@ -265,11 +342,11 @@ proof (induction "bmu sp s" arbitrary: s rule: less_induct)
     case (BS_Tryasms ctx er asms n)
     from less.prems[unfolded BS_Tryasms] have er: "sp_eres sp" "1 \<le> n"
       "asms = drop (nat_of_integer n - 1) (asms_of sp)" "ctx = sp_ctx sp" "er = eres_of sp"
-      by (auto elim: binv_TryasmsE)
+      by (auto elim: F.binv_TryasmsE)
     from tryasms_ok[OF cfg pa er(1) nok ops er(4,5,2,3)] obtain s'' where
       t: "okT (tryasms ops ctx er asms n) s''" and m: "bmu sp s'' < bmu sp (BS_Tryasms ctx er asms n)"
       by blast
-    have b'': "binv sp s''" by (rule tryasms_binv[OF cfg pa er(1) ops er(4,5,2,3) t])
+    have b'': "F.binv sp s''" by (rule F.tryasms_binv[OF cfg pa er(1) ops er(4,5,2,3) t])
     have eqv: "okT (bpull ops s) x \<longleftrightarrow> okT (bpull ops s'') x" for x
       using t unfolding BS_Tryasms by (subst bpull.simps) auto
     from less.hyps[OF _ b''] m BS_Tryasms obtain rs where "bevals ops s'' rs" by auto
@@ -1072,7 +1149,7 @@ proof -
     have ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
         (smax, stpairs, ?S) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s"
       using r Some b unfolding eq by (auto simp: returnW_def)
-    have "binv ?sp s" by (rule bicompose_body_binv) (use b cfg pa sel in simp_all)
+    have "F.binv ?sp s" by (rule F.bicompose_body_binv) (use b cfg pa sel in simp_all)
     from bpull_bevals[OF _ pa nok rok _ this] cfg sel obtain rs where "bevals (unify_ops cfg vl) s rs"
       by auto
     with ok show ?thesis by blast

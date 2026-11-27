@@ -25,22 +25,22 @@ definition pwf :: "env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> b
   "pwf env tus \<longleftrightarrow> (\<exists>A K X. finite X \<and> finite K \<and> sinv A K X env (tdps tus))"
 
 text \<open>
-  The unifiers of a problem: they satisfy the invariant of the results for every witness of the
-  well-formedness of the problem.
+  The unifiers of a problem: the elements of the enumeration of \<^const>\<open>unifiers\<close>. For a
+  well-formed problem they satisfy the invariant of the results, for every witness of the
+  well-formedness (theorem @{thm [source] unifiers_ev_uresult}, proved without termination).
 \<close>
 
 definition ures :: "env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
-  "ures env tus x \<longleftrightarrow>
-    (\<forall>A K X. finite X \<longrightarrow> finite K \<longrightarrow> sinv A K X env (tdps tus) \<longrightarrow> uresult A env tus x)"
+  "ures env tus x \<longleftrightarrow> (\<exists>cfg s. cfg_alg cfg = alg \<and> unifiers alg env tus = Some (Ok s) \<and> ev cfg s x)"
 
 lemma uresD: "ures env tus x \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow>
     sinv A K X env (tdps tus) \<Longrightarrow> uresult A env tus x"
-  unfolding ures_def by blast
+  unfolding ures_def using unifiers_ev_uresult by blast
 
 lemma ures_pwf:
   assumes "ures env tus x" "pwf env tus"
   obtains A where "uresult A env tus x"
-  using assms unfolding ures_def pwf_def by blast
+  using assms uresD unfolding pwf_def by blast
 
 text \<open>All elements of a sequence satisfy a property:\<close>
 
@@ -72,11 +72,7 @@ proof -
   with assms(1) show ?thesis unfolding eall_def by blast
 qed
 
-text \<open>
-  The sequence of the unifiers of a problem: every element is a unifier in the invariant, whatever
-  names its environment binds, and whether or not the enumeration is finite (theorem
-  @{thm [source] unifiers_ev_uresult}, proved without termination).
-\<close>
+text \<open>The sequence of the unifiers of a problem:\<close>
 
 lemma unifiers_eall:
   assumes "cfg_alg cfg = alg" "pwf env tus" "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
@@ -84,7 +80,7 @@ lemma unifiers_eall:
 proof -
   from assms(1,3) have u: "unifiers alg env tus = Some (Ok s)"
     by (auto simp: unify_ops_def liftMT_def liftWT_def liftM_def split: option.splits xres.splits)
-  show ?thesis unfolding eall_def ures_def using unifiers_ev_uresult[OF assms(1) _ _ _ u] by blast
+  show ?thesis unfolding eall_def ures_def using assms(1) u by blast
 qed
 
 end

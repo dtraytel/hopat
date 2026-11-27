@@ -481,15 +481,15 @@ text \<open>
 \<close>
 
 lemma uresult_ground:
-  assumes r: "uresult A env tus (El_R env' tps)" and si: "sinv A K X env (tdps tus)"
+  assumes r: "uresult_flex A env tus (El_R env' tps)" and si: "sinv A K X env (tdps tus)"
   obtains \<rho> \<sigma> where "cert_inst \<rho>" "wt_subst \<sigma>"
     "\<And>t u. (t, u) \<in> set tus \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u \<and> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T)"
 proof -
-  from uresultD(3)[OF r] obtain A' K' X' e0 where ff: "ffres A' K' X' env' tps" and fl: "fflex A' K' e0 env' tps"
+  from uresult_flexD(3)[OF r] obtain A' K' X' e0 where ff: "ffres A' K' X' env' tps" and fl: "fflex A' K' e0 env' tps"
     by blast
   from smash_flexflex_term[OF ff fl] obtain env'' where ds': "dstep env' (tdps tps) env'' []"
     and fv: "finv A' K' e0 env''" and wi'': "winv env'' X'" by blast
-  have ds: "dstep env (tdps tus) env'' []" by (rule dstep_trans[OF uresultD(1)[OF r] ds'])
+  have ds: "dstep env (tdps tus) env'' []" by (rule dstep_trans[OF uresult_flexD(1)[OF r] ds'])
   have "ffres A' K' X' env'' []" using fv wi'' by (simp add: ffres_def finv_def)
   then have ei'': "einv A' K' env''" by (simp add: ffres_def)
   note c = canonical_solution[OF ei'' wi'']
@@ -601,7 +601,7 @@ proof -
     and ur: "ures (sp_env ?sp) tus (El_R env' tps)" by (auto simp: rchar_def)
   from itsok_pwf[OF its pa] obtain A0 K X where "finite X" "finite K" "sinv A0 K X (sp_env ?sp) (tdps tus)"
     by (auto simp: pwf_def)
-  with uresD[OF ur] obtain \<rho> \<sigma> where \<rho>: "cert_inst \<rho>" and \<sigma>: "wt_subst \<sigma>"
+  with ures_flex[OF ur] obtain \<rho> \<sigma> where \<rho>: "cert_inst \<rho>" and \<sigma>: "wt_subst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set tus \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     by (metis uresult_ground)
   text \<open>The lifted rule.\<close>

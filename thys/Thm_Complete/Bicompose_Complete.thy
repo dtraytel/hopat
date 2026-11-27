@@ -186,7 +186,7 @@ text \<open>Pulling a sequence of results yields one of the results to come, and
 lemma bpull_pend:
   assumes cfg: "cfg_alg (sp_cfg sp) = alg" and pa: "pinv_all sp"
     and nok: "newas_ok sp" and ops: "ops = unify_ops (sp_cfg sp) (sp_vl sp)"
-  shows "binv sp s \<Longrightarrow> okT (bpull ops s) x \<Longrightarrow>
+  shows "F.binv sp s \<Longrightarrow> okT (bpull ops s) x \<Longrightarrow>
     (case x of None \<Rightarrow> pend sp s = {} | Some (r, s') \<Rightarrow> pend sp s \<subseteq> insert r (pend sp s'))"
 proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
   case less
@@ -197,8 +197,8 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
   next
     case (BS_Its ctx A na xq yq)
     from less.prems(1)[unfolded BS_Its] obtain tus where ctx: "ctx = sp_ctx sp" and its: "itsok sp A na tus"
-      and uq: "uqinv sp tus xq" and byq: "binv sp yq"
-      by (auto elim: binv_ItsE)
+      and uq: "F.uqinv sp tus xq" and byq: "F.binv sp yq"
+      by (auto elim: F.binv_ItsE)
     have pw: "pwf (sp_env sp) tus" by (rule itsok_pwf[OF its pa])
     have bp: "bpull ops s = do {
         r \<leftarrow> (case xq of UQ_Cell c \<Rightarrow> returnW (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us);
@@ -219,18 +219,18 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
     have q: "(rr = None \<longrightarrow> uqel (sp_cfg sp) xq = {} \<and> bmu sp yq < bmu sp s) \<and>
       (\<forall>env' tps us'. rr = Some ((env', tps), us') \<longrightarrow>
         uqel (sp_cfg sp) xq \<subseteq> insert (env', tps) (uels (sp_cfg sp) us') \<and>
-        binv sp (BS_Its ctx A na (UQ_Seq us') yq) \<and> bmu sp (BS_Its ctx A na (UQ_Seq us') yq) < bmu sp s)"
+        F.binv sp (BS_Its ctx A na (UQ_Seq us') yq) \<and> bmu sp (BS_Its ctx A na (UQ_Seq us') yq) < bmu sp s)"
     proof (cases xq)
       case (UQ_Cell c)
       obtain env' tps us' where c: "c = ((env', tps), us')" by (cases c) auto
       with UQ_Cell rr have rrc: "rr = Some ((env', tps), us')" by (simp add: returnW_def)
-      from uq UQ_Cell c have "fin (sp_cfg sp) us' (ures (sp_env sp) tus)" by (simp add: uqinv_def)
-      then have "binv sp (BS_Its ctx A na (UQ_Seq us') yq)"
-        unfolding ctx by (intro binv.Its[OF its _ byq]) (simp add: uqinv_def)
+      from uq UQ_Cell c have "fin (sp_cfg sp) us' (ures (sp_env sp) tus)" by (simp add: F.uqinv_def)
+      then have "F.binv sp (BS_Its ctx A na (UQ_Seq us') yq)"
+        unfolding ctx by (intro F.binv.Its[OF its _ byq]) (simp add: F.uqinv_def)
       with rrc UQ_Cell c BS_Its show ?thesis by (auto simp: uqel_def)
     next
       case (UQ_Seq us)
-      have ui: "fin (sp_cfg sp) us (ures (sp_env sp) tus)" using uq UQ_Seq by (simp add: uqinv_def)
+      have ui: "fin (sp_cfg sp) us (ures (sp_env sp) tus)" using uq UQ_Seq by (simp add: F.uqinv_def)
       have rr': "okT (upull (sp_cfg sp) us) rr" using rr UQ_Seq ops by (simp add: unify_ops_def)
       show ?thesis
       proof (rule upull_fin_cases[OF ui pw])
@@ -242,8 +242,8 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
           and f': "fin (sp_cfg sp) us' (ures (sp_env sp) tus)"
           and el: "elen (sp_cfg sp) us = Suc (elen (sp_cfg sp) us')"
         from rr' p have rrc: "rr = Some ((env', tps), us')" by (rule okT_det)
-        have "binv sp (BS_Its ctx A na (UQ_Seq us') yq)"
-          unfolding ctx by (intro binv.Its[OF its _ byq]) (simp add: uqinv_def f')
+        have "F.binv sp (BS_Its ctx A na (UQ_Seq us') yq)"
+          unfolding ctx by (intro F.binv.Its[OF its _ byq]) (simp add: F.uqinv_def f')
         with rrc UQ_Seq BS_Its el upull_uels_Some[OF p] show ?thesis by (simp add: uqel_def)
       qed
     qed
@@ -258,7 +258,7 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
       then obtain env' tps us' where c: "rr = Some ((env', tps), us')" by (cases c) auto
       let ?s' = "BS_Its ctx A na (UQ_Seq us') yq"
       from q c have sub: "uqel (sp_cfg sp) xq \<subseteq> insert (env', tps) (uels (sp_cfg sp) us')"
-        and b': "binv sp ?s'" and m: "bmu sp ?s' < bmu sp s" by auto
+        and b': "F.binv sp ?s'" and m: "bmu sp ?s' < bmu sp s" by auto
       have x': "okT (handleW (bindW (addth ctx A na (env', tps)) (\<lambda>th. returnW (Some (th, ?s'))))
           (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops ?s' | _ \<Rightarrow> raiseW e)) x"
         using x c by simp
@@ -336,11 +336,11 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
     case (BS_Tryasms ctx er asms n)
     from less.prems(1)[unfolded BS_Tryasms] have er: "sp_eres sp" "1 \<le> n"
       "asms = drop (nat_of_integer n - 1) (asms_of sp)" "ctx = sp_ctx sp" "er = eres_of sp"
-      by (auto elim: binv_TryasmsE)
+      by (auto elim: F.binv_TryasmsE)
     from tryasms_ok[OF cfg pa er(1) nok ops er(4,5,2,3)] obtain s'' where
       t: "okT (tryasms ops ctx er asms n) s''" and m: "bmu sp s'' < bmu sp (BS_Tryasms ctx er asms n)"
       by blast
-    have b'': "binv sp s''" by (rule tryasms_binv[OF cfg pa er(1) ops er(4,5,2,3) t])
+    have b'': "F.binv sp s''" by (rule F.tryasms_binv[OF cfg pa er(1) ops er(4,5,2,3) t])
     have x'': "okT (bpull ops s'') x"
       using less.prems(2) t unfolding BS_Tryasms by (subst (asm) bpull.simps) auto
     have "pend sp s \<subseteq> pend sp s''" using tryasms_pend[OF cfg ops t] BS_Tryasms by simp
@@ -351,14 +351,14 @@ qed
 lemma bevals_pend:
   assumes cfg: "cfg_alg (sp_cfg sp) = alg" and pa: "pinv_all sp"
     and nok: "newas_ok sp" and ops: "ops = unify_ops (sp_cfg sp) (sp_vl sp)"
-  shows "bevals ops s rs \<Longrightarrow> binv sp s \<Longrightarrow> pend sp s \<subseteq> set rs"
+  shows "bevals ops s rs \<Longrightarrow> F.binv sp s \<Longrightarrow> pend sp s \<subseteq> set rs"
 proof (induction rule: bevals.induct)
   case (Nil s)
   from bpull_pend[OF assms Nil.prems Nil.hyps] show ?case by simp
 next
   case (Cons s r s' rs)
   from Cons.hyps(1) obtain r0 where b: "bpull ops s = Some r0" "snd r0 = Ok (Some (r, s'))" by auto
-  from bpull_binv[OF cfg pa b(1) ops b(2) Cons.prems] have "binv sp s'" by simp
+  from F.bpull_binv[OF cfg pa b(1) ops b(2) Cons.prems] have "F.binv sp s'" by simp
   with Cons.IH have "pend sp s' \<subseteq> set rs" by simp
   with bpull_pend[OF assms Cons.prems Cons.hyps(1)] show ?case by auto
 qed
@@ -495,7 +495,7 @@ lemma bicompose_body_cover:
   shows "\<exists>r\<in>set rs. \<exists>na. itsok sp A na tus \<and> okT (addth (sp_ctx sp) A na (env', tps)) r"
 proof -
   let ?ops = "unify_ops (sp_cfg sp) (sp_vl sp)"
-  have bi: "binv sp s" by (rule bicompose_body_binv[OF b cfg pa])
+  have bi: "F.binv sp s" by (rule F.bicompose_body_binv[OF b cfg pa])
   have ps: "pend sp s \<subseteq> set rs" by (rule bevals_pend[OF cfg pa nok refl ev bi])
   have pw: "pwf (sp_env sp) tus" by (rule probok_pwf[OF pr pa])
   have "okT (bo_unifiers ?ops (sp_env sp) tus) s0" using un cfg by (simp add: unify_ops_def)
@@ -778,7 +778,7 @@ proof -
   qed
   text \<open>The unifiers of the problem:\<close>
   from unifiers_fin[OF cfg fX fA si] obtain s0 where un: "unifiers alg env ?tus = Some (Ok s0)"
-    and f0: "fin cfg s0 (uresult ?A env ?tus)" by blast
+    and f0: "fin cfg s0 (uresult_flex ?A env ?tus)" by blast
   from f0 obtain xs0 where es: "evals cfg s0 xs0" by (auto simp: fin_def)
   have ev0: "evars env = {}" using ce by (simp add: evars_def bnds_def vt_is_empty_lookup)
   have bX: "below (maxidx env) ?X"

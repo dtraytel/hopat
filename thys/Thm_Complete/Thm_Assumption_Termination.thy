@@ -243,14 +243,14 @@ proof -
     if pu: "okT (upull cfg us) (Some ((env', tps), us'))" and ur: "ures (empty_env ?m) (th_tpairs th) (El_R env' tps)"
     for us us' env' tps
   proof -
-    have urs: "uresult ?A (empty_env ?m) (th_tpairs th) (El_R env' tps)"
-      by (rule uresD[OF ur _ _ si]) simp_all
-    from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'"
+    have urs: "uresult_flex ?A (empty_env ?m) (th_tpairs th) (El_R env' tps)"
+      by (rule ures_flex[OF ur _ _ si]) simp_all
+    from uresult_flexD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'"
       and ff: "ffres A' K' X' env' tps" and fl: "fflex A' K' e0 env' tps" by blast
     from smash_flexflex_term[OF ff fl] obtain env where sm: "okW (smash_flexflex (env', tps)) env"
       and ds: "dstep env' (tdps tps) env []" and fv: "finv A' K' e0 env" by blast
     have ds': "dstep (empty_env ?m) (tdps (th_tpairs th)) env (tdps [])"
-      using dstep_trans[OF uresultD(1)[OF urs] ds] by simp
+      using dstep_trans[OF uresult_flexD(1)[OF urs] ds] by simp
     have ei: "einv A' K' env" using fv by (simp add: finv_def)
     have nok: "\<exists>t'. ok (norm_term env t) t'"
       if "\<And>e. e \<turnstile> t : T" "vars t \<subseteq> ?X" "ttvars t \<subseteq> ?A" for t T
