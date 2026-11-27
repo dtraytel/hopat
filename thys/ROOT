@@ -138,6 +138,7 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Results
     Unify_Typed_Results
     Unify_Smash_Typed
+    Unify_Invariant
     Unify_Results_Complete
     Unify_Outcome
 

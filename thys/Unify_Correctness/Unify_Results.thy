@@ -32,25 +32,48 @@ definition fflex :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
 text \<open>
   The invariant of the results, for the type variables \<open>A0\<close> of the problem: the known type
   variables \<open>A\<close> of a result include \<open>A0\<close>, and the result introduces only type variables that are
-  known in the problem or have indices above its maximal index (\<^const>\<open>tnew\<close>).
+  known in the problem or have indices above its maximal index (\<^const>\<open>tnew\<close>). This invariant
+  (\<open>uresult\<close>) holds for every element of the enumeration, by induction on the computations
+  (theory \<open>Unify_Invariant\<close>). The termination of smashing needs in addition that the
+  flex-flex pairs are flexible (\<open>fresult\<close>), which is proved here together with termination.
 \<close>
 
 definition uresult :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
   "uresult A0 env tus x \<longleftrightarrow> (\<exists>env' tps. x = El_R env' tps \<and> dstep env (tdps tus) env' (tdps tps) \<and>
+    (\<exists>A K X. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps))"
+
+definition fresult :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
+  "fresult A0 env tus x \<longleftrightarrow> (\<exists>env' tps. x = El_R env' tps \<and> dstep env (tdps tus) env' (tdps tps) \<and>
     (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
       fflex A K e0 env' tps))"
 
+lemma fresult_uresult: "fresult A0 env tus x \<Longrightarrow> uresult A0 env tus x"
+  unfolding fresult_def uresult_def by blast
+
 lemma uresult_El_R:
   "uresult A0 env tus (El_R env' tps) \<longleftrightarrow> dstep env (tdps tus) env' (tdps tps) \<and>
+    (\<exists>A K X. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps)"
+  unfolding uresult_def by blast
+
+lemma fresult_El_R:
+  "fresult A0 env tus (El_R env' tps) \<longleftrightarrow> dstep env (tdps tus) env' (tdps tps) \<and>
     (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
       fflex A K e0 env' tps)"
-  unfolding uresult_def by blast
+  unfolding fresult_def by blast
 
 lemma uresultI:
   assumes "dstep env (tdps tus) env' (tdps tps)" "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env A env'"
-    "ffres A K X env' tps" "fflex A K e0 env' tps"
+    "ffres A K X env' tps"
   shows "uresult A0 env tus (El_R env' tps)"
   unfolding uresult_El_R
+  by (rule conjI[OF assms(1)], rule exI[of _ A], rule exI[of _ K], rule exI[of _ X])
+    (simp add: assms(2-6))
+
+lemma fresultI:
+  assumes "dstep env (tdps tus) env' (tdps tps)" "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env A env'"
+    "ffres A K X env' tps" "fflex A K e0 env' tps"
+  shows "fresult A0 env tus (El_R env' tps)"
+  unfolding fresult_El_R
   by (rule conjI[OF assms(1)], rule exI[of _ A], rule exI[of _ K], rule exI[of _ X], rule exI[of _ e0])
     (simp add: assms(2-7))
 
@@ -123,10 +146,10 @@ subsection \<open>The elements of the enumeration\<close>
 text \<open>Every element of the enumeration of \<open>unifiers\<close> is a well-formed unifier, whatever names its
   environment binds:\<close>
 
-theorem unifiers_cfin_uresult:
+theorem unifiers_cfin_fresult:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
     and u: "unifiers alg env tus = Some (Ok s)"
-  shows "cfin cfg s (uresult A env tus)"
+  shows "cfin cfg s (fresult A env tus)"
 proof -
   have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(t, u)\<in>set tus. upok A env [] X t u"
     using si by (auto simp: sinv_def)
@@ -142,8 +165,8 @@ proof -
     note i = upostc_OkD[OF r(2)[unfolded Ok]]
     have "ffres A K X env' []" using i by (simp add: ffres_def)
     moreover have "fflex A K env' env' []" using i by (simp add: fflex_def finv_def iflex_refl)
-    ultimately have "uresult A env tus (El_R env' [])"
-      using uresultI[OF _ fin order_refl, of env tus env' "[]"] ds i(7) by simp
+    ultimately have "fresult A env tus (El_R env' [])"
+      using fresultI[OF _ fin order_refl, of env tus env' "[]"] ds i(7) by simp
     then show ?thesis unfolding s by (rule cfin_Single)
   next
     case (Err e)
@@ -159,7 +182,7 @@ proof -
           and h: "\<exists>A' K' X' e0. finite X' \<and> finite K' \<and> A \<subseteq> A' \<and> tnew A env A' env' \<and> ffres A' K' X' env' tps \<and>
             fflex A' K' e0 env' tps" by blast
         from x x' have "dstep env (tdps tus) env' (tdps tps)" by simp
-        with h show "uresult A env tus x" unfolding x' uresult_El_R by blast
+        with h show "fresult A env tus x" unfolding x' fresult_El_R by blast
       qed
     next
       case False
@@ -170,12 +193,24 @@ proof -
   qed
 qed
 
+corollary unifiers_cfin_uresult:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (tdps tus)"
+    "unifiers alg env tus = Some (Ok s)"
+  shows "cfin cfg s (uresult A env tus)"
+  by (rule cfin_mono[OF unifiers_cfin_fresult[OF assms] fresult_uresult])
+
 lemma uresultD:
   assumes "uresult A0 env tus (El_R env' tps)"
   shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
+    and "\<exists>A K X. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps"
+  using assms dstepD(1) unfolding uresult_def by blast+
+
+lemma fresultD:
+  assumes "fresult A0 env tus (El_R env' tps)"
+  shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
     and "\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
       fflex A K e0 env' tps"
-  using assms dstepD(1) unfolding uresult_def by blast+
+  using assms dstepD(1) unfolding fresult_def by blast+
 
 
 subsection \<open>Typing of the input\<close>
@@ -221,7 +256,7 @@ subsection \<open>Finiteness of the enumeration\<close>
 
 theorem unifiers_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
-  obtains s where "unifiers alg env tus = Some (Ok s)" "fin cfg s (uresult A env tus)"
+  obtains s where "unifiers alg env tus = Some (Ok s)" "fin cfg s (fresult A env tus)"
 proof -
   have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(t, u)\<in>set tus. upok A env [] X t u"
     using si by (auto simp: sinv_def)
@@ -238,7 +273,7 @@ proof -
     moreover have "ffres A K X env' []" using r(3) Ok by (simp add: ffres_def)
     moreover have "fflex A K env' env' []" using r(3) Ok by (simp add: fflex_def finv_def iflex_refl)
     moreover have "tnew A env A env'" using r(3) Ok by simp
-    ultimately have "uresult A env tus (El_R env' [])" using uresultI[OF _ fin order_refl, of env tus env' "[]"] by simp
+    ultimately have "fresult A env tus (El_R env' [])" using fresultI[OF _ fin order_refl, of env tus env' "[]"] by simp
     then show thesis by (rule that[OF u fin_Single])
   next
     case (Err e)
@@ -251,13 +286,13 @@ proof -
       from hounifiers_fin[OF cfg fin si] obtain xs where es: "evals cfg (hounifiers [] env tus) xs"
         and rs: "\<forall>x\<in>set xs. rres A env x"
         unfolding fin_def by blast
-      have "uresult A env tus x" if x: "x \<in> set xs" for x
+      have "fresult A env tus x" if x: "x \<in> set xs" for x
       proof -
         from unifiers_sound[OF cfg fin si u es x] obtain env' tps where x': "x = El_R env' tps"
           and ds: "dstep env (tdps tus) env' (tdps tps)" by blast
-        from rres_ffres[OF bspec[OF rs x]] x' ds show ?thesis unfolding uresult_def by auto
+        from rres_ffres[OF bspec[OF rs x]] x' ds show ?thesis unfolding fresult_def by auto
       qed
-      with es have "fin cfg (hounifiers [] env tus) (uresult A env tus)" unfolding fin_def by blast
+      with es have "fin cfg (hounifiers [] env tus) (fresult A env tus)" unfolding fin_def by blast
       with u show thesis by (rule that)
     next
       case 2
@@ -270,15 +305,21 @@ qed
 
 text \<open>Hence every enumeration of the result consists of well-formed unifiers:\<close>
 
-theorem unifiers_uresult:
+theorem unifiers_fresult:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
     and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "x \<in> set xs"
-  shows "uresult A env tus x"
+  shows "fresult A env tus x"
 proof -
-  from unifiers_fin[OF cfg fin si] u obtain ys where "evals cfg s ys" "\<forall>y\<in>set ys. uresult A env tus y"
+  from unifiers_fin[OF cfg fin si] u obtain ys where "evals cfg s ys" "\<forall>y\<in>set ys. fresult A env tus y"
     unfolding fin_def by auto
   with evals_det[OF es] x show ?thesis by blast
 qed
+
+corollary unifiers_uresult:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (tdps tus)"
+    "unifiers alg env tus = Some (Ok s)" "evals cfg s xs" "x \<in> set xs"
+  shows "uresult A env tus x"
+  by (rule fresult_uresult[OF unifiers_fresult[OF assms]])
 
 
 end
@@ -920,13 +961,13 @@ theorem unifiers_smash:
   obtains env'' where "okW (smash_flexflex (env', tps)) env''" "dstep env (tdps tus) env'' []"
     "tyenv env'' = tyenv env'" "\<exists>A' K' X'. finite X' \<and> finite K' \<and> A \<subseteq> A' \<and> ffres A' K' X' env'' []"
 proof -
-  note r = unifiers_uresult[OF cfg fin si u es x]
-  from uresultD(3)[OF r] obtain A' K' X' e0 where fin': "finite X'" "finite K'" and A': "A \<subseteq> A'"
+  note r = unifiers_fresult[OF cfg fin si u es x]
+  from fresultD(3)[OF r] obtain A' K' X' e0 where fin': "finite X'" "finite K'" and A': "A \<subseteq> A'"
     and ff: "ffres A' K' X' env' tps" and fl: "fflex A' K' e0 env' tps" by blast
   from smash_flexflex_term[OF ff fl] obtain env'' where sm: "okW (smash_flexflex (env', tps)) env''"
     and ds: "dstep env' (tdps tps) env'' []" and fv: "finv A' K' e0 env''" and wi: "winv env'' X'"
     and th: "tyenv env'' = tyenv env'" by blast
-  have "dstep env (tdps tus) env'' []" by (rule dstep_trans[OF uresultD(1)[OF r] ds])
+  have "dstep env (tdps tus) env'' []" by (rule dstep_trans[OF fresultD(1)[OF r] ds])
   moreover have "ffres A' K' X' env'' []" using fv wi by (simp add: ffres_def finv_def)
   ultimately show thesis using that sm th fin' A' by blast
 qed
