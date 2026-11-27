@@ -1,7 +1,7 @@
 section \<open>Normalization when a bound name occurs at a second type\<close>
 
 theory Clash_Norm
-  imports Thm_Assumption
+  imports "Thm_Soundness.Thm_Assumption"
 begin
 
 text \<open>

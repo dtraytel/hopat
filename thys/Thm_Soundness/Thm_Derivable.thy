@@ -28,7 +28,7 @@ text \<open>
     (\<open>sign_le\<close>).
 
   The certified terms and types record finitely many sorts over the classes of their signature
-  (\<open>csorts_ok\<close>; theory \<open>Thm_Certify\<close> shows this of the results of certification). Theorem
+  (\<open>csorts_ok\<close>; theory \<open>Thm_Certify\<close> of session \<open>Thm_Extras\<close> shows this of the results of certification). Theorem
   \<open>derivable_shyps\<close> states that the sort hypotheses of derivable data are of this kind again,
   which \<open>strip_shyps\<close> and \<open>unconstrainT\<close> need.
 \<close>

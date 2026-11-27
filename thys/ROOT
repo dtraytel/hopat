@@ -210,12 +210,8 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     theorems (bicompose_aux) rests on the results on higher-order unification of session
     Unify_Correctness. The proofs of theorems are data in this session: no theory imports a
     theory on the correctness of classic or tight proofs; theory Proof_Sig has the
-    definitions on proofs that the statements of the rules mention. The theories Clash_Norm
-    and Clash_Exception describe what normalization by an environment does with a variable
-    whose name is bound at another type (the rules that unify have no premise on the names of
-    the schematic variables): its result does not depend on such a variable, and if one is
-    kept, it is the exception TYPE. Thm_Example gives a signature that satisfies all assumptions, with
-    derivations in it; Thm_Certify shows that certification yields well-formed types and terms.
+    definitions on proofs that the statements of the rules mention. Thm_Example gives a
+    signature that satisfies all assumptions, with derivations in it.
   \<close>
   sessions
     Pure_Lambda
@@ -267,12 +263,30 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Thm_Hyps
     Thm_Derivable
     Thm_Classes
-    Thm_Match_Range
-    Thm_Match
-    Clash_Norm
-    Clash_Exception
     Thm_Example
     Thm_Clash_Example
+
+session Thm_Extras in Thm_Extras = Thm_Soundness +
+  description \<open>
+    Results next to the soundness theorem of session Thm_Soundness, which that theorem does not
+    use. Clash_Norm and Clash_Exception describe what normalization by an environment does
+    with a variable whose name is bound at another type (the rules that unify have no premise
+    on the names of the schematic variables): its result does not depend on such a variable,
+    and if one is kept, it is the exception TYPE. Thm_Match_Range and Thm_Match: Thm.match
+    returns certified types and terms. Thm_Certify: certification (Sign.certify_term,
+    Thm.global_cterm_of) yields well-formed types and terms.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pure_Thm
+    Pattern_Correctness
+    Thm_Soundness
+  theories
+    Clash_Norm
+    Clash_Exception
+    Thm_Match_Range
+    Thm_Match
     Thm_Certify
 
 session Thm_Proofs in Thm_Proofs = Thm_Soundness +

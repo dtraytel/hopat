@@ -1,7 +1,7 @@
 section \<open>Certified terms and types are well formed\<close>
 
 theory Thm_Certify
-  imports Thm_Example "Pure_Thm.Pure_Certify"
+  imports "Thm_Soundness.Thm_Example" "Pure_Thm.Pure_Certify"
 begin
 
 text \<open>

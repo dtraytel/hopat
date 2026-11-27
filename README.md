@@ -201,7 +201,7 @@ does not check:
   (`AUDIT.md`, "What the kernel does when the premise fails"); the soundness
   theorem says that a result, if there is one, is valid.
   What normalization does in that situation is described by theorems about
-  the models (`Clash_Norm.thy` in `Thm_Soundness`): what the normalization of the new theorem does with a
+  the models (`Clash_Norm.thy` in `Thm_Extras`): what the normalization of the new theorem does with a
   variable whose name the environment binds at a type that does not agree
   with its own (a clashing variable, `clash`). Its lookup raises the
   exception (`lookup_clash`, `lookup_clash_raises`). `Envir.norm_term` looks a
@@ -1481,7 +1481,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     the invariant whatever the names of the variables are (`sound_…_gen`).
     `Thm_Example.thy` gives a
     signature that satisfies all assumptions (`pure0`) and derivations in it.
-    `Thm_Certify.thy` shows that the results of the models of
+  - `Thm_Extras/`: results next to the soundness theorem, which it does not
+    use (session `Thm_Extras`): `Clash_Norm.thy` and `Clash_Exception.thy`
+    (normalization with a variable whose name is bound at another type),
+    `Thm_Match_Range.thy` and `Thm_Match.thy` (`Thm.match`), and
+    `Thm_Certify.thy`, which shows that the results of the models of
     certification are the certified terms and types that the rules take.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Soundness` in the sets of ZFC_in_HOL; needs the AFP
