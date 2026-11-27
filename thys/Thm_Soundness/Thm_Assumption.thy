@@ -209,7 +209,7 @@ definition achar :: "actx \<Rightarrow> pterm list \<Rightarrow> ares \<Rightarr
 
 inductive ainv :: "cfg \<Rightarrow> actx \<Rightarrow> pterm list \<Rightarrow> seq aseq \<Rightarrow> bool" for cfg ctx asms where
   Try: "n = integer_of_nat k + 1 \<Longrightarrow> ainv cfg ctx asms (AQ_Try ctx (drop k asms) n)"
-| Map: "k < length asms \<Longrightarrow> cfin cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k))) \<Longrightarrow>
+| Map: "k < length asms \<Longrightarrow> eall cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k))) \<Longrightarrow>
     n = integer_of_nat k + 1 \<Longrightarrow> m = n + 1 \<Longrightarrow> ainv cfg ctx asms (AQ_Map ctx n us (drop (Suc k) asms) m)"
 
 lemma drop_Cons_nth:
@@ -263,7 +263,7 @@ proof (induction ops s r0 arbitrary: r s' rule: apull.raw_induct[rotated, consum
           by (auto simp: aprob_def)
         have "asm \<in> set asms" using dk by (metis nth_mem)
         with pw have "pwf (empty_env (ac_maxidx ctx)) (aprob ctx asm)" by blast
-        from unifiers_ures[OF cfg this] us ops have "cfin cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k)))"
+        from unifiers_eall[OF cfg this] us ops have "eall cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k)))"
           using dk(2) by simp
         from ainv.Map[OF dk(1) this Try(2) HOL.refl] dk(3) have "ainv cfg ctx asms (AQ_Map ctx n us rest (n + 1))"
           by simp
@@ -289,7 +289,7 @@ proof (induction ops s r0 arbitrary: r s' rule: apull.raw_induct[rotated, consum
       case (Some c)
       then obtain env' tps us' where c: "rr = Some ((env', tps), us')" by (cases c) auto
       have "okT (upull cfg us) (Some ((env', tps), us'))" using rr c ops by (simp add: unify_ops_def)
-      note u = upull_fin[OF Map(3) this]
+      note u = upull_eall[OF Map(3) this]
       from cont c have th: "okT (newth ctx n (env', tps)) r"
         and s': "s' = AQ_Map ctx n us' (drop (Suc k) asms) m"
         by auto
@@ -962,7 +962,7 @@ qed
 text \<open>The results of \<^const>\<open>flexflex_rule\<close>: new theorems of the smashed unifiers of the flex-flex pairs.\<close>
 
 lemma fresult_char:
-  assumes "fresult (unify_ops cfg vl) smashT th s x" "s = FQ us" "cfin cfg us (ures env0 tus)"
+  assumes "fresult (unify_ops cfg vl) smashT th s x" "s = FQ us" "eall cfg us (ures env0 tus)"
   shows "\<exists>env' tps. ures env0 tus (El_R env' tps) \<and> okW (smash_flexflex (env', tps)) (fst x) \<and>
     ok (fnewth th (fst x)) (snd x)"
   using assms
@@ -973,14 +973,14 @@ proof (induction arbitrary: us rule: fresult.induct)
     and n: "ok (fnewth th env) th'" and x: "x = (env, th')"
     by (auto simp: fpull_def unify_ops_def smashT_def split: option.splits)
   obtain env' tps where et: "et = (env', tps)" by (cases et)
-  from upull_fin[OF First.prems(2) p[unfolded et]] sm n x et show ?case by auto
+  from upull_eall[OF First.prems(2) p[unfolded et]] sm n x et show ?case by auto
 next
   case (Next s x' s' x)
   from Next.hyps(1) Next.prems(1) obtain et us' where
     p: "okT (upull cfg us) (Some (et, us'))" and s': "s' = FQ us'"
     by (auto simp: fpull_def unify_ops_def smashT_def split: option.splits)
   obtain env' tps where et: "et = (env', tps)" by (cases et)
-  from upull_fin[OF Next.prems(2) p[unfolded et]] have "cfin cfg us' (ures env0 tus)" by blast
+  from upull_eall[OF Next.prems(2) p[unfolded et]] have "eall cfg us' (ures env0 tus)" by blast
   from Next.IH[OF s' this] show ?case .
 qed
 
@@ -1000,7 +1000,7 @@ proof -
     using si unfolding pwf_def
     by (intro exI[of _ "tvars_thm (th_tpairs th) (th_prop th)"] exI[of _ "vars_thm (th_tpairs th) (th_prop th)"]
         conjI finite_vars_thm finite_tvars_thm)
-  from fresult_char[OF res s0 unifiers_ures[OF cfg pw us]] si show thesis using that by blast
+  from fresult_char[OF res s0 unifiers_eall[OF cfg pw us]] si show thesis using that by blast
 qed
 
 text \<open>The data of a result of \<^const>\<open>flexflex_rule\<close> that its soundness theorems need:\<close>
@@ -1022,8 +1022,8 @@ proof -
     using flexflex_result[OF a res cfg st] by auto
   have urs: "uresult ?A (empty_env (th_maxidx th)) (th_tpairs th) (El_R env' tps)"
     by (rule uresD[OF ur _ _ si]) simp_all
-  from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'" and tn: "tnew ?A (empty_env (th_maxidx th)) A' env'"
-    and ff: "ffres A' K' X' env' tps" and fl: "fflex A' K' e0 env' tps" by blast
+  from uresultD(3)[OF urs] obtain A' K' X' where AA: "?A \<subseteq> A'" and tn: "tnew ?A (empty_env (th_maxidx th)) A' env'"
+    and ff: "ffres A' K' X' env' tps" by blast
   note smi = smash_flexflex_invw[OF ff sm]
   have "dstep (empty_env (th_maxidx th)) (tdps (th_tpairs th)) env (tdps [])"
     using dstep_trans[OF uresultD(1)[OF urs] smi(1)] by simp
@@ -1126,12 +1126,6 @@ context pure_sig
 begin
 
 text \<open>Without loose names:\<close>
-
-lemma fresult_char:
-  assumes "fresult (unify_ops cfg vl) smashT th s x" "s = FQ us" "fin cfg us (ures env0 tus)"
-  shows "\<exists>env' tps. ures env0 tus (El_R env' tps) \<and> okW (smash_flexflex (env', tps)) (fst x) \<and>
-    ok (fnewth th (fst x)) (snd x)"
-  using fresult_char[OF assms(1,2)] assms(3) by (simp add: cfin_strict)
 
 theorem flexflex_thm_inv:
   assumes a: "okT (flexflex_rule (unify_ops cfg vl) th) s0" and res: "fresult (unify_ops cfg vl) smashT th s0 (env, th')"

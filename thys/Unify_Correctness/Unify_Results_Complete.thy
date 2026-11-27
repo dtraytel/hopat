@@ -26,9 +26,9 @@ corollary unifiers_complete_fin:
       tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'"
 proof -
   from unifiers_fin[OF cfg fin si] obtain s where u: "unifiers alg env tus = Some (Ok s)"
-    and f: "fin cfg s (fresult A env tus)" by blast
+    and f: "fin cfg s (uresult_flex A env tus)" by blast
   from f obtain xs where es: "evals cfg s xs" and r: "\<forall>x\<in>set xs. uresult A env tus x"
-    unfolding fin_def using fresult_uresult by blast
+    unfolding fin_def using uresult_flex_uresult by blast
   show thesis by (rule that[OF u es r unifiers_complete[OF cfg k fin si inv kk bound u es]])
 qed
 

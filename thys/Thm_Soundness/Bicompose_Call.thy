@@ -1,7 +1,7 @@
 section \<open>The Calls of \<open>bicompose_aux\<close> and their Sequences of Unifiers\<close>
 
 theory Bicompose_Call
-  imports Thm_Semantics "Unify_Correctness.Unify_Smash_Typed"
+  imports Thm_Semantics "Unify_Correctness.Unify_Invariant"
 begin
 
 text \<open>
@@ -10,7 +10,7 @@ text \<open>
   of resolution, or of elim-resolution with one of the assumptions of the subgoal, and for the
   new premises computed by \<^const>\<open>newAs\<close>. A unifier is an element of the enumeration of
   \<^const>\<open>unifiers\<close>; for a well-formed problem, it is a result in the sense of
-  \<^const>\<open>pure_sig_gen.uresult\<close> (theorem @{thm [source] pure_sig.unifiers_uresult}).
+  \<^const>\<open>pure_sig_gen.uresult\<close> (theorem @{thm [source] pure_sig_gen.unifiers_ev_uresult}).
 \<close>
 
 
@@ -42,78 +42,49 @@ lemma ures_pwf:
   obtains A where "uresult A env tus x"
   using assms unfolding ures_def pwf_def by blast
 
-lemma cfin_strict: "loose = {} \<Longrightarrow> cfin cfg s Q \<longleftrightarrow> fin cfg s Q"
-  using cfin_fin fin_cfin by blast
+text \<open>All elements of a sequence satisfy a property:\<close>
 
-lemma cfin_pull_elem:
-  assumes "cfin cfg s Q" "pull cfg s = Some (evs, Ok (Some (x, s')))"
-  shows "Q x \<and> cfin cfg s' Q"
+definition eall :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<Rightarrow> bool) \<Rightarrow> bool" where
+  "eall cfg s Q \<longleftrightarrow> (\<forall>x. ev cfg s x \<longrightarrow> Q x)"
+
+lemma okT_upull:
+  assumes "okT (upull cfg s) (Some ((env', tps), s'))"
+  obtains evs where "pull cfg s = Some (evs, Ok (Some (El_R env' tps, s')))"
 proof -
-  from assms(1) obtain xs where xs: "evalx cfg s xs" "\<forall>y\<in>set xs. Q y" by (auto simp: cfin_def)
-  from evalx_pull[OF xs(1) assms(2)] obtain xs' where "xs = x # xs'" "evalx cfg s' xs'" .
-  with xs(2) show ?thesis by (auto simp: cfin_def)
-qed
-
-lemma fin_pull:
-  assumes "fin cfg s P"
-  obtains (none) evs where "pull cfg s = Some (evs, Ok None)"
-  | (some) evs x s' where "pull cfg s = Some (evs, Ok (Some (x, s')))" "P x" "fin cfg s' P"
-proof -
-  from assms obtain xs where es: "evals cfg s xs" and P: "\<forall>x\<in>set xs. P x" by (auto simp: fin_def)
-  from es show thesis
-  proof cases
-    case (Nil evs)
-    show thesis by (rule none[OF Nil(2)])
-  next
-    case (Cons evs x s' xs')
-    with P show thesis by (intro some[of evs x s']) (auto simp: fin_def)
-  qed
-qed
-
-text \<open>
-  Pulling an element from a sequence, whose enumeration is finite or (with loose names) ends
-  with an exception of the unifier:
-\<close>
-
-lemma upull_fin:
-  assumes "cfin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
-  shows "ures env tus (El_R env' tps) \<and> cfin cfg s' (ures env tus)"
-proof -
-  from assms(2) obtain r where r: "okW (pull cfg s) r"
+  from assms obtain r where r: "okW (pull cfg s) r"
     and c: "okW (case r of None \<Rightarrow> returnW None
       | Some (x, s') \<Rightarrow> (case x of El_R env tps \<Rightarrow> returnW (Some ((env, tps), s'))
           | _ \<Rightarrow> raiseW (PExn (Failure (STR ''Unify: unexpected element''))))) (Some ((env', tps), s'))"
     by (auto simp: upull_def)
   from c have "r = Some (El_R env' tps, s')"
     by (cases r) (auto simp: returnW_def raiseW_def split: elem.splits)
-  with r obtain evs where "pull cfg s = Some (evs, Ok (Some (El_R env' tps, s')))" by blast
-  from cfin_pull_elem[OF assms(1) this] show ?thesis .
+  with r that show thesis by blast
+qed
+
+text \<open>Pulling an element from a sequence yields one of its elements; the rest holds elements of it:\<close>
+
+lemma upull_eall:
+  assumes "eall cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
+  shows "ures env tus (El_R env' tps) \<and> eall cfg s' (ures env tus)"
+proof -
+  from okT_upull[OF assms(2)] obtain evs where p: "pull cfg s = Some (evs, Ok (Some (El_R env' tps, s')))" .
+  from pull_some_ev[OF p] have "ev cfg s (El_R env' tps)" "\<forall>y. ev cfg s' y \<longrightarrow> ev cfg s y" by simp_all
+  with assms(1) show ?thesis unfolding eall_def by blast
 qed
 
 text \<open>
-  The sequence of the unifiers of a well-formed problem: every element is a unifier, whatever
-  names its environment binds (theorem @{thm [source] unifiers_cfin_uresult}).
+  The sequence of the unifiers of a problem: every element is a unifier in the invariant, whatever
+  names its environment binds, and whether or not the enumeration is finite (theorem
+  @{thm [source] unifiers_ev_uresult}, proved without termination).
 \<close>
 
-lemma unifiers_ures:
+lemma unifiers_eall:
   assumes "cfg_alg cfg = alg" "pwf env tus" "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
-  shows "cfin cfg s (ures env tus)"
+  shows "eall cfg s (ures env tus)"
 proof -
-  from assms(2) obtain A K X where fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
-    by (auto simp: pwf_def)
   from assms(1,3) have u: "unifiers alg env tus = Some (Ok s)"
     by (auto simp: unify_ops_def liftMT_def liftWT_def liftM_def split: option.splits xres.splits)
-  have f: "cfin cfg s (uresult A' env tus)" if "finite X'" "finite K'" "sinv A' K' X' env (tdps tus)" for A' K' X'
-    by (rule unifiers_cfin_uresult[OF assms(1) that u])
-  from f[OF fin si] obtain xs where es: "evalx cfg s xs" by (auto simp: cfin_def)
-  have "ures env tus x" if x: "x \<in> set xs" for x
-    unfolding ures_def
-  proof (intro impI allI)
-    fix A' K' X' assume h: "finite X'" "finite K'" "sinv A' K' X' env (tdps tus)"
-    from f[OF h] obtain ys where "evalx cfg s ys" "\<forall>y\<in>set ys. uresult A' env tus y" by (auto simp: cfin_def)
-    with evalx_det[OF es] x show "uresult A' env tus x" by blast
-  qed
-  then show ?thesis unfolding cfin_def using es by blast
+  show ?thesis unfolding eall_def ures_def using unifiers_ev_uresult[OF assms(1) _ _ _ u] by blast
 qed
 
 end
@@ -172,26 +143,11 @@ definition itsok :: "bspec \<Rightarrow> pterm option \<Rightarrow> newas \<Righ
 context pure_sig_gen
 begin
 
-text \<open>A position in a sequence of unifiers of a problem.\<close>
-
-definition uqinv :: "bspec \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> seq uq \<Rightarrow> bool" where
-  "uqinv sp tus xq \<longleftrightarrow>
-    (case xq of
-      UQ_Cell ((env', tps), us') \<Rightarrow> ures (sp_env sp) tus (El_R env' tps) \<and> cfin (sp_cfg sp) us' (ures (sp_env sp) tus)
-    | UQ_Seq us \<Rightarrow> cfin (sp_cfg sp) us (ures (sp_env sp) tus))"
-
 text \<open>The results: a new theorem for a unifier of a problem.\<close>
 
 definition rchar :: "bspec \<Rightarrow> bres \<Rightarrow> bool" where
   "rchar sp r \<longleftrightarrow> (\<exists>A na tus env' tps. itsok sp A na tus \<and> ures (sp_env sp) tus (El_R env' tps) \<and>
     okT (addth (sp_ctx sp) A na (env', tps)) r)"
-
-inductive binv :: "bspec \<Rightarrow> seq bseq \<Rightarrow> bool" for sp where
-  Empty: "binv sp BS_Empty"
-| Its: "itsok sp A na tus \<Longrightarrow> uqinv sp tus xq \<Longrightarrow> binv sp yq \<Longrightarrow>
-    binv sp (BS_Its (sp_ctx sp) A na xq yq)"
-| Tryasms: "sp_eres sp \<Longrightarrow> 1 \<le> n \<Longrightarrow> asms = drop (nat_of_integer n - 1) (asms_of sp) \<Longrightarrow>
-    binv sp (BS_Tryasms (sp_ctx sp) (eres_of sp) asms n)"
 
 text \<open>The problems of a call are well-formed.\<close>
 
@@ -225,6 +181,71 @@ proof -
     using d by (metis drop_Suc list.sel(3) tl_drop)
   ultimately show "rest = drop (nat_of_integer (n + 1) - 1) (asms_of sp)" by simp
 qed
+
+text \<open>The data of a call of \<^const>\<open>bicompose_aux\<close>.\<close>
+
+definition call_spec :: "cfg \<Rightarrow> (name list \<Rightarrow> name list) \<Rightarrow> env \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow>
+    integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow>
+    (pterm \<times> pterm) list \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> bspec" where
+  "call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B =
+    (let
+      nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0);
+      BBi = (if lifted then strip_assums2 B Bi else (B, Bi));
+      ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs)
+    in BSpec cfg vl env ctx rAs eres_flg)"
+
+lemma okT_handle_raise:
+  assumes "okT (handleW (liftMT m) (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW e' | _ \<Rightarrow> raiseW e)) x"
+  shows "ok m x"
+proof -
+  from assms consider "okT (liftMT m) x" | evs e where "liftMT m = Some (evs, Err e)"
+      "okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW e' | _ \<Rightarrow> raiseW e) x"
+    by (auto simp: okW_handleW)
+  then show ?thesis
+    by cases (auto split: texn.splits uexn.splits exn.splits)
+qed
+
+text \<open>
+  The results of \<open>bicompose_aux\<close> are the theorems obtained by pulling its lazy sequence
+  (\<^const>\<open>bpull\<close>), one after the other.
+\<close>
+
+inductive bresult :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> bres \<Rightarrow> bool" for ops where
+  First: "okT (bpull ops s) (Some (r, s')) \<Longrightarrow> bresult ops s r"
+| Next: "okT (bpull ops s) (Some (r', s')) \<Longrightarrow> bresult ops s' r \<Longrightarrow> bresult ops s r"
+
+end
+
+text \<open>
+  The invariant of the sequences of unifiers that a state of the enumeration holds is a parameter
+  \<open>F\<close>, with two properties: pulling a unifier keeps it, and the sequence of the unifiers of a
+  well-formed problem satisfies it. For soundness, \<open>F\<close> is \<^const>\<open>pure_sig_gen.eall\<close> (all elements
+  are unifiers in the invariant), which needs no termination of the unifiers. Termination and
+  completeness of the rules use the finite enumerations (session \<open>Thm_Complete\<close>).
+\<close>
+
+locale seq_inv = pure_sig_gen +
+  fixes F :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<Rightarrow> bool) \<Rightarrow> bool"
+  assumes F_pull: "F cfg s (ures env tus) \<Longrightarrow> okT (upull cfg s) (Some ((env', tps), s')) \<Longrightarrow>
+      ures env tus (El_R env' tps) \<and> F cfg s' (ures env tus)"
+    and F_unifiers: "cfg_alg cfg = alg \<Longrightarrow> pwf env tus \<Longrightarrow>
+      okT (bo_unifiers (unify_ops cfg vl) env tus) s \<Longrightarrow> F cfg s (ures env tus)"
+begin
+
+text \<open>A position in a sequence of unifiers of a problem.\<close>
+
+definition uqinv :: "bspec \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> seq uq \<Rightarrow> bool" where
+  "uqinv sp tus xq \<longleftrightarrow>
+    (case xq of
+      UQ_Cell ((env', tps), us') \<Rightarrow> ures (sp_env sp) tus (El_R env' tps) \<and> F (sp_cfg sp) us' (ures (sp_env sp) tus)
+    | UQ_Seq us \<Rightarrow> F (sp_cfg sp) us (ures (sp_env sp) tus))"
+
+inductive binv :: "bspec \<Rightarrow> seq bseq \<Rightarrow> bool" for sp where
+  Empty: "binv sp BS_Empty"
+| Its: "itsok sp A na tus \<Longrightarrow> uqinv sp tus xq \<Longrightarrow> binv sp yq \<Longrightarrow>
+    binv sp (BS_Its (sp_ctx sp) A na xq yq)"
+| Tryasms: "sp_eres sp \<Longrightarrow> 1 \<le> n \<Longrightarrow> asms = drop (nat_of_integer n - 1) (asms_of sp) \<Longrightarrow>
+    binv sp (BS_Tryasms (sp_ctx sp) (eres_of sp) asms n)"
 
 lemma tryasms_binv:
   assumes "cfg_alg (sp_cfg sp) = alg" "pinv_all sp" "sp_eres sp"
@@ -262,8 +283,8 @@ next
     have env: "er_env er = sp_env sp" using eqs by (simp add: eres_of_def split: list.splits prod.splits)
     from prems(2) have "asm \<in> set (asms_of sp)" by (metis in_set_dropD list.set_intros(1))
     with assms(2,3) have pw: "pwf (sp_env sp) (eres_prob sp asm)" by (auto simp: pinv_all_def)
-    have ui: "cfin (sp_cfg sp) us (ures (sp_env sp) (eres_prob sp asm))"
-      using unifiers_ures[OF assms(1) pw] us env tus eqs by simp
+    have ui: "F (sp_cfg sp) us (ures (sp_env sp) (eres_prob sp asm))"
+      using F_unifiers[OF assms(1) pw] us env tus eqs by simp
     show ?thesis
     proof (cases r)
       case None
@@ -279,7 +300,7 @@ next
           (BS_Tryasms (sp_ctx sp) (eres_of sp) rest (n + 1))"
         using eqs by (auto simp: unify_ops_def)
       have pu: "okT (upull (sp_cfg sp) us) (Some ((env', tps), us'))" using r c eqs by (simp add: unify_ops_def)
-      note u = upull_fin[OF ui pu]
+      note u = F_pull[OF ui pu]
       have "itsok sp (Some (er_A1 (eres_of sp))) na (eres_prob sp asm)"
         unfolding itsok_def using assms(3) prems(1) nth(1,2) na by blast
       moreover have "uqinv sp (eres_prob sp asm) (UQ_Cell ((env', tps), us'))"
@@ -327,7 +348,7 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
               (\<lambda>e. case e of COMPOSE \<Rightarrow> P ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e))
         (Some (r, s'))"
       by auto
-    have elem: "ures (sp_env sp) tus (El_R env' tps) \<and> cfin (sp_cfg sp) us' (ures (sp_env sp) tus)"
+    have elem: "ures (sp_env sp) tus (El_R env' tps) \<and> F (sp_cfg sp) us' (ures (sp_env sp) tus)"
       if "rr = Some ((env', tps), us')" for env' tps us'
     proof (cases xq)
       case (UQ_Cell c)
@@ -336,7 +357,7 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
       case (UQ_Seq us)
       with rr that ops have "okT (upull (sp_cfg sp) us) (Some ((env', tps), us'))"
         by (simp add: unify_ops_def)
-      from upull_fin[OF _ this] uq UQ_Seq show ?thesis by (simp add: uqinv_def)
+      from F_pull[OF _ this] uq UQ_Seq show ?thesis by (simp add: uqinv_def)
     qed
     show ?thesis
     proof (cases rr)
@@ -382,18 +403,6 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
   qed
 qed
 
-text \<open>The data of a call of \<^const>\<open>bicompose_aux\<close>.\<close>
-
-definition call_spec :: "cfg \<Rightarrow> (name list \<Rightarrow> name list) \<Rightarrow> env \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow>
-    integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow>
-    (pterm \<times> pterm) list \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> bspec" where
-  "call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B =
-    (let
-      nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0);
-      BBi = (if lifted then strip_assums2 B Bi else (B, Bi));
-      ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs)
-    in BSpec cfg vl env ctx rAs eres_flg)"
-
 lemma bicompose_body_binv:
   assumes "okT (bicompose_body (unify_ops (sp_cfg sp) (sp_vl sp)) (sp_ctx sp) (sp_env sp) (sp_eres sp)
     (sp_rAs sp)) s"
@@ -422,8 +431,8 @@ next
           returnW (BS_Its (sp_ctx sp) None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}) s"
     by (auto simp: bicompose_body_def)
   from assms(3) False have pw: "pwf (sp_env sp) (bc_dpairs (sp_ctx sp))" by (auto simp: pinv_all_def)
-  have ui: "cfin (sp_cfg sp) us (ures (sp_env sp) (bc_dpairs (sp_ctx sp)))"
-    by (rule unifiers_ures[OF assms(2) pw us])
+  have ui: "F (sp_cfg sp) us (ures (sp_env sp) (bc_dpairs (sp_ctx sp)))"
+    by (rule F_unifiers[OF assms(2) pw us])
   show ?thesis
   proof (cases r)
     case None
@@ -436,23 +445,12 @@ next
       and s: "s = BS_Its (sp_ctx sp) None na (UQ_Cell ((env', tps), us')) BS_Empty"
       by (auto simp: unify_ops_def)
     have pu: "okT (upull (sp_cfg sp) us) (Some ((env', tps), us'))" using r c by (simp add: unify_ops_def)
-    note u = upull_fin[OF ui pu]
+    note u = F_pull[OF ui pu]
     have "itsok sp None na (bc_dpairs (sp_ctx sp))" unfolding itsok_def using False na by blast
     moreover have "uqinv sp (bc_dpairs (sp_ctx sp)) (UQ_Cell ((env', tps), us'))"
       using u by (simp add: uqinv_def)
     ultimately show ?thesis unfolding s by (rule binv.Its) (rule binv.Empty)
   qed
-qed
-
-lemma okT_handle_raise:
-  assumes "okT (handleW (liftMT m) (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW e' | _ \<Rightarrow> raiseW e)) x"
-  shows "ok m x"
-proof -
-  from assms consider "okT (liftMT m) x" | evs e where "liftMT m = Some (evs, Err e)"
-      "okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW e' | _ \<Rightarrow> raiseW e) x"
-    by (auto simp: okW_handleW)
-  then show ?thesis
-    by cases (auto split: texn.splits uexn.splits exn.splits)
 qed
 
 text \<open>
@@ -527,15 +525,6 @@ proof -
   qed
 qed
 
-text \<open>
-  The results of \<open>bicompose_aux\<close> are the theorems obtained by pulling its lazy sequence
-  (\<^const>\<open>bpull\<close>), one after the other.
-\<close>
-
-inductive bresult :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> bres \<Rightarrow> bool" for ops where
-  First: "okT (bpull ops s) (Some (r, s')) \<Longrightarrow> bresult ops s r"
-| Next: "okT (bpull ops s) (Some (r', s')) \<Longrightarrow> bresult ops s' r \<Longrightarrow> bresult ops s r"
-
 lemma bresult_rchar:
   assumes "bresult (unify_ops (sp_cfg sp) (sp_vl sp)) s r" "binv sp s"
     "cfg_alg (sp_cfg sp) = alg" "pinv_all sp"
@@ -555,28 +544,9 @@ qed
 
 end
 
-text \<open>Without loose names the enumerations are finite:\<close>
+text \<open>The instance for soundness:\<close>
 
-context pure_sig
-begin
-
-lemma upull_fin:
-  assumes "fin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
-  shows "ures env tus (El_R env' tps) \<and> fin cfg s' (ures env tus)"
-  using upull_fin[of cfg s env tus env' tps s'] assms by (simp add: cfin_strict)
-
-lemma unifiers_ures:
-  assumes "cfg_alg cfg = alg" "pwf env tus" "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
-  shows "fin cfg s (ures env tus)"
-  using unifiers_ures[OF assms] by (simp add: cfin_strict)
-
-lemma uqinv_def:
-  "uqinv sp tus xq \<longleftrightarrow>
-    (case xq of
-      UQ_Cell ((env', tps), us') \<Rightarrow> ures (sp_env sp) tus (El_R env' tps) \<and> fin (sp_cfg sp) us' (ures (sp_env sp) tus)
-    | UQ_Seq us \<Rightarrow> fin (sp_cfg sp) us (ures (sp_env sp) tus))"
-  by (simp add: uqinv_def cfin_strict split: uq.splits prod.splits)
-
-end
+sublocale pure_sig_gen \<subseteq> seq_inv alg ar ctab loose eall
+  by unfold_locales (rule upull_eall, rule unifiers_eall)
 
 end

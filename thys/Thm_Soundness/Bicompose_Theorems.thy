@@ -576,7 +576,7 @@ next
   have si: "sinv ?A ?A ?X env (tdps tus)" using itsok_sinv[OF its sa] by (simp add: sel)
   have rr0: "br_env r = env' \<and> br_newas r = na" using ad by (cases rule: addth_cases) auto
   have urs: "uresult ?A env tus (El_R env' tps)" by (rule uresD[OF ur fX fA si])
-  from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'" and tn: "tnew ?A env A' env'"
+  from uresultD(3)[OF urs] obtain A' K' X' where AA: "?A \<subseteq> A'" and tn: "tnew ?A env A' env'"
     and ff: "ffres A' K' X' env' tps" by blast
   have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
     using ff by (simp_all add: ffres_def)

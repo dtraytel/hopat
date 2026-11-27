@@ -309,7 +309,7 @@ proof -
     have cons: "evals cfg sq xs \<and> r = None" if c: "ncons env X"
     proof -
       from unifiers_fin[OF cfg fin si1[OF c]] obtain s where s: "unifiers alg env tus = Some (Ok s)"
-        and f: "fin cfg s (fresult A env tus)" by blast
+        and f: "fin cfg s (uresult_flex A env tus)" by blast
       have ss: "s = sq" using s u' by simp
       from f obtain ys where ys: "evals cfg sq ys" unfolding fin_def ss by blast
       from pulls_det[OF p evals_pulls[OF ys]] ys show ?thesis by simp
