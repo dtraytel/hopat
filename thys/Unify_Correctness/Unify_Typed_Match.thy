@@ -34,7 +34,7 @@ lemma vars_types_abs_mi: "vars (types_abs Ts t) = vars t"
   by (induction Ts) auto
 
 context
-  fixes b :: bool
+  fixes b :: bool and Q :: "(indexname \<times> psort) set" and m0 :: integer
 begin
 
 lemma acyc_fresh_update:
@@ -63,11 +63,35 @@ qed
 
 subsection \<open>The invariant of the sequences\<close>
 
+text \<open>
+  A bound on the known type variables of a state: they are in a set \<open>Q\<close> or have an index above
+  \<open>m0\<close>, which is at most the maximal index. (For the root of a search, \<open>Q\<close> are its known
+  type variables and \<open>m0\<close> is its maximal index.)
+\<close>
+
+definition tub :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> bool" where
+  "tub A env \<longleftrightarrow> tvars_env (tyenv env) \<union> A \<subseteq> Q \<union> {p. m0 < snd (fst p)} \<and> m0 \<le> maxidx env"
+
+lemma tub_tgrow: "tub A env \<Longrightarrow> tgrow A env env' \<Longrightarrow> tub A env'"
+  unfolding tub_def tgrow_def tnew_def by fastforce
+
+lemma tub_same: "tub A env \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow> tub A env'"
+  unfolding tub_def by auto
+
+lemma tub_gentvars:
+  assumes "tub A env" "gentvars p env = (env0, Cs)"
+  shows "tub (A \<union> ntv Cs) env0"
+proof -
+  have "m0 < snd (fst x)" if "x \<in> ntv Cs" for x
+    using ntv_gentvars(1)[OF assms(2) that] assms(1) by (simp add: tub_def)
+  then show ?thesis using assms(1) gentvars_simps(2,3)[OF assms(2)] unfolding tub_def by auto
+qed
+
 text \<open>The type-level invariant of a state, for type variables \<open>P\<close> that stay known:\<close>
 
 definition tst :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "tst P env dps \<longleftrightarrow> (\<exists>A K. finite K \<and> P \<subseteq> tvars_env (tyenv env) \<union> A \<and> einv A K (tyonly env) \<and>
-    tknown A env dps) \<and> (b \<longrightarrow> acyc env)"
+    tknown A env dps \<and> tub A env) \<and> (b \<longrightarrow> acyc env)"
 
 lemma tst_mono: "tst P' env dps \<Longrightarrow> P \<subseteq> P' \<Longrightarrow> tst P env dps"
   unfolding tst_def by blast
@@ -76,7 +100,7 @@ lemma tst_tyinv: "tst P env dps \<Longrightarrow> \<exists>A K. tyinv A K env dp
   unfolding tst_def tyinv_def by blast
 
 lemma tstI: "finite K \<Longrightarrow> einv A K (tyonly env) \<Longrightarrow> tknown A env dps \<Longrightarrow> P \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow>
-    (b \<longrightarrow> acyc env) \<Longrightarrow> tst P env dps"
+    (b \<longrightarrow> acyc env) \<Longrightarrow> tub A env \<Longrightarrow> tst P env dps"
   unfolding tst_def by blast
 
 inductive tseq :: "(indexname \<times> psort) set \<Rightarrow> seq \<Rightarrow> bool" where
@@ -183,15 +207,15 @@ lemma tyinv_cunify_c:
     and T: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" "cert_typ alg ar T"
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "cert_typ alg ar U"
   shows "einv A K (tyonly env1)" "tenv env1 = tenv env" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
-    "textends (tyenv env) (tyenv env1)" "maxidx env \<le> maxidx env1"
+    "textends (tyenv env) (tyenv env1)" "maxidx env \<le> maxidx env1" "tgrow A env env1"
 proof -
   note c = cunify_types_tyonly[OF cu]
   have tT: "tvars T \<subseteq> tvars_env (tyenv (tyonly env)) \<union> A" and tU: "tvars U \<subseteq> tvars_env (tyenv (tyonly env)) \<union> A"
     using T(1) U(1) by simp_all
   from xokW_okW[OF cunify_types_term[OF ei fK tT _ _ tU] c(1)] T(2) U(2)
   show "einv A K (tyonly env1)" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
-    "textends (tyenv env) (tyenv env1)" "maxidx env \<le> maxidx env1"
-    by (simp_all add: cert_typ_def)
+    "textends (tyenv env) (tyenv env1)" "maxidx env \<le> maxidx env1" "tgrow A env env1"
+    by (simp_all add: cert_typ_def tgrow_def tnew_def)
   show "tenv env1 = tenv env" by (rule c(2))
 qed
 
@@ -221,7 +245,7 @@ lemma proj_unify_inv:
       "\<forall>C\<in>set Cs. tvars C \<subseteq> tvars_env (tyenv env) \<union> A"
     and c: "cert_typ alg ar base" "cert_typ alg ar bary" "\<forall>C\<in>set Cs. cert_typ alg ar C"
   shows "einv A K (tyonly env') \<and> tenv env' = tenv env \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
-    maxidx env \<le> maxidx env'"
+    maxidx env \<le> maxidx env' \<and> tgrow A env env'"
 proof (cases "Cs = []")
   case True
   with pu have h: "okW (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
@@ -275,7 +299,7 @@ lemma imitate_tseq:
     and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)"
     and gt: "gtyped env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)"
-    and ac: "b \<longrightarrow> acyc env" and hv: "vars uhead = {}"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env" and hv: "vars uhead = {}"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
 proof -
   let ?KN = "tvars_env (tyenv env) \<union> A" and ?\<rho> = "tnorm_inst (tyenv env)"
@@ -338,8 +362,10 @@ proof -
     using kTs kA kt by (auto simp: list_comb_apps ttvars_apps u)
   then have kE'': "etvars env'' \<subseteq> ?KN"
     using etvars_update[OF up[unfolded X]] etvars_tenv[OF ma'(1)] kE kt by (auto simp: ttvars_apps)
+  have ub'': "tub A env''"
+    by (rule tub_same[OF ub te'']) (use ma'(3) ok_update(4)[OF up[unfolded X]] in simp)
   have "tst ?KN env'' dps"
-    by (rule tstI[OF fK ei'' _ _ ac'']) (use kE'' kd te'' in \<open>auto simp: tknown_def\<close>)
+    by (rule tstI[OF fK ei'' _ _ ac'' ub'']) (use kE'' kd te'' in \<open>auto simp: tknown_def\<close>)
   moreover have each: "ttvars (G \<degree>\<degree> targs) \<union> ttvars uarg \<union> btvars rb \<subseteq> ?KN"
     if "(G, uarg) \<in> set (zip (map head_of args) uargs)" for G uarg
   proof -
@@ -398,7 +424,7 @@ lemma projenv_tseq:
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)"
     and gt: "gtyped env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)"
-    and ac: "b \<longrightarrow> acyc env"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
 proof -
   let ?KN = "tvars_env (tyenv env) \<union> A" and ?\<rho> = "tnorm_inst (tyenv env)"
@@ -444,9 +470,10 @@ proof -
     have cC: "\<forall>C\<in>set Cs. cert_typ alg ar C" using cert_ntv[OF g] by blast
     from proj_unify_inv[OF ok(1) cfg fK' ei0 _ _ kC cb sk(3) cC] kb sk(2) te0
     have pu: "einv ?A' ?K' (tyonly env')" "tenv env' = tenv env" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
-      "maxidx env0 \<le> maxidx env'"
+      "maxidx env0 \<le> maxidx env'" "tgrow ?A' env0 env'"
       by auto
     have mx: "maxidx env \<le> maxidx env'" using pu(4) gs(3) by simp
+    have ub': "tub ?A' env'" by (rule tub_tgrow[OF tub_gentvars[OF ub g] pu(5)])
     have "tst ?KN env2 ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)"
       if ma: "make_args vname Ts env' (Us @ Cs) = (env1, args)"
         and up: "ok (update X (types_abs Ts (list_comb head args)) env1) env2" for env1 args env2
@@ -516,7 +543,9 @@ proof -
         by (rule tknown_lift[OF tknown_Cons[THEN iffD1, OF tk, THEN conjunct2] sub kE2])
       ultimately have "tknown ?A' env2 ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)"
         by (simp add: tknown_Cons[of _ _ _ dps])
-      from tstI[OF fK' ei2 this _ ac2] sub show ?thesis by blast
+      moreover have "tub ?A' env2"
+        by (rule tub_same[OF ub' te2]) (use ma'(3) ok_update(4)[OF up[unfolded X]] in simp)
+      ultimately show ?thesis using tstI[OF fK' ei2 _ _ ac2] sub by blast
     qed
     with tl ok(2) show ?thesis by (auto intro!: tseq.Proj)
   qed (use tl in simp)
@@ -530,13 +559,13 @@ lemma matchfun_tseq:
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)"
     and gt: "gtyped env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)"
-    and ac: "b \<longrightarrow> acyc env"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
   using assms(1,2)
 proof (induction projs arbitrary: s)
   case Nil
   then show ?case
-    by (cases uhead) (auto intro: imitate_tseq[OF _ u Tsok fK ei tk gt ac] tseq.Empty)
+    by (cases uhead) (auto intro: imitate_tseq[OF _ u Tsok fK ei tk gt ac ub] tseq.Empty)
 next
   case (Cons q projs)
   obtain bvar T targ where q: "q = (bvar, T, targ)" by (cases q)
@@ -559,7 +588,7 @@ next
       assume "tseq ?P b"
       with Cons.IH have b1: "tseq ?P b1" by simp
       show "tseq ?P b'"
-        by (rule projenv_tseq[OF Cons.hyps(2) b1 st hk(1,2,4,3) Tsok kb cb cfg fK ei tk gt ac])
+        by (rule projenv_tseq[OF Cons.hyps(2) b1 st hk(1,2,4,3) Tsok kb cb cfg fK ei tk gt ac ub])
     qed
   qed simp
   with fo tl show ?case by blast
@@ -601,13 +630,14 @@ lemma mc_tseq:
     "\<forall>t. ot = Some t \<longrightarrow> t = Var (fst X) (snd X) \<degree>\<degree> targs"
     and cfg: "cfg_alg cfg = alg" and fK: "finite K"
   shows "einv A K (tyonly env) \<Longrightarrow> tknown A env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps) \<Longrightarrow>
-    gtyped env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps) \<Longrightarrow> (b \<longrightarrow> acyc env) \<Longrightarrow>
+    gtyped env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps) \<Longrightarrow> (b \<longrightarrow> acyc env) \<Longrightarrow> tub A env \<Longrightarrow>
     tseq (tvars_env (tyenv env) \<union> A) s"
   using assms(1-3)
 proof (induction "size u" arbitrary: X rb targs u env s ot rule: less_induct)
   case less
   obtain v TX where X: "X = (v, TX)" by (cases X)
   note ei = less.prems(1) and tk = less.prems(2) and gt = less.prems(3) and ac = less.prems(4)
+    and ub = less.prems(5)
   have blX: "below (maxidx env) (insert (v, TX) (evars env))"
   proof -
     have "(v, TX) \<in> dvars ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)" by (simp add: dvars_def X vars_apps)
@@ -635,11 +665,11 @@ proof (induction "size u" arbitrary: X rb targs u env s ot rule: less_induct)
       and tyt: "e \<turnstile> inst \<rho> (Var v TX \<degree>\<degree> targs) : U" and tyu: "e \<turnstile> inst \<rho> u : U" for \<rho> e U T0 base
   proof (cases ot)
     case None
-    with less.prems(6) have sat: "satd env rb u" by (simp add: msat_def)
+    with less.prems(7) have sat: "satd env rb u" by (simp add: msat_def)
     show ?thesis by (rule satd_base[OF na sat T0 base tsol bs tyu])
   next
     case (Some t)
-    with less.prems(6,7) X have "rsat env rb (Var v TX \<degree>\<degree> targs) u" by (simp add: msat_def)
+    with less.prems(7,8) X have "rsat env rb (Var v TX \<degree>\<degree> targs) u" by (simp add: msat_def)
     from this[unfolded rsat_def] T0 base tsol bs tyt tyu show ?thesis by blast
   qed
   have base_known: "tvars base \<subseteq> ?KN \<and> cert_typ alg ar base"
@@ -655,15 +685,15 @@ proof (induction "size u" arbitrary: X rb targs u env s ot rule: less_induct)
     from known_wft[OF ei kb this] kb show ?thesis by (simp add: cert_typ_def)
   qed
   show ?case
-    using less.prems(5)[unfolded X]
+    using less.prems(6)[unfolded X]
   proof (cases rule: mc_okW_cases)
     case (asg r)
     have "tst ?KN env ((rb, list_comb (Var v TX) targs, u) # dps)"
-      by (rule tstI[OF fK ei _ _ ac]) (use tk in \<open>simp_all add: X list_comb_apps\<close>)
+      by (rule tstI[OF fK ei _ _ ac ub]) (use tk in \<open>simp_all add: X list_comb_apps\<close>)
     then show ?thesis by (simp add: asg(2) tseq.Single)
   next
     case (abs a A' body Ts B env' Y Y' env'')
-    have sat: "satd env rb u" using less.prems(6,7) abs(2) by (cases ot) (simp_all add: msat_def)
+    have sat: "satd env rb u" using less.prems(7,8) abs(2) by (cases ot) (simp_all add: msat_def)
     note st = mc_abs_step[OF abs(1-7) sat]
     note gs = genvar_simps[OF abs(5)]
     let ?targs' = "map (incr_boundvars 1) targs @ [Bound 0]"
@@ -709,7 +739,7 @@ proof (induction "size u" arbitrary: X rb targs u env s ot rule: less_induct)
         using that gs(4) by (simp add: vars_types_abs_mi combound_apps vars_apps)
     qed
     have "tseq (tvars_env (tyenv env'') \<union> A) s"
-    proof (rule less.hyps[OF _ ei'' tk'' gt'' ac'' abs(8)])
+    proof (rule less.hyps[OF _ ei'' tk'' gt'' ac'' tub_same[OF ub te'' mx] abs(8)])
       show "size body < size u" by (simp add: st(1))
       show "msat None env'' ((a, A') # rb) body" by (simp add: msat_def st(6))
     qed simp
@@ -737,14 +767,14 @@ proof (induction "size u" arbitrary: X rb targs u env s ot rule: less_induct)
       show "maxidx env < snd y" if "(y, U) \<in> vars (types_abs Ts (combound newhd 0 (length Ts)))" for y U
         using that gs(4) by (simp add: vars_types_abs_mi combound_apps vars_apps)
     qed
-    from tstI[OF fK ei'' tkn _ ac''] te'' have "tst ?KN env'' ((rb, newhd \<degree>\<degree> targs, u) # dps)" by simp
+    from tstI[OF fK ei'' tkn _ ac'' tub_same[OF ub te'' mx]] te'' have "tst ?KN env'' ((rb, newhd \<degree>\<degree> targs, u) # dps)" by simp
     then show ?thesis by (simp add: var(8) list_comb_apps tseq.Single)
   next
     case (rigid T0 base Ts projs)
     have u: "u = fst (strip_comb u) \<degree>\<degree> snd (strip_comb u)" by (rule strip_comb_apps[OF prod.collapse[symmetric]])
     note bk = base_known[OF rigid(2,4,5)]
     show ?thesis
-      by (rule matchfun_tseq[OF rigid(8)[folded X] _ u rigid(6) _ _ cfg fK ei tk gt ac])
+      by (rule matchfun_tseq[OF rigid(8)[folded X] _ u rigid(6) _ _ cfg fK ei tk gt ac ub])
         (use make_projs_props[OF rigid(7)] bk in simp_all)
   qed
 qed
@@ -757,7 +787,7 @@ lemma copycons_tseq:
   assumes cc: "okW (copycons cfg vname envM rb targs G uarg env dps) cs" and extM: "extends envM env"
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env ((rb, G \<degree>\<degree> targs, uarg) # dps)" and gt: "gtyped env ((rb, G \<degree>\<degree> targs, uarg) # dps)"
-    and ac: "b \<longrightarrow> acyc env"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) cs"
 proof -
   let ?KN = "tvars_env (tyenv env) \<union> A" and ?\<rho> = "tnorm_inst (tyenv env)"
@@ -791,12 +821,12 @@ proof -
   proof (cases d)
     case True
     with s have "cs = S_Single (El_E env ((rb, G \<degree>\<degree> targs, u2) # dps))" by (simp add: list_comb_apps)
-    with tstI[OF fK ei tk2 _ ac] show ?thesis by (simp add: tseq.Single)
+    with tstI[OF fK ei tk2 _ ac ub] show ?thesis by (simp add: tseq.Single)
   next
     case False
     with s have m: "okW (mc cfg vname envM X rb targs u2 env dps) cs" by simp
     have "msat None env rb u2" using head_norm_eta_norm_satd[OF h e] by (simp add: msat_def)
-    from mc_tseq[OF m this _ cfg fK, of A] ei tk2 gt2 ac show ?thesis by (simp add: G)
+    from mc_tseq[OF m this _ cfg fK, of A] ei tk2 gt2 ac ub show ?thesis by (simp add: G)
   qed
 qed
 
@@ -823,13 +853,14 @@ next
   have gt: "gtyped env'' (?p # dpairs)" by (rule gtyped_dstep[OF d proj.prems(3)])
   from t obtain A K where fK: "finite K" and P: "P \<subseteq> tvars_env (tyenv env'') \<union> A"
     and ei: "einv A K (tyonly env'')" and tk: "tknown A env'' (?p # dpairs)" and ac: "b \<longrightarrow> acyc env''"
+    and ub: "tub A env''"
     unfolding tst_def by blast
   have ac2: "b \<longrightarrow> acyc env2" using SIMPL_acyc[OF proj.hyps(3)] ac by blast
   from SIMPL_inv[OF fK proj.hyps(3)[unfolded cfg] ei tk gt]
   have ei2: "einv A K (tyonly env2)" and tk2: "tknown A env2 (fflex @ frigid)"
-    and m: "tvars_env (tyenv env'') \<subseteq> tvars_env (tyenv env2)" by auto
+    and m: "tgrow A env'' env2" by auto
   have "tknown A env2 (frigid @ fflex)" by (rule tknown_perm[OF tk2]) auto
-  from tstI[OF fK ei2 this _ ac2] P m show ?case by auto
+  from tstI[OF fK ei2 this _ ac2 tub_tgrow[OF ub m]] P tgrowD(1)[OF m] show ?case by auto
 next
   case (proj_tail tail x vname env Ts Us targs rb u dpairs head targ X)
   from proj_tail.prems(1) have "tseq P tail" by (rule tseq_ProjE)
@@ -851,6 +882,7 @@ next
     then have g1': "gtyped env1 dps1" by (rule gtyped_mono) auto
     from maps.IH(1)[OF t1 xs g1'] obtain A K where fK: "finite K" and P1: "P1 \<subseteq> tvars_env (tyenv env) \<union> A"
       and ei: "einv A K (tyonly env)" and tk: "tknown A env dps" and ac: "b \<longrightarrow> acyc env"
+      and ub: "tub A env"
       unfolding tst_def by blast
     from ev_sound[OF maps.hyps(1) xs] have d1: "dstep env1 dps1 env dps" by simp
     have ext: "extends envM env" by (rule extends_trans[OF extM dstepD(1)[OF d1]])
@@ -859,7 +891,7 @@ next
     have gt: "gtyped env ((rb, G' \<degree>\<degree> targs, uarg) # dps)" by (rule gtyped_dstep[OF d2 g1])
     have tkp: "tknown A env ((rb, G' \<degree>\<degree> targs, uarg) # dps)"
       using tknown_Cons[of A env "(rb, G' \<degree>\<degree> targs, uarg)" dps] tk kp P1 by (auto simp: tknown_def)
-    have ts: "tseq (tvars_env (tyenv env) \<union> A) cs" by (rule copycons_tseq[OF maps.hyps(2) ext cfg fK ei tkp gt ac])
+    have ts: "tseq (tvars_env (tyenv env) \<union> A) cs" by (rule copycons_tseq[OF maps.hyps(2) ext cfg fK ei tkp gt ac ub])
     have sq: "seqinv (GE env ((rb, G' \<degree>\<degree> targs, uarg) # dps)) cs"
       by (rule copycons_sinv[OF maps.hyps(2) ext head_norm_eta_norm_satd])
     from maps.IH(2)[OF ts sq gt] obtain env' dps' where "x = El_E env' dps'"
@@ -886,20 +918,20 @@ lemma match_pair_tseq:
     and sat: "rsat env rb t u" and nab: "\<not> is_Abs (fst (strip_comb u))"
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env ((rb, t, u) # dps)" and gt: "gtyped env ((rb, t, u) # dps)"
-    and ac: "b \<longrightarrow> acyc env"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
 proof -
   from m st have mc: "okW (mc cfg (fst v) env (v, T) rb targs u env dps) s" by (simp add: match_pair_def)
   have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
   have "msat (Some t) env rb u" using sat nab by (simp add: msat_def)
-  from mc_tseq[OF mc this _ cfg fK, of A] ei tk gt ac t show ?thesis by simp
+  from mc_tseq[OF mc this _ cfg fK, of A] ei tk gt ac ub t show ?thesis by simp
 qed
 
 lemma match_sat_tseq:
   assumes m: "okW (match_sat cfg env dp dps) s" and ms: "msat_ok env dp"
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env (dp # dps)" and gt: "gtyped env (dp # dps)"
-    and acy: "b \<longrightarrow> acyc env"
+    and acy: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
 proof -
   let ?KN = "tvars_env (tyenv env) \<union> A"
@@ -938,7 +970,7 @@ proof -
     using kp kEs by (auto simp: t'_def u'_def rb'_def ttvars_apps btvars_def)
   then have "tknown A env ((rb', t', u') # dps)"
     using tknown_Cons[of A env "(rb', t', u')" dps] tkd kE by (auto simp: tknown_pair)
-  from match_pair_tseq[OF mp[folded Es_def, unfolded ed] st' sat' nab cfg fK ei this gt' acy] show ?thesis .
+  from match_pair_tseq[OF mp[folded Es_def, unfolded ed] st' sat' nab cfg fK ei this gt' acy ub] show ?thesis .
 qed
 
 lemma sorts_ok_known_TVar:
@@ -958,13 +990,13 @@ lemma match_eta_tseq:
     and kB: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" and tvB: "is_TVar B"
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env (dp # dps)" and gt: "gtyped env (dp # dps)"
-    and ac: "b \<longrightarrow> acyc env"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
 proof (cases "j = 0")
   case True
   with m obtain s' where "okW (match_sat cfg env dp dps) s'" and s: "s = S_Append s' tail"
     by (auto simp: match_eta_def)
-  from match_sat_tseq[OF this(1) ms[OF extends_refl refl] cfg fK ei tk gt ac] tl show ?thesis
+  from match_sat_tseq[OF this(1) ms[OF extends_refl refl] cfg fK ei tk gt ac ub] tl show ?thesis
     by (simp add: s tseq.Append)
 next
   case False
@@ -1000,8 +1032,9 @@ next
     then have "etvars env2 \<subseteq> tvars_env (tyenv env2) \<union> ?A'"
       using etvars_tenv[OF te] sub by blast
     then have tk2: "tknown ?A' env2 (dp # dps)" by (rule tknown_lift[OF tk sub])
+    have ub2: "tub ?A' env2" by (rule tub_tgrow[OF tub_gentvars[OF ub g] c(6)])
     have "tseq (tvars_env (tyenv env2) \<union> ?A') s'"
-      by (rule match_sat_tseq[OF ok(2) ms[OF ext te] cfg fK' c(1) tk2 gt2]) (use ac acyc_tenv[OF te] in simp)
+      by (rule match_sat_tseq[OF ok(2) ms[OF ext te] cfg fK' c(1) tk2 gt2 _ ub2]) (use ac acyc_tenv[OF te] in simp)
     then have "tseq (tvars_env (tyenv env) \<union> A) s'" by (rule tseq_mono[OF _ sub])
     with tl show ?thesis by (simp add: ok(3) tseq.Append)
   qed (use tl in simp)
@@ -1011,7 +1044,7 @@ theorem MATCH_tseq:
   assumes m: "okW (MATCH cfg env dp dps) s" and mo: "MATCH_ok env dp"
     and cfg: "cfg_alg cfg = alg" and fK: "finite K" and ei: "einv A K (tyonly env)"
     and tk: "tknown A env (dp # dps)" and gt: "gtyped env (dp # dps)"
-    and ac: "b \<longrightarrow> acyc env"
+    and ac: "b \<longrightarrow> acyc env" and ub: "tub A env"
   shows "tseq (tvars_env (tyenv env) \<union> A) s"
 proof -
   let ?P = "tvars_env (tyenv env) \<union> A"
@@ -1041,14 +1074,14 @@ proof -
       proof
         assume "tseq ?P b"
         with Cons.IH have "tseq ?P b1" by simp
-        from match_eta_tseq[OF Cons.hyps(2) this ms kB True cfg fK ei tk gt ac] show "tseq ?P b'" .
+        from match_eta_tseq[OF Cons.hyps(2) this ms kB True cfg fK ei tk gt ac ub] show "tseq ?P b'" .
       qed
     qed simp
     with f show ?thesis by (blast intro: tseq.Empty)
   next
     case False
     with r have "okW (match_sat cfg env dp dps) s" by simp
-    from match_sat_tseq[OF this ms[OF extends_refl refl] cfg fK ei tk gt ac] show ?thesis .
+    from match_sat_tseq[OF this ms[OF extends_refl refl] cfg fK ei tk gt ac ub] show ?thesis .
   qed
 qed
 
@@ -1065,9 +1098,10 @@ proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   have mo: "MATCH_ok env dp" using ninv_MATCH_ok[OF ni[unfolded dp] sh[unfolded dp]] by (simp add: dp)
   have sq: "seqinv (GE env (dp # dps)) ms" by (rule MATCH_sound[OF m mo])
-  have ts: "tseq False (tvars_env (tyenv env) \<union> A) ms" by (rule MATCH_tseq[OF m mo cfg fK ei tk gt]) simp
+  have ts: "tseq False UNIV (maxidx env) (tvars_env (tyenv env) \<union> A) ms"
+    by (rule MATCH_tseq[OF m mo cfg fK ei tk gt]) (simp_all add: tub_def)
   from tseq_ev[OF cfg ev ts sq gt] obtain env' dps' where "El_E env2 dps2 = El_E env' dps'"
-    "tst False (tvars_env (tyenv env) \<union> A) env' dps'" by blast
+    "tst False UNIV (maxidx env) (tvars_env (tyenv env) \<union> A) env' dps'" by blast
   then show ?thesis using tst_tyinv by simp
 qed
 

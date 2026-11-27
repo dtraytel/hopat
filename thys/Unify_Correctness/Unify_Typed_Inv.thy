@@ -179,6 +179,31 @@ qed
 
 subsection \<open>Type unification\<close>
 
+text \<open>
+  The growth of the type environment from \<open>env\<close> to \<open>env'\<close>, for known type variables \<open>A\<close>:
+  the type variables of the type environment stay, the maximal index does not decrease, and
+  every new type variable of the type environment is known in \<open>env\<close> or has an index above the
+  maximal index of \<open>env\<close> (\<^const>\<open>tnew\<close>).
+\<close>
+
+definition tgrow :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
+  "tgrow A env env' \<longleftrightarrow> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
+    tnew A env A env'"
+
+lemma tgrowD:
+  assumes "tgrow A env env'"
+  shows "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "maxidx env \<le> maxidx env'" "tnew A env A env'"
+  using assms by (simp_all add: tgrow_def)
+
+lemma tgrow_refl [simp]: "tgrow A env env"
+  by (simp add: tgrow_def)
+
+lemma tgrow_trans: "tgrow A env env1 \<Longrightarrow> tgrow A env1 env2 \<Longrightarrow> tgrow A env env2"
+  unfolding tgrow_def using tnew_trans[of A env A env1 A env2] by auto
+
+lemma tgrow_tyenv: "tyenv env' = tyenv env \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow> tgrow A env env'"
+  by (simp add: tgrow_def tnew_tyenv)
+
 lemma xokW_okW: "xokW E m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
   by (auto simp: xokW_def)
 
@@ -217,16 +242,17 @@ lemma tyinv_cunify:
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "cert_typ alg ar (tsubst \<rho>' U)"
   shows "einv A K (tyonly env1)" "tenv env1 = tenv env" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
     "maxidx env \<le> maxidx env1" "textends (tyenv env) (tyenv env1)"
-    "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
+    "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U" "tgrow A env env1"
 proof -
   note c = cunify_types_tyonly[OF cu]
   have tT: "tvars T \<subseteq> tvars_env (tyenv (tyonly env)) \<union> A" and tU: "tvars U \<subseteq> tvars_env (tyenv (tyonly env)) \<union> A"
     using T(1) U(1) by simp_all
   note kT = known_cert[OF ei T] and kU = known_cert[OF ei U]
-  from xokW_okW[OF cunify_types_term[OF ei fK tT kT tU kU] c(1)]
-  show "einv A K (tyonly env1)" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "maxidx env \<le> maxidx env1"
+  note r = xokW_okW[OF cunify_types_term[OF ei fK tT kT tU kU] c(1)]
+  from r show "einv A K (tyonly env1)" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "maxidx env \<le> maxidx env1"
     "textends (tyenv env) (tyenv env1)" "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
     by simp_all
+  from r show "tgrow A env env1" by (simp add: tgrow_def tnew_def)
   show "tenv env1 = tenv env" by (rule c(2))
 qed
 
@@ -254,7 +280,7 @@ lemma new_dpair_inv:
   "okW (new_dpair al rb t u env) ((rb', t', u'), env') \<Longrightarrow> al = alg \<Longrightarrow> finite K \<Longrightarrow> einv A K (tyonly env) \<Longrightarrow>
     tknown A env [(rb, t, u)] \<Longrightarrow> gtyped env [(rb, t, u)] \<Longrightarrow>
     einv A K (tyonly env') \<and> tknown A env' [(rb', t', u')] \<and> tenv env' = tenv env \<and>
-    tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    tgrow A env env'"
 proof (induction al rb t u env arbitrary: rb' t' u' env' rule: new_dpair.induct)
   case (1 al rb a T body1 b U body2 env)
   note al = "1.prems"(2) and fK = "1.prems"(3) and ei = "1.prems"(4) and tk = "1.prems"(5) and gt = "1.prems"(6)
@@ -272,14 +298,14 @@ proof (induction al rb t u env arbitrary: rb' t' u' env' rule: new_dpair.induct)
     by (rule gtyped_dstep[OF dstep_trans[OF cunify_types_dstep[OF cu] dstep_Abs[OF refl extends_refl]] gt])
   have tk1: "tknown A env1 [((?c, T) # rb, body1, body2)]"
     using tk c(2,3) etvars_tenv[OF c(2)] by (auto simp: tknown_pair ttvars_def btvars_def)
-  from "1.IH"[OF cu refl r al fK c(1) tk1 gt1] c(2,3) show ?case by auto
+  from "1.IH"[OF cu refl r al fK c(1) tk1 gt1] c(2) tgrow_trans[OF c(7)] show ?case by auto
 qed (auto simp: raiseW_def)
 
 lemma head_norm_dpair_inv:
   assumes hn: "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env')" and fK: "finite K"
     and ei: "einv A K (tyonly env)" and tk: "tknown A env [(rb, t, u)]" and gt: "gtyped env [(rb, t, u)]"
   shows "einv A K (tyonly env') \<and> tknown A env' [(rb', t', u')] \<and> tenv env' = tenv env \<and>
-    tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    tgrow A env env'"
 proof -
   from hn obtain t1 t2 u1 u2 where
     ht: "ok (head_norm env t) t1" and et: "ok (eta_norm env rb t1) t2" and
@@ -320,7 +346,7 @@ lemma assignment_inv:
   assumes a: "okW (assignment alg rb t u env) env'" and fK: "finite K"
     and ei: "einv A K (tyonly env)" and tk: "tknown A env [(rb, t, u)]" and gt: "gtyped env [(rb, t, u)]"
   shows "einv A K (tyonly env') \<and> etvars env' \<subseteq> tvars_env (tyenv env') \<union> A \<and>
-    tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    tgrow A env env'"
 proof -
   have "\<exists>v T T1 T2 env1. okW (get_eta_var rb 0 t) (v, T) \<and> ok (body_type env T) T1 \<and>
       ok (fastype env rb u) T2 \<and> okW (cunify_types alg T1 T2 env) env1 \<and>
@@ -367,7 +393,9 @@ proof -
   then have "ttvars (rlist_abs rb u) \<subseteq> ?KN" using kt by (auto simp: rlist_abs_abs_list ttvars_abs_list)
   then have "etvars env' \<subseteq> tvars_env (tyenv env') \<union> A"
     using etvars_update[OF upd] etvars_tenv[OF c(2)] kE kT c(3) te' by auto
-  with ei' c(3) te' show ?thesis by simp
+  moreover have "tgrow A env env'"
+    using c(7) te' ok_update(4)[OF upd] by (simp add: tgrow_def tnew_def)
+  ultimately show ?thesis using ei' by simp
 qed
 
 subsection \<open>Simplification\<close>
@@ -466,14 +494,14 @@ lemma simrands_inv:
   assumes IH: "\<And>dp env ffs frs env' ffs' frs'. okW (f dp (env, ffs, frs)) (env', ffs', frs') \<Longrightarrow>
       einv A K (tyonly env) \<Longrightarrow> tknown A env [dp] \<Longrightarrow> gtyped env [dp] \<Longrightarrow>
       \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b) \<and> einv A K (tyonly env') \<and>
-        tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+        tknown A env' (a @ b) \<and> tgrow A env env'"
   shows "okW (simrands f bs u0 s t st) st' \<Longrightarrow> einv A K (tyonly (fst st)) \<Longrightarrow> tknown A (fst st) [(bs, s, t)] \<Longrightarrow>
     (\<forall>ss ts. s = head_of s \<degree>\<degree> ss \<longrightarrow> t = head_of t \<degree>\<degree> ts \<longrightarrow> length ss = length ts \<longrightarrow>
       gtyped (fst st) (dzip bs ss ts)) \<Longrightarrow>
     \<exists>a b ss ts. s = head_of s \<degree>\<degree> ss \<and> t = head_of t \<degree>\<degree> ts \<and> length ss = length ts \<and>
       fst (snd st') = a @ fst (snd st) \<and> snd (snd st') = b @ snd (snd st) \<and>
       dstep (fst st) (dzip bs ss ts) (fst st') (a @ b) \<and> einv A K (tyonly (fst st')) \<and>
-      tknown A (fst st') (a @ b) \<and> tvars_env (tyenv (fst st)) \<subseteq> tvars_env (tyenv (fst st'))"
+      tknown A (fst st') (a @ b) \<and> tgrow A (fst st) (fst st')"
   using IH
 proof (induction f bs u0 s t st arbitrary: st' rule: simrands.induct)
   case (1 f bs u0 f1 s1 g1 t1 st)
@@ -498,7 +526,7 @@ proof (induction f bs u0 s t st arbitrary: st' rule: simrands.induct)
     ss: "f1 = head_of f1 \<degree>\<degree> ss" "g1 = head_of g1 \<degree>\<degree> ts" "length ss = length ts"
     and st1: "fst (snd st1) = a1 @ fst (snd st)" "snd (snd st1) = b1 @ snd (snd st)"
     and d1: "dstep (fst st) (dzip bs ss ts) (fst st1) (a1 @ b1)" and ei1: "einv A K (tyonly (fst st1))"
-    and tk1': "tknown A (fst st1) (a1 @ b1)" and m1: "tvars_env (tyenv (fst st)) \<subseteq> tvars_env (tyenv (fst st1))"
+    and tk1': "tknown A (fst st1) (a1 @ b1)" and m1: "tgrow A (fst st) (fst st1)"
     by blast
   have whole: "f1 $ s1 = head_of (f1 $ s1) \<degree>\<degree> (ss @ [s1])" "g1 $ t1 = head_of (g1 $ t1) \<degree>\<degree> (ts @ [t1])"
     using ss(1,2) by (metis foldl_Cons foldl_Nil foldl_append head_of.simps(1))+
@@ -511,7 +539,7 @@ proof (induction f bs u0 s t st arbitrary: st' rule: simrands.induct)
     then show ?thesis by (rule gtyped_mono) auto
   qed
   have tkl: "tknown A (fst st1) [(bs, s1, t1)]"
-    using tk tk1' m1 by (auto simp: tknown_pair tknown_def ttvars_def)
+    using tk tk1' tgrowD(1)[OF m1] by (auto simp: tknown_pair tknown_def ttvars_def)
   obtain env1 ffs1 frs1 where st1e: "st1 = (env1, ffs1, frs1)" by (cases st1)
   obtain env' ffs' frs' where st'e: "st' = (env', ffs', frs')" by (cases st')
   have r2': "okW (f (bs, s1, t1) (env1, ffs1, frs1)) (env', ffs', frs')" using r2 st1e st'e by simp
@@ -520,7 +548,7 @@ proof (induction f bs u0 s t st arbitrary: st' rule: simrands.induct)
   from IH[OF r2' ei1' tkl' gl'] obtain a2 b2 where
     a2: "ffs' = a2 @ ffs1" "frs' = b2 @ frs1" and d2: "dstep env1 [(bs, s1, t1)] env' (a2 @ b2)"
     and ei2: "einv A K (tyonly env')" and tk2: "tknown A env' (a2 @ b2)"
-    and m2: "tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env')"
+    and m2: "tgrow A env1 env'"
     by blast
   have d2': "dstep (fst st1) [(bs, s1, t1)] (fst st') (a2 @ b2)" using d2 st1e st'e by simp
   have "dstep (fst st) (dzip bs (ss @ [s1]) (ts @ [t1])) (fst st') ((a2 @ a1) @ (b2 @ b1))"
@@ -528,13 +556,14 @@ proof (induction f bs u0 s t st arbitrary: st' rule: simrands.induct)
   moreover have "tknown A (fst st') ((a2 @ a1) @ (b2 @ b1))"
   proof -
     have "etvars env' \<subseteq> tvars_env (tyenv env') \<union> A" using tk2 by (simp add: tknown_def)
-    then have "tknown A env' (a1 @ b1)" using tknown_ext[OF tk1'[unfolded st1e, simplified] m2] by blast
+    then have "tknown A env' (a1 @ b1)" using tknown_ext[OF tk1'[unfolded st1e, simplified] tgrowD(1)[OF m2]] by blast
     with tk2 have "tknown A env' ((a2 @ b2) @ (a1 @ b1))" by (rule tknown_append)
     then have "tknown A env' ((a2 @ a1) @ (b2 @ b1))" by (rule tknown_perm) auto
     then show ?thesis using st'e by simp
   qed
+  moreover have "tgrow A (fst st) (fst st')" using tgrow_trans[OF m1] m2 st1e st'e by simp
   ultimately show ?case
-    using whole ss(3) st1 a2 st1e st'e ei2 m1 m2 by (intro exI[of _ "a2 @ a1"] exI[of _ "b2 @ b1"] exI[of _ "ss @ [s1]"]
+    using whole ss(3) st1 a2 st1e st'e ei2 by (intro exI[of _ "a2 @ a1"] exI[of _ "b2 @ b1"] exI[of _ "ss @ [s1]"]
       exI[of _ "ts @ [t1]"]) auto
 qed (auto simp: dstep_refl tknown_def)
 
@@ -544,11 +573,11 @@ lemma SIMPL0_rest_inv:
     and IH: "\<And>dp env ffs frs env' ffs' frs'. okW (simpl alg dp (env, ffs, frs)) (env', ffs', frs') \<Longrightarrow>
       einv A K (tyonly env) \<Longrightarrow> tknown A env [dp] \<Longrightarrow> gtyped env [dp] \<Longrightarrow>
       \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b) \<and> einv A K (tyonly env') \<and>
-        tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+        tknown A env' (a @ b) \<and> tgrow A env env'"
     and r: "okW (SIMPL0_rest simpl alg bs t u env ffs frs) (env', ffs', frs')"
     and ei: "einv A K (tyonly env)" and tk: "tknown A env [(bs, t, u)]" and gt: "gtyped env [(bs, t, u)]"
   shows "\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> einv A K (tyonly env') \<and>
-    tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    tknown A env' (a @ b) \<and> tgrow A env env'"
 proof -
   let ?\<rho> = "tnorm_inst (tyenv env)"
   from gtyped_rho0(2)[OF gt ei] obtain e0 W where tyt: "e0 \<turnstile> inst ?\<rho> t : W" and tyu: "e0 \<turnstile> inst ?\<rho> u : W"
@@ -581,14 +610,14 @@ proof -
   have rigid: ?thesis
     if sr: "okW (simrands (simpl alg) bs u t u (env1, ffs, frs)) (env', ffs', frs')"
       and ei1: "einv A K (tyonly env1)" and te: "tenv env1 = tenv env" and ext: "extends env env1"
-      and m1: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+      and m1: "tgrow A env env1"
       and heads: "\<And>\<rho> e U U'. tsol (tyenv env1) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (head_of t) : U \<Longrightarrow>
         e \<turnstile> inst \<rho> (head_of u) : U' \<Longrightarrow> inst \<rho> (head_of t) = inst \<rho> (head_of u)"
     for env1
   proof -
     have gt1: "gtyped env1 [(bs, t, u)]"
       by (rule gtyped_dstep[OF dstep_tenv[OF te ext] gt])
-    have tk1: "tknown A env1 [(bs, t, u)]" using tk m1 etvars_tenv[OF te] by (auto simp: tknown_def)
+    have tk1: "tknown A env1 [(bs, t, u)]" using tk tgrowD(1)[OF m1] etvars_tenv[OF te] by (auto simp: tknown_def)
     have gp: "\<forall>ss ts. t = head_of t \<degree>\<degree> ss \<longrightarrow> u = head_of u \<degree>\<degree> ts \<longrightarrow> length ss = length ts \<longrightarrow>
         gtyped env1 (dzip bs ss ts)"
     proof (intro allI impI)
@@ -599,13 +628,13 @@ proof -
     have "\<exists>a b ss ts. t = head_of t \<degree>\<degree> ss \<and> u = head_of u \<degree>\<degree> ts \<and> length ss = length ts \<and>
       fst (snd (env', ffs', frs')) = a @ fst (snd (env1, ffs, frs)) \<and> snd (snd (env', ffs', frs')) = b @ snd (snd (env1, ffs, frs)) \<and>
       dstep (fst (env1, ffs, frs)) (dzip bs ss ts) (fst (env', ffs', frs')) (a @ b) \<and> einv A K (tyonly (fst (env', ffs', frs'))) \<and>
-      tknown A (fst (env', ffs', frs')) (a @ b) \<and> tvars_env (tyenv (fst (env1, ffs, frs))) \<subseteq> tvars_env (tyenv (fst (env', ffs', frs')))"
+      tknown A (fst (env', ffs', frs')) (a @ b) \<and> tgrow A (fst (env1, ffs, frs)) (fst (env', ffs', frs'))"
       by (rule simrands_inv[OF IH sr]) (use ei1 tk1 gp in simp_all)
     then obtain a b where
       "ffs' = a @ ffs" "frs' = b @ frs" "einv A K (tyonly env')" "tknown A env' (a @ b)"
-      "tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env')"
+      "tgrow A env1 env'"
       by auto
-    with m1 show ?thesis by blast
+    with tgrow_trans[OF m1] show ?thesis by blast
   qed
   have CF: ?thesis if ht: "head_of t = c T" and hu: "head_of u = c U" and c: "c = Const a0 \<or> c = Free a0"
     and cu: "okW (cunify_types alg T U env) env1"
@@ -618,7 +647,7 @@ proof -
     note cT = head_cert[OF ht tyt c] and cU = head_cert[OF hu tyu c]
     note cc = tyinv_cunify[OF cu fK ei kT(1) cT kT(2) cU]
     show ?thesis
-    proof (rule rigid[OF sr cc(1,2) _ cc(3)])
+    proof (rule rigid[OF sr cc(1,2) _ cc(7)])
       show "extends env env1" by (rule cunify_types_sound(2)[OF cu])
       fix \<rho> e V V' assume "tsol (tyenv env1) \<rho>" "cert_inst \<rho>"
       with cc(6) have "tsubst \<rho> T = tsubst \<rho> U" by blast
@@ -689,7 +718,7 @@ proof -
       from r tB Bound have ij: "i = j"
         and sr: "okW (simrands (simpl alg) bs u t u (env, ffs, frs)) (env', ffs', frs')"
         by (auto simp: SIMPL0_rest_def split: if_splits)
-      show ?thesis by (rule rigid[OF sr ei refl extends_refl order_refl]) (simp add: tB Bound ij)
+      show ?thesis by (rule rigid[OF sr ei refl extends_refl tgrow_refl]) (simp add: tB Bound ij)
     next
       case (Var y U)
       have "okW (handleW (do {env' \<leftarrow> assignment alg bs u t env; returnW (env', ffs, frs)})
@@ -726,7 +755,7 @@ lemma SIMPL0_inv_aux:
     (\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b)) \<and>
     (einv A K (tyonly env) \<longrightarrow> tknown A env [dp] \<longrightarrow> gtyped env [dp] \<longrightarrow>
       (\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b) \<and> einv A K (tyonly env') \<and>
-        tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')))"
+        tknown A env' (a @ b) \<and> tgrow A env env'))"
   using assms
 proof (induction alg' dp st r arbitrary: env ffs frs env' ffs' frs' rule: SIMPL0.raw_induct[rotated, consumes 1])
   case (1 simpl alg' dp0 st r)
@@ -738,7 +767,7 @@ proof (induction alg' dp st r arbitrary: env ffs frs env' ffs' frs' rule: SIMPL0
     from "1.IH"[OF this] aeq show ?thesis by simp
   qed
   have IH: "\<exists>a b. ffs2 = a @ ffs1 \<and> frs2 = b @ frs1 \<and> dstep env1 [dp] env2 (a @ b) \<and> einv A K (tyonly env2) \<and>
-      tknown A env2 (a @ b) \<and> tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env2)"
+      tknown A env2 (a @ b) \<and> tgrow A env1 env2"
     if "okW (simpl alg dp (env1, ffs1, frs1)) (env2, ffs2, frs2)" "einv A K (tyonly env1)"
       "tknown A env1 [dp]" "gtyped env1 [dp]" for dp env1 ffs1 frs1 env2 ffs2 frs2
   proof -
@@ -764,15 +793,15 @@ proof (induction alg' dp st r arbitrary: env ffs frs env' ffs' frs' rule: SIMPL0
     obtain rb0 t0 u0 where dp0: "dp0 = (rb0, t0, u0)" by (cases dp0)
     from head_norm_dpair_inv[OF hn[unfolded dp0] fK ei tk[unfolded dp0] gt[unfolded dp0]]
     have ei1: "einv A K (tyonly env1)" and tk1: "tknown A env1 [(bs, t, u)]"
-      and m1: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" by auto
+      and m1: "tgrow A env env1" by auto
     have gt1: "gtyped env1 [(bs, t, u)]" by (rule gtyped_dstep[OF hd gt])
     from SIMPL0_rest_inv[OF IHd IH rest ei1 tk1 gt1] obtain a' b' where
       ab': "ffs' = a' @ ffs" "frs' = b' @ frs" and ei': "einv A K (tyonly env')" and tk': "tknown A env' (a' @ b')"
-      and m2: "tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env')"
+      and m2: "tgrow A env1 env'"
       by blast
     from ab ab' have "a' = a" "b' = b" by simp_all
-    with d0 ab ei' tk' m1 m2 show "\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp0] env' (a @ b) \<and>
-        einv A K (tyonly env') \<and> tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    with d0 ab ei' tk' tgrow_trans[OF m1 m2] show "\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp0] env' (a @ b) \<and>
+        einv A K (tyonly env') \<and> tknown A env' (a @ b) \<and> tgrow A env env'"
       by blast
   qed
 qed
@@ -781,14 +810,14 @@ lemma SIMPL0_inv:
   "okW (SIMPL0 alg dp (env, ffs, frs)) (env', ffs', frs') \<Longrightarrow> einv A K (tyonly env) \<Longrightarrow> tknown A env [dp] \<Longrightarrow>
     gtyped env [dp] \<Longrightarrow>
     \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b) \<and> einv A K (tyonly env') \<and>
-      tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+      tknown A env' (a @ b) \<and> tgrow A env env'"
   using SIMPL0_inv_aux[OF _ refl] by fastforce
 
 lemma foldrW_SIMPL0_inv:
   "okW (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (env', ffs', frs') \<Longrightarrow> einv A K (tyonly env) \<Longrightarrow>
     tknown A env dps \<Longrightarrow> gtyped env dps \<Longrightarrow>
     \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env dps env' (a @ b) \<and> einv A K (tyonly env') \<and>
-      tknown A env' (a @ b) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+      tknown A env' (a @ b) \<and> tgrow A env env'"
 proof (induction dps arbitrary: env' ffs' frs')
   case Nil
   then show ?case using dstep_refl[of env "[]"] by (simp add: tknown_def)
@@ -801,36 +830,36 @@ next
   have gtd: "gtyped env dps" by (rule gtyped_mono[OF Cons.prems(4)]) auto
   from Cons.IH[OF f Cons.prems(2) tkd gtd] obtain a1 b1 where ab1: "ffs1 = a1 @ ffs" "frs1 = b1 @ frs"
     and d1: "dstep env dps env1 (a1 @ b1)" and ei1: "einv A K (tyonly env1)" and tk1: "tknown A env1 (a1 @ b1)"
-    and m1: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+    and m1: "tgrow A env env1"
     by blast
   have "gtyped env1 ((a1 @ b1) @ [dp])"
     by (rule gtyped_dstep[OF dstep_frame[OF d1]]) (rule gtyped_mono[OF Cons.prems(4)], auto)
   then have gt1: "gtyped env1 [dp]" by (rule gtyped_mono) auto
   have "etvars env1 \<subseteq> tvars_env (tyenv env1) \<union> A" using tk1 by (simp add: tknown_def)
   then have tkp: "tknown A env1 [dp]"
-    using tknown_ext[OF tknown_mono[OF Cons.prems(3), of "[dp]"] m1] by auto
+    using tknown_ext[OF tknown_mono[OF Cons.prems(3), of "[dp]"] tgrowD(1)[OF m1]] by auto
   from SIMPL0_inv[OF s ei1 tkp gt1] obtain a2 b2 where ab2: "ffs' = a2 @ ffs1" "frs' = b2 @ frs1"
     and d2: "dstep env1 [dp] env' (a2 @ b2)" and ei2: "einv A K (tyonly env')" and tk2: "tknown A env' (a2 @ b2)"
-    and m2: "tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env')"
+    and m2: "tgrow A env1 env'"
     by blast
   have d: "dstep env (dp # dps) env' ((a2 @ a1) @ (b2 @ b1))" by (rule dstep_seq[OF d1 d2 refl])
   have "etvars env' \<subseteq> tvars_env (tyenv env') \<union> A" using tk2 by (simp add: tknown_def)
-  then have "tknown A env' (a1 @ b1)" using tknown_ext[OF tk1 m2] by blast
+  then have "tknown A env' (a1 @ b1)" using tknown_ext[OF tk1 tgrowD(1)[OF m2]] by blast
   with tk2 have "tknown A env' ((a2 @ b2) @ (a1 @ b1))" by (rule tknown_append)
   then have "tknown A env' ((a2 @ a1) @ (b2 @ b1))" by (rule tknown_perm) auto
-  with d ab1 ab2 ei2 m1 m2 show ?case
+  with d ab1 ab2 ei2 tgrow_trans[OF m1 m2] show ?case
     by (intro exI[of _ "a2 @ a1"] exI[of _ "b2 @ b1"]) auto
 qed
 
 lemma SIMPL_inv_aux:
   assumes "SIMPL alg' env dps = Some r"
   shows "alg' = alg \<Longrightarrow> snd r = Ok (env', ffs, frs) \<Longrightarrow> einv A K (tyonly env) \<Longrightarrow> tknown A env dps \<Longrightarrow> gtyped env dps \<Longrightarrow>
-    einv A K (tyonly env') \<and> tknown A env' (frs @ ffs) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    einv A K (tyonly env') \<and> tknown A env' (frs @ ffs) \<and> tgrow A env env'"
   using assms
 proof (induction alg' env dps r arbitrary: env' ffs frs rule: SIMPL.raw_induct[rotated, consumes 1])
   case (1 simpl alg' env dps r)
   note aeq = "1.prems"(1)
-  have IH: "einv A K (tyonly env2) \<and> tknown A env2 (frs2 @ ffs2) \<and> tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env2)"
+  have IH: "einv A K (tyonly env2) \<and> tknown A env2 (frs2 @ ffs2) \<and> tgrow A env1 env2"
     if "okW (simpl alg env1 dps1) (env2, ffs2, frs2)" "einv A K (tyonly env1)" "tknown A env1 dps1"
       "gtyped env1 dps1" for env1 dps1 env2 ffs2 frs2
   proof -
@@ -845,7 +874,7 @@ proof (induction alg' env dps r arbitrary: env' ffs frs rule: SIMPL.raw_induct[r
     using aeq by blast
   from foldrW_SIMPL0_inv[OF f "1.prems"(3-5)] obtain a b where ab: "ffs1 = a" "frs1 = b"
     and d: "dstep env dps env1 (a @ b)" and ei1: "einv A K (tyonly env1)" and tk1: "tknown A env1 (a @ b)"
-    and m1: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+    and m1: "tgrow A env env1"
     by auto
   have tk1': "tknown A env1 (frs1 @ ffs1)" using tk1 ab by (rule_tac tknown_perm) auto
   have gt1: "gtyped env1 (frs1 @ ffs1)"
@@ -853,13 +882,13 @@ proof (induction alg' env dps r arbitrary: env' ffs frs rule: SIMPL.raw_induct[r
   from rest show ?case
   proof
     assume "okW (simpl alg env1 (frs1 @ ffs1)) (env', ffs, frs)"
-    from IH[OF this ei1 tk1' gt1] m1 show ?thesis by auto
+    from IH[OF this ei1 tk1' gt1] tgrow_trans[OF m1] show ?thesis by auto
   qed (use ei1 tk1' m1 in auto)
 qed
 
 theorem SIMPL_inv:
   "okW (SIMPL alg env dps) (env', ffs, frs) \<Longrightarrow> einv A K (tyonly env) \<Longrightarrow> tknown A env dps \<Longrightarrow> gtyped env dps \<Longrightarrow>
-    einv A K (tyonly env') \<and> tknown A env' (frs @ ffs) \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    einv A K (tyonly env') \<and> tknown A env' (frs @ ffs) \<and> tgrow A env env'"
   using SIMPL_inv_aux[OF _ refl] by fastforce
 
 

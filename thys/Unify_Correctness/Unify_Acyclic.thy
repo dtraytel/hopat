@@ -686,9 +686,10 @@ proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   have mo: "MATCH_ok env dp" using ninv_MATCH_ok[OF ni[unfolded dp] sh[unfolded dp]] by (simp add: dp)
   have sq: "seqinv (GE env (dp # dps)) ms" by (rule MATCH_sound[OF m mo])
-  have ts: "tseq True (tvars_env (tyenv env) \<union> A) ms" by (rule MATCH_tseq[OF m mo cfg fK ei tk gt]) (simp add: ac)
+  have ts: "tseq True UNIV (maxidx env) (tvars_env (tyenv env) \<union> A) ms"
+    by (rule MATCH_tseq[OF m mo cfg fK ei tk gt]) (simp_all add: ac tub_def)
   from tseq_ev[OF cfg ev ts sq gt] obtain env' dps' where e: "El_E env2 dps2 = El_E env' dps'"
-    and t: "tst True (tvars_env (tyenv env) \<union> A) env' dps'" by blast
+    and t: "tst True UNIV (maxidx env) (tvars_env (tyenv env) \<union> A) env' dps'" by blast
   from e have "env2 = env'" "dps2 = dps'" by simp_all
   with t tst_tyinv[OF t] show ?thesis by (simp add: tst_def)
 qed
