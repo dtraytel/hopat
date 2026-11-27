@@ -132,12 +132,17 @@ per result of the sequences of `assumption`, `flexflex_rule`, `bicompose` and
 derivable or certified (`cterm_ok`, `ctyp_ok`), the model of the rule in
 session `Pure_Thm` returns the logical part of the result (`okT`), and the side
 conditions listed below. The conclusion is the record that the wrapper of
-`thm.ML` builds, including both proofs (in `Thm_Soundness` the proofs are
-data that the statements mention; nothing is proved about them there). Two
+`thm.ML` builds, with arbitrary proofs: `derivable` says which propositions
+are derivable, with which hypotheses, sort hypotheses and constraints, and
+neither its rules nor their premises mention the construction of proofs.
+The predicate `pderivable` of session `Thm_Proofs` has the same rules with the
+classic and the tight proof that each rule constructs, and with the
+conditions on the signature that only the proofs need; it refines
+`derivable` (`pderivable_derivable: "pderivable d ⟹ derivable d"`). Two
 theorems cover all rules:
 
     theorem derivable_sem: "derivable d ⟹ dsem TYPE('u) d"
-    theorem derivable_proofs: "derivable d ⟹ is_prf_sig (th_sign d) ⟹ proofs_ok d"
+    theorem derivable_proofs: "pderivable d ⟹ is_prf_sig (th_sign d) ⟹ proofs_ok d"
 
 The first is in `Thm_Soundness`. `dsem` says that, if the class algebra of
 the signature is well formed (`pure_sig`): the proposition, the hypotheses and
@@ -151,20 +156,23 @@ The second is in `Thm_Proofs`: if the signature has closed proof
 constants (`is_prf_sig`), the classic proof and the tight proof, when their
 computation returns one, are proofs of the proposition from the hypotheses in
 the proof judgments `prf_valid` and `zvalid` (`proofs_ok`).
-`derivable_sound: "derivable d ⟹ dok TYPE('u) d"` states both parts.
+`derivable_sound: "pderivable d ⟹ dok TYPE('u) d"` states both parts.
 
 Side conditions that are premises of rules of `derivable` and that the kernel
 does not check:
 
-- `sign_eq` (the equality rules, the conversions, `of_class`): the signature
-  declares `Pure.eq` with its polymorphic type and `prop` without arguments,
-  and its proof constants include the equality axioms of `Pure`.
-- `sign_closed` (`forall_intr`, `abstract_rule`, `generalize`,
-  `varifyT_global`, `strip_shyps`): the propositions of proof constants have no
-  free variables and no free type variables.
-- `sign_axioms` (`axiom`): the axioms are well-typed propositions without
-  free variables whose type variables are schematic and have the top sort,
-  and they are proof constants.
+- `sign_eqs` (the equality rules, the conversions): the signature declares
+  `Pure.eq` with its polymorphic type and `prop` without arguments.
+- `sign_axioms_sem` (`axiom`): the axioms are well-typed propositions whose
+  variables and type variables have non-negative indices.
+- For the proofs only, in the rules of `pderivable`: `sign_eq` (the equality
+  rules, the conversions, `of_class`: in addition, the proof constants
+  include the equality axioms of `Pure`), `sign_closed` (`forall_intr`,
+  `abstract_rule`, `generalize`, `varifyT_global`, `strip_shyps`: the
+  propositions of proof constants have no free variables and no free type
+  variables), and `sign_axioms` (`axiom`: in addition, the axioms have no
+  free variables, their type variables are schematic and have the top sort,
+  and they are proof constants).
 - Binary rules require the same signature in both arguments (`thm.ML` joins
   the certificates). `transfer` moves a theorem to an extension of its
   signature (`sign_le`: more classes, class relations, arities, constants,
@@ -379,13 +387,11 @@ does not check:
   unifiers these are instances of the general theorems with exceptions, at
   the level of the rules there is no general theorem), and in the lemmas
   that the unifying rules preserve it (`data_cons_assumption` and the
-  lemmas after it). The operations `assumption_thms`, `flexflex_rule_thms`
-  and `biresolution_thms` on the abstract type are defined for theorems with
-  one type per name (`thm_cons`), since their descriptions use these
-  theorems; `bicompose_thms` asks nothing of the names.
-- `unconstrainT`: `unc_sig_ok` (the names of the variables
-  of the proposition are consistent, the signature declares the class
-  constants, and the proof box is a proof constant).
+  lemmas after it).
+- `unconstrainT`: `unc_sem_ok` (the names of the variables of the
+  proposition are consistent, and the signature declares the class
+  constants); for the proofs, `unc_sig_ok` (in addition, the proof box is a
+  proof constant).
 - `sign_eq` and `sign_closed` are kept by extensions of the signature
   (`sign_eq_transfer`, `sign_closed_transfer`), so a derivation can go on
   after `transfer` without assuming them again.
@@ -1222,16 +1228,15 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     is a separate statement, proved rule by rule in the theories `X_Proofs`
     (`thm_sem_X` in `X`, `proofs_ok_X` in `X_Proofs`). The results are also
     described without the internals of `bicompose_aux`, as those of
-    `Unify.unifiers` are (`bicompose_aux_results` in `Bicompose_Shape.thy`,
-    `biresolution_thms_shape` in `Thm_Type.thy`): the new theorem is
+    `Unify.unifiers` are (`bicompose_aux_results` in `Bicompose_Shape.thy`):
+    the new theorem is
     `⟦Bs; As'⟧ ⟹ C` with a unifier of the problem of the composition and the
     flex-flex pairs of both theorems applied, up to β-reduction, modulo its own
     flex-flex pairs; `As'` are the remaining premises of the rule, with
     variables that occur only in them renamed, and flattened.
     The invariant of the theorems (`thm_wf`) does not require the schematic
     variables of a theorem to have the same type wherever their names occur,
-    since the rules that combine two theorems do not keep this; biresolution
-    assumes it of its arguments (`thm_cons`).
+    since the rules that combine two theorems do not keep this.
     The other inference rules of `thm.ML` map valid theorems to valid
     theorems (`Rules_Sound.thy`, `Forall_Intr_Sound.thy`,
     `Instantiate_Sound.thy`, `Equality_Sound.thy`,
@@ -1337,7 +1342,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     a sort, as a set; Isabelle keeps an ordered list tagged with the theory),
     computed as in `thm.ML`: kept or joined by the rules on theorems, emptied
     where Isabelle calls `Thm.solve_constraints` (`instantiate`, `of_class`,
-    `strip_shyps`, before `flexflex_rule`; `solve_constraints_thm`, which
+    `strip_shyps`, before `flexflex_rule`; `solve_data`, which
     also `β`-normalizes the tight proof as Isabelle does), and extended by the type bindings
     of the unifiers of `assumption`, `flexflex_rule`, `bicompose` and
     biresolution (`env_constraints`, `Thm.insert_constraints_env`). The type
@@ -1363,11 +1368,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Thm_Assumption.thy` completes the rules with `eq_assumption`, `assumption`
     and `flexflex_rule`. The lazy result sequences of the latter two are
     evaluated to the lists of their results (`aevals`, `fevals`), which
-    exist for every theorem (`assumption_thms_terminates`,
-    `flexflex_rule_thms_terminates`); every result is a theorem
-    (`assumption_thms_results`, `flexflex_rule_thms_results`): the instance
+    exist for theorems with one type per name of a variable
+    (`assumption_terminates`, `flexflex_terminates`); every result is a
+    theorem (`thm_sem_thm_of_ares`, `thm_sem_thm_of_fres`): the instance
     of the proof state, or of the theorem, by a unifier of the model of
-    `Unify` (`assumption_thms_shape`, `flexflex_rule_thms_shape`). As in
+    `Unify` (`assumption_result`, `flexflex_result`). As in
     `Thm.flexflex_rule`, the flex-flex pairs of the unifiers are smashed
     (`Unify.smash_unifiers`). `Thm_Lift.thy` adds `weaken_sorts` on
     certified terms, `lift_rule` (the rule lifted over a certified
@@ -1406,8 +1411,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     consistent types (`unify_var_types_vtcons`), so the results are those
     of the incremented case, which are theorems with valid classic and
     tight proofs and the sorts of the unifier as additional sort hypotheses
-    (`bicompose_thms`, `bicompose_thms_results`). `Thm_Strip_Shyps.thy` lifts
-    `strip_shyps` to theorems (`strip_shyps_thm`; the sort hypotheses are
+    (`thm_sem_thm_of_bc`). `Thm_Strip_Shyps.thy` lifts
+    `strip_shyps` to theorems (`thm_sem_strip_shyps`; the sort hypotheses are
     ordered by `Term_Ord.sort_ord`, so their set determines them): the
     proofs replace the type variables that do not occur in the theorem by
     present type variables, witnesses or dummy types of their sorts, which
@@ -1418,7 +1423,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `unconstrainT` keeps theorems valid (`unconstrainT_valid`): the
     premises `OFCLASS` make the values of the unconstrained type variables
     values of the sorts of the old ones and of the sort hypotheses, which are
-    then inhabited. `unconstrainT_thm` lifts it to theorems (after
+    then inhabited. `thm_sem_unconstrainT` is the statement on theorems (after
     `strip_shyps`): its classic proof box, applied to the arguments of
     `Proofterm.prop_args` with unconstrained types, and its tight proof box
     (with patch 24, of the β-normal form of the new proposition, which
@@ -1455,8 +1460,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     model that interprets `Pure.eq` as equality (`equality_axiom_holds`), so
     such a model is a model of every signature whose axioms are equality
     axioms (`is_model_eq_axioms`). `Thm_Transfer.thy` transfers theorems to
-    extensions of their signature (`Thm.transfer`; `thm_sem_transfer`, `proofs_ok_transfer`,
-    `transfer_thm`): an extension (`sign_le`) may add classes, subclass
+    extensions of their signature (`Thm.transfer`; `thm_sem_transfer`, `proofs_ok_transfer`): an extension (`sign_le`) may add classes, subclass
     relations and arities, constants, axioms and atoms of proofs, and keeps
     the arities of the type constructors (total in the model), the closures
     and type arguments of the atoms, and the constants that are not class

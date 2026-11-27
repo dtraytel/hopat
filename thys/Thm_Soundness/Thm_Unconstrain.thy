@@ -754,6 +754,17 @@ definition unc_ok :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Right
       (\<forall>z. zunconstrain_proof (pure_sig_gen.ztargs (sg_consts c)) zn invent shyps P = return z \<longrightarrow>
         unc_box_ok c (pure_sig_gen.zdec (sg_consts c) (zbox_prop z))))"
 
+text \<open>The part of these conditions that the validity of the result needs:\<close>
+
+definition unc_sem_ok :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow> pterm \<Rightarrow> bool" where
+  "unc_sem_ok invent c P \<longleftrightarrow>
+    (\<forall>n. n \<le> length (invent (integer_of_nat n)) \<and> distinct (invent (integer_of_nat n))) \<and>
+    sign_ofclass c \<and> vars_consistent P"
+
+lemma unc_ok_sem: "unc_ok box zn invent c shyps P r \<Longrightarrow> unc_sem_ok invent c P"
+  and unc_ok_sorts: "unc_ok box zn invent c shyps P r \<Longrightarrow> \<forall>S\<in>set shyps. sort_ok (sg_alg c) S"
+  by (simp_all add: unc_ok_def unc_sem_ok_def)
+
 definition unconstrainT_data :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow> (integer \<Rightarrow> name list) \<Rightarrow>
     'u pure_thm \<Rightarrow> thm_rep \<Rightarrow> thm_data" where
   "unconstrainT_data box zn invent th r = mk_thm r {[]} [] (sign_of th)
@@ -775,15 +786,15 @@ theorem thm_sem_unconstrainT:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (unconstrainT_rep invent (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)) r"
     and fin: "finite (shyps_of th)"
-    and uo: "unc_ok box zn invent (sign_of th) (shyps_list (shyps_of th)) (th_prop (rep_of th)) r"
+    and us: "unc_sem_ok invent (sign_of th) (th_prop (rep_of th))"
+    and so: "\<forall>S\<in>set (shyps_list (shyps_of th)). sort_ok (sg_alg (sign_of th)) S"
   shows "thm_sem TYPE('u) (unconstrainT_data box zn invent th r)"
 proof -
   let ?c = "sign_of th" and ?shyps = "shyps_list (shyps_of th)" and ?P = "th_prop (rep_of th)"
   have sl: "set ?shyps = shyps_of th" by (rule set_shyps_list[OF fin])
   have inv: "\<And>k. k \<le> length (invent (integer_of_nat k))" and dis: "\<And>k. distinct (invent (integer_of_nat k))"
-    and bx: "\<And>B. hd_prop (fst (box B)) = B" "\<And>B. hd_types (fst (box B)) = None"
-    and so: "\<forall>S\<in>set ?shyps. sort_ok (sg_alg ?c) S" and soc: "sign_ofclass ?c" and vcP: "vars_consistent ?P"
-    using uo by (simp_all add: unc_ok_def)
+    and soc: "sign_ofclass ?c" and vcP: "vars_consistent ?P"
+    using us by (simp_all add: unc_sem_ok_def)
   from ok have h: "hyps_of th = []" "th_tpairs (rep_of th) = []"
     by (auto simp: unconstrainT_rep_def raiseW_def returnW_def split: if_splits)
   from ok h obtain args pm cm P1 where args: "ok (prop_args ?P) args"
@@ -850,34 +861,5 @@ proof -
   qed
 qed
 
-text \<open>
-  \<open>Thm.unconstrainT\<close> on theorems: \<open>Thm.strip_shyps\<close> (with the logical types \<open>gts\<close>), then the
-  rule on the stripped theorem; \<open>None\<close> if it raises an exception or a condition fails.
-\<close>
-
-definition unconstrainT_thm' :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow> (integer \<Rightarrow> name list) \<Rightarrow>
-    'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "unconstrainT_thm' box zn invent th =
-    (case resT (unconstrainT_rep invent (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)) of
-      None \<Rightarrow> None
-    | Some r \<Rightarrow>
-        if finite (shyps_of th) \<and> unc_ok box zn invent (sign_of th) (shyps_list (shyps_of th)) (th_prop (rep_of th)) r
-        then Some (Abs_thm (unconstrainT_data box zn invent th r)) else None)"
-
-definition unconstrainT_thm :: "name list \<Rightarrow> (pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow>
-    (integer \<Rightarrow> name list) \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "unconstrainT_thm gts box zn invent th = Option.bind (strip_shyps_thm gts th) (unconstrainT_thm' box zn invent)"
-
-theorem unconstrainT_thm'_rep:
-  assumes "unconstrainT_thm' box zn invent th = Some th'"
-  obtains r where "okT (unconstrainT_rep invent (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)) r"
-    "rep_thm th' = unconstrainT_data box zn invent th r"
-proof -
-  from assms obtain r where ok: "okT (unconstrainT_rep invent (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)) r"
-    and g: "finite (shyps_of th)" "unc_ok box zn invent (sign_of th) (shyps_list (shyps_of th)) (th_prop (rep_of th)) r"
-    and th': "th' = Abs_thm (unconstrainT_data box zn invent th r)"
-    by (auto simp: unconstrainT_thm'_def resT_Some split: option.splits if_splits)
-  show thesis by (rule that[OF ok]) (simp add: th' Abs_thm_inverse thm_sem_unconstrainT[OF ok g])
-qed
 
 end

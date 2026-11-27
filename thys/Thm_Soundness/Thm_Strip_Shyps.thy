@@ -131,15 +131,6 @@ text \<open>
   variables (\<^const>\<open>sign_closed\<close>), as in Isabelle.
 \<close>
 
-definition strip_shyps_thm :: "name list \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "strip_shyps_thm gts th =
-    (let c = sign_of th; d = strip_shyps_rep (sg_alg c) gts (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)
-     in if finite (shyps_of th) \<and> sign_closed c \<and> (\<forall>S\<in>shyps_of th. sort_ok (sg_alg c) S)
-        then Some (Abs_thm (mk_thm (rep_of th) (case d of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th)
-          (hyps_of th) c (bindW (proof_of th) (strip_shyps_proof (sg_alg c) d))
-          (bindM (zproof_of th) (zstrip_shyps_proof (sg_alg c) d))))
-        else None)"
-
 lemma strip_shyps_rep_Some:
   "strip_shyps_rep alg gts shyps hyps r = Some d \<Longrightarrow>
     d = strip_shyps_data alg gts shyps (thm_atyps hyps (th_tpairs r) (th_prop r))"
@@ -151,7 +142,7 @@ lemma strip_typ_tmap: "map_types (strip_typ alg d) = tmap (\<lambda>T. case stri
 theorem thm_sem_strip_shyps:
   fixes th :: "'u pure_thm" and gts :: "name list"
   defines "d \<equiv> strip_shyps_rep (sg_alg (sign_of th)) gts (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)"
-  assumes fin: "finite (shyps_of th)" and sc: "sign_closed (sign_of th)"
+  assumes fin: "finite (shyps_of th)"
     and so: "\<forall>S\<in>shyps_of th. sort_ok (sg_alg (sign_of th)) S"
   shows "thm_sem TYPE('u) (mk_thm (rep_of th) (case d of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th)
     (hyps_of th) (sign_of th) (bindW (proof_of th) (strip_shyps_proof (sg_alg (sign_of th)) d))
@@ -199,35 +190,6 @@ next
     using v0 sh unfolding valid_def by blast
   then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
     by (simp add: valid_in_def)
-qed
-
-theorem strip_shyps_thm_rep:
-  assumes "strip_shyps_thm gts th = Some th'"
-  shows "rep_of th' = rep_of th" "hyps_of th' = hyps_of th" "sign_of th' = sign_of th"
-    "shyps_of th' = (case strip_shyps_rep (sg_alg (sign_of th)) gts (shyps_list (shyps_of th)) (hyps_of th) (rep_of th) of
-      Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th)"
-proof -
-  from assms have g: "finite (shyps_of th)" "sign_closed (sign_of th)" "\<forall>S\<in>shyps_of th. sort_ok (sg_alg (sign_of th)) S"
-    and th': "th' = Abs_thm (mk_thm (rep_of th) (case strip_shyps_rep (sg_alg (sign_of th)) gts
-      (shyps_list (shyps_of th)) (hyps_of th) (rep_of th) of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th)
-      (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (strip_shyps_proof (sg_alg (sign_of th)) (strip_shyps_rep (sg_alg (sign_of th)) gts
-        (shyps_list (shyps_of th)) (hyps_of th) (rep_of th))))
-      (bindM (zproof_of th) (zstrip_shyps_proof (sg_alg (sign_of th)) (strip_shyps_rep (sg_alg (sign_of th)) gts
-        (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)))))"
-    unfolding strip_shyps_thm_def Let_def by (auto split: if_splits)
-  have "rep_thm th' = mk_thm (rep_of th) (case strip_shyps_rep (sg_alg (sign_of th)) gts
-      (shyps_list (shyps_of th)) (hyps_of th) (rep_of th) of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th)
-      (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (strip_shyps_proof (sg_alg (sign_of th)) (strip_shyps_rep (sg_alg (sign_of th)) gts
-        (shyps_list (shyps_of th)) (hyps_of th) (rep_of th))))
-      (bindM (zproof_of th) (zstrip_shyps_proof (sg_alg (sign_of th)) (strip_shyps_rep (sg_alg (sign_of th)) gts
-        (shyps_list (shyps_of th)) (hyps_of th) (rep_of th))))"
-    unfolding th' by (rule Abs_thm_inverse) (simp add: thm_sem_strip_shyps[OF g])
-  then show "rep_of th' = rep_of th" "hyps_of th' = hyps_of th" "sign_of th' = sign_of th"
-    "shyps_of th' = (case strip_shyps_rep (sg_alg (sign_of th)) gts (shyps_list (shyps_of th)) (hyps_of th) (rep_of th) of
-      Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th)"
-    by (simp_all add: thm_rep.truncate_def mk_thm_def)
 qed
 
 text \<open>

@@ -174,35 +174,4 @@ proof -
 qed
 
 
-subsection \<open>Generalization of type variables with their renaming\<close>
-
-text \<open>
-  \<open>Thm.varifyT_global' fixed\<close> returns, besides the theorem of \<^const>\<open>varifyT_global_thm\<close>, the
-  renaming of the free type variables (not fixed, not in the hypotheses) to the schematic ones.
-\<close>
-
-definition varifyT_global'_thm :: "(name list \<Rightarrow> name list \<Rightarrow> name list) \<Rightarrow> (name \<times> psort) list \<Rightarrow>
-    'u pure_thm \<Rightarrow> (((name \<times> psort) \<times> (indexname \<times> psort)) list \<times> 'u pure_thm) option" where
-  "varifyT_global'_thm vl fixed th =
-    (if sign_closed (sign_of th) then
-      map_option (\<lambda>(names, r). (names, Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-          (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))))
-        (resT (varifyT_global vl fixed (hyps_of th) (rep_of th)))
-     else None)"
-
-theorem varifyT_global'_thm:
-  assumes "varifyT_global'_thm vl fixed th = Some (names, th')"
-  obtains r where "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)" "sign_closed (sign_of th)"
-    "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))"
-proof -
-  from assms obtain r where sc: "sign_closed (sign_of th)"
-    and ok: "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)"
-    and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))"
-    by (auto simp: varifyT_global'_thm_def resT_Some split: if_splits)
-  show thesis
-    by (rule that[OF ok sc]) (use thm_sem_varifyT_global[OF ok sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
-qed
-
 end

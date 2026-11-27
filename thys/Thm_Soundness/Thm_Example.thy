@@ -191,15 +191,18 @@ definition th_reflA :: thm_data where
 definition th_reflF :: thm_data where
   "th_reflF = conv_datar ctF (mk_rep (-1) [] (eq_const (propT \<rightarrow>\<^sub>T propT) $ F0 $ F0))"
 
+lemma sign_eqs0: "sign_eqs pure0"
+  by (rule sign_eq_eqs[OF sign_eq0])
+
 lemma derivable_th_reflA: "derivable th_reflA"
-  unfolding th_reflA_def
+  unfolding th_reflA_def conv_datar_def
   by (rule derivable.reflexive[OF cterm_ok_ctA])
-    (simp_all add: sign_eq0 ctA_def reflexive_def mk_rep_def A0_def mk_equals_def fastype_of_def)
+    (simp_all add: sign_eqs0 ctA_def reflexive_def mk_rep_def A0_def mk_equals_def fastype_of_def)
 
 lemma derivable_th_reflF: "derivable th_reflF"
-  unfolding th_reflF_def
+  unfolding th_reflF_def conv_datar_def
   by (rule derivable.reflexive[OF cterm_ok_ctF])
-    (simp_all add: sign_eq0 ctF_def reflexive_def mk_rep_def F0_def mk_equals_def fastype_of_def)
+    (simp_all add: sign_eqs0 ctF_def reflexive_def mk_rep_def F0_def mk_equals_def fastype_of_def)
 
 definition th_comb :: thm_data where
   "th_comb = with_cons {} (mk_thm (mk_rep (-1) [] (eq_const propT $ (F0 $ A0) $ (F0 $ A0))) {} [] pure0
@@ -209,8 +212,9 @@ definition th_comb :: thm_data where
 
 lemma derivable_th_comb: "derivable th_comb"
   using derivable.combination[OF derivable_th_reflF derivable_th_reflA,
-    of "mk_rep (-1) [] (eq_const propT $ (F0 $ A0) $ (F0 $ A0))" propT propT F0 F0 A0 A0]
-  by (simp add: th_comb_def th_reflF_def th_reflA_def conv_datar_def ctA_def ctF_def sign_eq0 combination_res_def
+    of "mk_rep (-1) [] (eq_const propT $ (F0 $ A0) $ (F0 $ A0))" propT propT F0 F0 A0 A0
+      "th_proof th_comb" "th_zproof th_comb"]
+  by (simp add: th_comb_def th_reflF_def th_reflA_def conv_datar_def ctA_def ctF_def sign_eqs0 combination_res_def
       combination_data_def mk_rep_def F0_def A0_def mk_equals_def fastype_of_def union_tpairs_def)
 
 end

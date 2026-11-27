@@ -753,23 +753,6 @@ next
   from brevals.Cons[OF this Cons.IH] show ?case by simp
 qed
 
-lemma brevals_det: "brevals ops rep s xs \<Longrightarrow> brevals ops rep s ys \<Longrightarrow> xs = ys"
-proof (induction arbitrary: ys rule: brevals.induct)
-  case (Nil s)
-  from Nil.prems show ?case by cases (use Nil.hyps okT_det in force)+
-next
-  case (Cons s xr s' xs)
-  from Cons.prems show ?case
-  proof cases
-    case Nil
-    with Cons.hyps(1) okT_det show ?thesis by force
-  next
-    case (Cons xr' s'' ys')
-    with Cons.hyps(1) okT_det have "xr' = xr" "s'' = s'" by force+
-    with Cons Cons.IH show ?thesis by simp
-  qed
-qed
-
 lemma brevals_brresult: "brevals ops rep s xs \<Longrightarrow> xr \<in> set xs \<Longrightarrow> brresult ops rep s xr"
   by (induction rule: brevals.induct) (auto intro: brresult.First brresult.Next)
 

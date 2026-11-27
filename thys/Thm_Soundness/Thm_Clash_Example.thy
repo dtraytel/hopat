@@ -124,6 +124,7 @@ lemma scons_st1: "data_scons st1"
 text \<open>The result is derivable, although the state does not have one type for each name:\<close>
 
 theorem derivable_clash: "derivable (ares_data st1 (aseq_ctx s1) r1)"
+  unfolding ares_data_def
   by (rule derivable.assumption[OF derivable_st1 _ scons_st1 assumption1 aresult.First[OF a1]])
     (simp_all add: cfg1_def st1_def)
 

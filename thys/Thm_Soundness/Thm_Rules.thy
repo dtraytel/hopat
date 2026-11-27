@@ -139,12 +139,23 @@ end
 
 text \<open>
   The signature condition of the equality rules: \<open>Pure.eq\<close> is declared with its polymorphic type,
-  the type \<open>prop\<close> has no arguments, and the equality axioms of \<open>Pure\<close> are axioms with their closures (as in every theory).
+  and the type \<open>prop\<close> has no arguments.
+\<close>
+
+definition sign_eqs :: "sign \<Rightarrow> bool" where
+  "sign_eqs c \<longleftrightarrow> pure_sig_gen.eq_ok (sg_consts c) \<and> sg_ar c STR ''prop'' = 0"
+
+text \<open>
+  With the part that only the proofs of the equality rules need: the equality axioms of \<open>Pure\<close>
+  are axioms with their closures (as in every theory).
 \<close>
 
 definition sign_eq :: "sign \<Rightarrow> bool" where
   "sign_eq c \<longleftrightarrow> pure_sig_gen.eq_ok (sg_consts c) \<and> sg_ar c STR ''prop'' = 0 \<and>
     (is_prf_sig c \<longrightarrow> prf_eq (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c))"
+
+lemma sign_eq_eqs: "sign_eq c \<Longrightarrow> sign_eqs c"
+  by (simp add: sign_eq_def sign_eqs_def)
 
 fun eq_args :: "pterm \<Rightarrow> (ptyp \<times> pterm \<times> pterm) option" where
   "eq_args (Const c (Type a [T, U]) $ t $ u) = Some (T, t, u)"
@@ -155,7 +166,7 @@ subsection \<open>Symmetry\<close>
 
 lemma thm_sem_symmetric:
   fixes th :: "'u pure_thm"
-  assumes ok: "okT (symmetric (rep_of th)) r" and se: "sign_eq (sign_of th)"
+  assumes ok: "okT (symmetric (rep_of th)) r" and se: "sign_eqs (sign_of th)"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (symmetric_proof p)))
     (bindM (zproof_of th) (\<lambda>p. case eq_args (th_prop (rep_of th)) of
@@ -164,7 +175,7 @@ lemma thm_sem_symmetric:
     (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eqs_def)
   from ok obtain e t u where P: "th_prop (rep_of th) = e $ t $ u" and d: "dest_eq_fun (th_prop (rep_of th)) \<noteq> None"
     and r: "r = mk_rep (th_maxidx (rep_of th)) (th_tpairs (rep_of th)) (e $ u $ t)"
     by (auto simp: symmetric_def returnW_def raiseW_def split: pterm.splits option.splits)
@@ -283,7 +294,7 @@ end
 lemma thm_sem_transitive:
   fixes th1 th2 :: "'u pure_thm"
   assumes ok: "okT (transitive (rep_of th1) (rep_of th2)) r" and c: "sign_of th2 = sign_of th1"
-    and se: "sign_eq (sign_of th1)"
+    and se: "sign_eqs (sign_of th1)"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
     (bindW (proof_of th1) (\<lambda>p. bindW (proof_of th2) (\<lambda>q.
       case eq_args (th_prop (rep_of th1)) of
@@ -297,7 +308,7 @@ lemma thm_sem_transitive:
     (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th1"
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eqs_def)
   from ok obtain e x y T t1 u u' t2 where P1: "th_prop (rep_of th1) = e $ x $ y"
     and d1: "dest_eq (th_prop (rep_of th1)) = Some (T, t1, u)"
     and d2: "dest_eq_any (th_prop (rep_of th2)) = Some (u', t2)" and a: "aconv_term u u'"
@@ -390,13 +401,13 @@ lemma zprf2_return:
 lemma thm_sem_equal_intr:
   fixes th1 th2 :: "'u pure_thm"
   assumes ok: "okT (equal_intr (rep_of th1) (rep_of th2)) r" and c: "sign_of th2 = sign_of th1"
-    and se: "sign_eq (sign_of th1)"
+    and se: "sign_eqs (sign_of th1)"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
     (prf2 equal_intr_proof th1 th2) (zprf2 zequal_intr_proof th1 th2))"
     (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th1"
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eqs_def)
   from ok obtain A B B' A' P where d1: "dest_imp (th_prop (rep_of th1)) = Some (A, B)"
     and mk: "ok (mk_equals (A, B)) P"
     and r: "r = mk_rep (max (th_maxidx (rep_of th1)) (th_maxidx (rep_of th2)))
@@ -462,13 +473,13 @@ qed
 lemma thm_sem_equal_elim:
   fixes th1 th2 :: "'u pure_thm"
   assumes ok: "okT (equal_elim (rep_of th1) (rep_of th2)) r" and c: "sign_of th2 = sign_of th1"
-    and se: "sign_eq (sign_of th1)"
+    and se: "sign_eqs (sign_of th1)"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
     (prf2 equal_elim_proof th1 th2) (zprf2 zequal_elim_proof th1 th2))"
     (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th1"
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eqs_def)
   from ok obtain A B where d: "dest_eq_any (th_prop (rep_of th1)) = Some (A, B)"
     and a: "aconv_term (th_prop (rep_of th2)) A"
     and r: "r = mk_rep (max (th_maxidx (rep_of th1)) (th_maxidx (rep_of th2)))
@@ -539,7 +550,7 @@ lemma combination_data_okE:
 lemma thm_sem_combination:
   fixes th1 th2 :: "'u pure_thm"
   assumes res: "okT (combination_res (rep_of th1) (rep_of th2)) (r, T1, U, f, g, t, u)"
-    and c: "sign_of th2 = sign_of th1" and se: "sign_eq (sign_of th1)"
+    and c: "sign_of th2 = sign_of th1" and se: "sign_eqs (sign_of th1)"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
     (bindW (proof_of th1) (\<lambda>p. bindW (proof_of th2) (\<lambda>q. combination_proof f g t u p q)))
     (bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
@@ -547,7 +558,7 @@ lemma thm_sem_combination:
     (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th1"
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eqs_def)
   note ok = combination_res_ok(1)[OF res] and cd = combination_res_ok(2)[OF res]
   define fT where "fT = T1 \<rightarrow>\<^sub>T U"
   have d1: "dest_eq_fun (th_prop (rep_of th1)) = Some (fT, f, g)"
@@ -1049,7 +1060,7 @@ definition conv_data :: "pure_cterm \<Rightarrow> thm_rep \<Rightarrow> thm_data
 
 lemma thm_sem_conversion:
   fixes ct :: pure_cterm
-  assumes ok: "okT (f (crep_of ct)) r" and se: "sign_eq (csign_of ct)"
+  assumes ok: "okT (f (crep_of ct)) r" and se: "sign_eqs (csign_of ct)"
     and cf: "pure_sig (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) \<Longrightarrow>
       pure_sig.conv_ok (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) f"
   shows "thm_sem TYPE('u) (conv_data ct r)"
@@ -1057,7 +1068,7 @@ proof -
   let ?c = "csign_of ct"
   obtain t T m where cr: "crep_of ct = CTerm t T m" by (cases "crep_of ct")
   have ok': "okT (f (CTerm t T m)) r" using ok by (simp add: cr)
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" and pr: "sg_ar ?c STR ''prop'' = 0" using se by (simp_all add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" and pr: "sg_ar ?c STR ''prop'' = 0" using se by (simp_all add: sign_eqs_def)
   have th: "th_sign (conv_data ct r) = ?c" "th_shyps (conv_data ct r) = csorts_of ct" "th_hyps (conv_data ct r) = []"
     "th_maxidx (conv_data ct r) = th_maxidx r" "th_tpairs (conv_data ct r) = th_tpairs r" "th_prop (conv_data ct r) = th_prop r"
     by (simp_all add: conv_data_def)

@@ -827,7 +827,6 @@ end
 lemma thm_sem_forall_intr:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (forall_intr (hyps_of th) (crep_of ct) (rep_of th)) r" and c: "csign_of ct = sign_of th"
-    and sc: "sign_closed (sign_of th)"
   shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p)))
     (bindM (zproof_of th) (zforall_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
@@ -966,7 +965,7 @@ end
 lemma thm_sem_abstract_rule:
   fixes th :: "'u pure_thm"
   assumes res: "okT (abstract_rule_res b (hyps_of th) (crep_of ct) (rep_of th)) (r, U, f, g)"
-    and c: "csign_of ct = sign_of th" and se: "sign_eq (sign_of th)" and sc: "sign_closed (sign_of th)"
+    and c: "csign_of ct = sign_of th" and se: "sign_eqs (sign_of th)"
   shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)))
     (bindM (zproof_of th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
@@ -978,7 +977,7 @@ proof -
   have ok': "okT (abstract_rule b (hyps_of th) (CTerm x T m) (rep_of th)) r"
     and ad: "okT (abstract_rule_data b (hyps_of th) (CTerm x T m) (rep_of th)) (U, f, g)"
     using abstract_rule_res_ok[OF res] by (simp_all add: cr)
-  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eqs_def)
   have wfc: "pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (CTerm x T m)"
     if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
     using pure_cterm_wf[of ct] ps c by (simp add: cr)
@@ -1140,7 +1139,7 @@ end
 
 lemma thm_sem_generalize:
   fixes th :: "'u pure_thm"
-  assumes ok: "okT (generalize tfrees frees gi (hyps_of th) (rep_of th)) r" and sc: "sign_closed (sign_of th)"
+  assumes ok: "okT (generalize tfrees frees gi (hyps_of th) (rep_of th)) r"
     and ne: "\<not> (tfrees = [] \<and> frees = [])"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (generalize_thm_proof tfrees frees gi (th_tpairs (rep_of th)) (th_prop (rep_of th)) p)))
@@ -1392,18 +1391,9 @@ lemma tmap_ok_freeze: "tmap_ok (freeze_tvar alist)"
 
 end
 
-definition varifyT_global_thm :: "(name list \<Rightarrow> name list \<Rightarrow> name list) \<Rightarrow> (name \<times> psort) list \<Rightarrow>
-    'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "varifyT_global_thm vl fixed th =
-    (if sign_closed (sign_of th) then
-      map_option (\<lambda>(names, r). Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-          (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))))
-        (resT (varifyT_global vl fixed (hyps_of th) (rep_of th)))
-     else None)"
-
 lemma thm_sem_varifyT_global:
   fixes th :: "'u pure_thm"
-  assumes ok: "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)" and sc: "sign_closed (sign_of th)"
+  assumes ok: "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)"
   shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))"
     (is "thm_sem _ ?th")
@@ -1464,21 +1454,6 @@ proof -
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
   qed
-qed
-
-theorem varifyT_global_thm:
-  assumes "varifyT_global_thm vl fixed th = Some th'"
-  obtains names r where "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)" "sign_closed (sign_of th)"
-    "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))"
-proof -
-  from assms obtain names r where sc: "sign_closed (sign_of th)"
-    and ok: "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)"
-    and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))"
-    by (auto simp: varifyT_global_thm_def resT_Some split: if_splits)
-  show thesis
-    by (rule that[OF ok sc]) (use thm_sem_varifyT_global[OF ok sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 lemma thm_sem_legacy_freezeT:
@@ -1572,7 +1547,6 @@ lemma thm_sem_of_class:
   assumes ok: "okT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c) r"
     and P: "ct_t (crep_of ct) = mk_of_class T c" and so: "tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct"
     and cc: "pure_sig_gen.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
-    and se: "sign_eq (csign_of ct)"
   shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
     (return (OFCLASSp (ztyp_of T) c)))"
     (is "thm_sem _ ?th")

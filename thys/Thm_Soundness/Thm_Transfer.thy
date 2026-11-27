@@ -544,10 +544,4 @@ lemma cons_ok_transfer: "sign_le c c' \<Longrightarrow> cons_ok c C \<Longrighta
   unfolding cons_ok_def sign_le_def
   using has_sort_mono[OF _ pure_sig_wf, of "sg_alg c" "sg_alg c'" "sg_ar c"] by auto
 
-text \<open>\<open>Thm.transfer\<close>, on theorems:\<close>
-
-definition transfer_thm :: "sign \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "transfer_thm c' th =
-    (if sign_le (sign_of th) c' then Some (Abs_thm ((rep_thm th)\<lparr>th_sign := c'\<rparr>)) else None)"
-
 end

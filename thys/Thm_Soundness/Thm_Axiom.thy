@@ -455,6 +455,15 @@ definition ax_ok :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \<Righ
       (\<forall>outer B. ok (unconstrainT invent A) (outer, B) \<longrightarrow> sg_ax c B \<and> axm_name_ok a B \<and>
         sg_close c B = forall_closure B \<and> (\<forall>v\<in>set (sg_tyargs c B). v \<in> ttvars B)))"
 
+text \<open>The part of these conditions that the validity of the theorem of an axiom needs:\<close>
+
+definition ax_sem_ok :: "sign \<Rightarrow> pterm \<Rightarrow> bool" where
+  "ax_sem_ok c A \<longleftrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<and>
+    (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>ttvars A. 0 \<le> snd (fst v))"
+
+definition sign_axioms_sem :: "sign \<Rightarrow> bool" where
+  "sign_axioms_sem c \<longleftrightarrow> (\<forall>a A. sg_axioms c a = Some A \<longrightarrow> ax_sem_ok c A)"
+
 definition sign_axioms :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow> bool" where
   "sign_axioms invent c \<longleftrightarrow> (\<forall>n. n \<le> length (invent (integer_of_nat n)) \<and> distinct (invent (integer_of_nat n))) \<and>
     (\<forall>a A. sg_axioms c a = Some A \<longrightarrow> ax_ok invent c a A)"
@@ -530,17 +539,17 @@ qed
 
 text \<open>The theorem of an axiom:\<close>
 
+lemma sign_axioms_sem: "sign_axioms invent c \<Longrightarrow> sign_axioms_sem c"
+  by (simp add: sign_axioms_def sign_axioms_sem_def ax_ok_def ax_sem_ok_def)
+
 lemma thm_sem_axiom:
-  assumes A: "sg_axioms c a = Some A" and sa: "sign_axioms invent c"
+  assumes A: "sg_axioms c a = Some A" and sa: "sign_axioms_sem c"
   shows "thm_sem TYPE('u) (axiom_data invent c a A)"
 proof -
-  have ao: "ax_ok invent c a A" using sa A by (simp add: sign_axioms_def)
-  have inv: "n \<le> length (invent (integer_of_nat n))" "distinct (invent (integer_of_nat n))" for n
-    using sa by (simp_all add: sign_axioms_def)
-  have nnv: "\<forall>v\<in>vars A. 0 \<le> snd (fst v)" and nnt: "\<forall>v\<in>ttvars A. 0 \<le> snd (fst v)" and fA: "fnames A = {}"
-    and sf: "\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []" and vc: "pure_sig_gen.vtcons (vars A)"
-    using ao by (simp_all add: ax_ok_def)
-  have wtA: "pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A" using ao by (simp add: ax_ok_def)
+  have ao: "ax_sem_ok c A" using sa A by (simp add: sign_axioms_sem_def)
+  have nnv: "\<forall>v\<in>vars A. 0 \<le> snd (fst v)" and nnt: "\<forall>v\<in>ttvars A. 0 \<le> snd (fst v)"
+    using ao by (simp_all add: ax_sem_ok_def)
+  have wtA: "pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A" using ao by (simp add: ax_sem_ok_def)
   show ?thesis
   proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign (axiom_data invent c a A))) (sg_ar (th_sign (axiom_data invent c a A)))"

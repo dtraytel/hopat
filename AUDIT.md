@@ -2272,3 +2272,58 @@ can be said about completeness, and about the exceptions, without it.
   `Thm_Soundness`, `Thm_Proofs` and `Thm_Model_ZFC` build from this state; no other session
   depends on the changed theories.
 - **Not changed.** No model of the code, no patch and no test changed.
+
+### Additions after the twenty-first execution (the footprint of the soundness theorem; simplifications)
+
+- **Measurement.** The transitive dependencies of `derivable_sem` on named lemmas were read
+  off the proof bodies of the built sessions (a scratch session on `Thm_Proofs`), and the
+  lemma lines of each theory that they cover were counted by a script (approximate). At the
+  start of this execution `derivable_sem` used 19.4k of 29.8k lemma lines of `Thm_Soundness`,
+  17.6k of 30.0k of `Unify_Correctness`, 11.0k of 21.5k of `Pattern_Correctness`, 1.4k of 1.8k
+  of `Pure_Lambda`, and no lemma of `Thm_Proofs` or of the theories on proofs (from the two
+  theories with the models of the proofs it used type arities and a list function only). So
+  soundness without proofs is a part of the development of about 50k lines. The patches whose
+  code it reasons about are 01–05, 07, 08, 11 and 26; without 04, 05, 07 or 08 the release
+  proves `False` (`Unpatched_Examples`); 01–03 are about completeness; 11 and 26 do not affect
+  the validity of the propositions by the analysis in the README. It does not reason about 09
+  (the quick test), 10, 12 and 13–25 (the proofs).
+- **Session `Thm_Extras`.** `Clash_Norm`, `Clash_Exception`, `Thm_Match_Range`, `Thm_Match` and
+  `Thm_Certify` moved out of `Thm_Soundness`: the soundness theorem uses no lemma of them.
+- **`derivable` without proofs.** The conclusions of the 38 rules of `derivable` have arbitrary
+  proofs (`pf`, `zpf`), so the predicate says which propositions are derivable, with which
+  hypotheses, sort hypotheses and constraints, and its definition mentions no function that
+  constructs a proof. Its premises no longer contain conditions that only the proofs need:
+  `sign_closed` is gone from the five rules that had it; the equality rules ask for `sign_eqs`
+  (the constant `Pure.eq` and the arity of `prop`) instead of `sign_eq`, and `of_class` for
+  neither; `axiom` asks for `sign_axioms_sem` (well-typed axioms with non-negative indices);
+  `unconstrainT` for `unc_sem_ok` (no conditions on proof boxes). The lemmas on the rules
+  were stated with these conditions although their proofs did not use them
+  (`thm_sem_forall_intr`, `thm_sem_abstract_rule`, `thm_sem_generalize`,
+  `thm_sem_varifyT_global`, `thm_sem_strip_shyps`, `thm_sem_of_class`, `thm_sem_unconstrainT`,
+  `thm_sem_axiom`, and the lemmas on the equality rules); they are stated without them now.
+  The soundness proof uses the lemmas `sound_…` as before, which are about the data with the
+  constructed proofs, and one lemma that the invariant does not depend on the proofs
+  (`dsem_same_core`).
+  The predicate `pderivable` of `Thm_Derivable_Proofs.thy` has the old rules: the proofs that
+  the rules construct and the old premises. `pderivable_derivable: "pderivable d ⟹ derivable d"`
+  holds rule by rule; `derivable_proofs` and `derivable_sound` are about `pderivable`. The
+  example derivations are repeated for `pderivable` in `Thm_Example_Proofs.thy`.
+  What is not achieved: the lemmas `thm_sem_…` and `sound_…` of `Thm_Soundness` still mention
+  the constructed proofs as data in their statements, so the session still imports the models
+  of the proofs.
+- **Operations on the abstract type removed.** The option-valued operations on `'u pure_thm`
+  (`assumption_thms`, `flexflex_rule_thms`, `bicompose_thms`, `biresolution_thms`,
+  `strip_shyps_thm`, `unconstrainT_thm`, `varifyT_global_thm`, `varifyT_global'_thm`,
+  `transfer_thm`, `solve_constraints_thm`) and the theorems about them (`…_results`, `…_shape`,
+  `…_terminates`, `biresolution_thms_complete`) were a third presentation of the rules, next
+  to the lemmas `thm_sem_…` on the abstract type and the predicate `derivable`; nothing used
+  them. With them went the predicate `thm_cons`, `pure_thm_inv`, `thm_sem_thm_of_bres` and
+  `thm_of_bres` (the rule `biresolution` of `derivable` is proved directly on data), and three
+  determinism lemmas of the result enumerations. The statements of termination and
+  completeness at the level of the model functions are unchanged (`assumption_terminates`,
+  `flexflex_terminates`, `bicompose_aux_terminates`, `biresolution_terminates`,
+  `bicompose_aux_complete`, `biresolution_complete`).
+  What is not achieved: the lemmas `thm_sem_…` are still stated on the abstract type
+  `'u pure_thm`, and `Thm_Derivable` converts each of them to data (`sound_…`). Stating them on
+  data would remove the type and the conversions; it changes about 350 statements in
+  `Thm_Soundness` and `Thm_Proofs` and was not done.

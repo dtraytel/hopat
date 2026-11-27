@@ -9,6 +9,48 @@ text \<open>
   \<open>Thm_Soundness\<close>) are valid.
 \<close>
 
+subsection \<open>The derivations with their proofs\<close>
+
+text \<open>
+  The derivations of theory \<open>Thm_Example\<close> and the proof by assumption of theory
+  \<open>Thm_Clash_Example\<close> again, by the rules of \<^const>\<open>pderivable\<close>: the data of these theorems
+  have the proofs that the rules construct.
+\<close>
+
+lemma pderivable_thA: "pderivable thA"
+  using pderivable.assumeI[OF cterm_ok_ctA, of "mk_rep (-1) [] A0"]
+  by (simp add: thA_def ctA_def assume_rule_def adjust_maxidx_cterm_def zassume_proof_def A0_def propT_def)
+
+lemma pderivable_thAA: "pderivable thAA"
+  using pderivable.implies_intr[OF cterm_ok_ctA _ pderivable_thA, of "mk_rep (-1) [] (mk_implies A0 A0)"]
+  by (simp add: thAA_def implies_intr_def implies_intr_proof_def zimplies_intr_proof_def ctA_def thA_def
+      mk_rep_def A0_def propT_def)
+
+lemma pderivable_th_reflA: "pderivable th_reflA"
+  unfolding th_reflA_def
+  by (rule pderivable.reflexive[OF cterm_ok_ctA])
+    (simp_all add: sign_eq0 ctA_def reflexive_def mk_rep_def A0_def mk_equals_def fastype_of_def)
+
+lemma pderivable_th_reflF: "pderivable th_reflF"
+  unfolding th_reflF_def
+  by (rule pderivable.reflexive[OF cterm_ok_ctF])
+    (simp_all add: sign_eq0 ctF_def reflexive_def mk_rep_def F0_def mk_equals_def fastype_of_def)
+
+lemma pderivable_th_comb: "pderivable th_comb"
+  using pderivable.combination[OF pderivable_th_reflF pderivable_th_reflA,
+    of "mk_rep (-1) [] (eq_const propT $ (F0 $ A0) $ (F0 $ A0))" propT propT F0 F0 A0 A0]
+  by (simp add: th_comb_def th_reflF_def th_reflA_def conv_datar_def ctA_def ctF_def sign_eq0 combination_res_def
+      combination_data_def mk_rep_def F0_def A0_def mk_equals_def fastype_of_def union_tpairs_def)
+
+lemma pderivable_st1: "pderivable st1"
+  using pderivable.trivial[OF cterm_ok_ct1, of "mk_rep 0 [] (mk_implies (mk_implies H1 Vy) (mk_implies H1 Vy))"]
+  by (simp add: st1_def ct1_def trivial_def)
+
+lemma pderivable_clash: "pderivable (ares_data st1 (aseq_ctx s1) r1)"
+  by (rule pderivable.assumption[OF pderivable_st1 _ scons_st1 assumption1 aresult.First[OF a1]])
+    (simp_all add: cfg1_def st1_def)
+
+
 subsection \<open>The example signature\<close>
 
 text \<open>
@@ -81,7 +123,7 @@ theorem th_comb_proofs:
 proof -
   obtain z where z: "th_zproof th_comb = return z" using th_comb_zproof by blast
   have "proofs_ok th_comb"
-    by (rule derivable_proofs[OF derivable_th_comb]) (simp add: th_comb_def is_prf_sig0)
+    by (rule derivable_proofs[OF pderivable_th_comb]) (simp add: th_comb_def is_prf_sig0)
   then show thesis using that[OF th_comb_proof z]
     by (simp add: proofs_ok_def Let_def th_comb_proof z) (simp add: th_comb_def mk_rep_def)
 qed
@@ -92,7 +134,7 @@ theorem thAA_proofs:
     (mk_implies A0 A0)"
 proof -
   have "proofs_ok thAA"
-    by (rule derivable_proofs[OF derivable_thAA]) (simp add: thAA_def is_prf_sig0)
+    by (rule derivable_proofs[OF pderivable_thAA]) (simp add: thAA_def is_prf_sig0)
   then show
     "prf_sig_gen.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (AbsP STR ''H'' None (PBound 0)) (mk_implies A0 A0)"
     "prf_sig_gen.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))
@@ -105,6 +147,6 @@ subsection \<open>A theorem with a variable name at two types\<close>
 text \<open>Hence it satisfies the invariant of theorems:\<close>
 
 corollary dok_clash: "dok TYPE('u) (ares_data st1 (aseq_ctx s1) r1)"
-  by (rule derivable_sound[OF derivable_clash])
+  by (rule derivable_sound[OF pderivable_clash])
 
 end
