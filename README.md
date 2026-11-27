@@ -1227,9 +1227,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     below, those on proof terms (`Proof_…`, `ZProof_…`, `Biresolution_Proofs`,
     `Rule_Proofs`, `ZRule_Proofs`, `ZSubst_Proofs`, `ZEq_Proofs`, and a theory
     `X_Proofs` for each theory `X` on rules, and `Thm_Example_Proofs`) are in
-    `Thm_Proofs/`, and every theory there is about proof terms; all others
-    are in `Thm_Soundness/`, and none of those imports a theory of
-    `Thm_Proofs/`. A theorem of the abstract type is well formed and
+    `Thm_Proofs/`, and every theory there is about proof terms; the others
+    are in `Thm_Soundness/`, `Thm_Complete/` or `Thm_Extras/`, and none of
+    those imports a theory of `Thm_Proofs/`. A theorem of the abstract type is well formed and
     valid in every model (`thm_sem`); that its proofs are valid (`proofs_ok`)
     is a separate statement, proved rule by rule in the theories `X_Proofs`
     (`thm_sem_X` in `X`, `proofs_ok_X` in `X_Proofs`). The results are also
